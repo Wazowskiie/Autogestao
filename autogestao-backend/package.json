@@ -1,0 +1,55 @@
+{
+  "name": "autogestao-backend",
+  "version": "0.1.0",
+  "description": "Backend multi-tenant da plataforma AutoGestão",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:prod": "node dist/src/main.js",
+    "lint": "eslint \"src/**/*.ts\"",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@nestjs/common": "11.1.27",
+    "@nestjs/config": "4.0.4",
+    "@nestjs/core": "11.1.27",
+    "@nestjs/jwt": "11.0.0",
+    "@nestjs/passport": "11.0.5",
+    "@nestjs/platform-express": "11.1.27",
+    "@nestjs/throttler": "6.5.0",
+    "@prisma/adapter-pg": "7.8.0",
+    "@prisma/client": "7.8.0",
+    "argon2": "0.44.0",
+    "axios": "^1.20.0",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.14.2",
+    "cookie-parser": "1.4.7",
+    "dotenv": "17.4.2",
+    "helmet": "8.1.0",
+    "passport": "0.7.0",
+    "passport-jwt": "4.0.1",
+    "pg": "8.21.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "overrides": {
+    "@hono/node-server": "^1.19.13"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "11.0.23",
+    "@types/cookie-parser": "1.4.9",
+    "@types/express": "5.0.6",
+    "@types/node": "22.10.5",
+    "@types/passport-jwt": "4.0.1",
+    "@types/pg": "8.20.0",
+    "prisma": "7.8.0",
+    "ts-node": "10.9.2",
+    "typescript": "5.7.3"
+  }
+}

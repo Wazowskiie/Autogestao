@@ -1,0 +1,368 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  owner
+  admin
+  seller
+}
+
+enum VehicleStatus {
+  available
+  reserved
+  sold
+}
+
+enum VehicleType {
+  car
+  moto
+  truck
+}
+
+enum LeadStage {
+  new
+  contacted
+  negotiating
+  won
+  lost
+}
+
+enum TransactionType {
+  revenue
+  expense
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
+}
+
+model Dealership {
+  id            String   @id @default(uuid())
+  name          String
+  cnpj          String?  @unique
+  slug          String   @unique
+  city          String?
+  state         String?
+  phone         String?
+  logoUrl       String?  @map("logo_url")
+  coverUrl      String?  @map("cover_url")
+  primaryColor  String?  @map("primary_color")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // --- Integração Focus NFe ---
+  // Reaproveita o campo "cnpj" acima, não precisa de um novo
+  focusNfeTokenEncrypted    String?  @map("focus_nfe_token_encrypted")
+  focusNfeAmbiente          String   @default("homologacao") @map("focus_nfe_ambiente")
+  focusNfeInscricaoEstadual String?  @map("focus_nfe_inscricao_estadual")
+  focusNfeRegimeTributario  Int?     @map("focus_nfe_regime_tributario")
+  focusNfeLogradouro        String?  @map("focus_nfe_logradouro")
+  focusNfeNumero            String?  @map("focus_nfe_numero")
+  focusNfeBairro            String?  @map("focus_nfe_bairro")
+  focusNfeMunicipio         String?  @map("focus_nfe_municipio")
+  focusNfeUf                String?  @map("focus_nfe_uf")
+  focusNfeCep               String?  @map("focus_nfe_cep")
+
+  users         User[]
+  vehicles      Vehicle[]
+  customers     Customer[]
+  leads         Lead[]
+  sales         Sale[]
+  transactions  FinancialTransaction[]
+  promissoryNotes PromissoryNote[]
+  parts         Part[]
+  subscription  Subscription?
+  auditLogs     AuditLog[]
+  interestRates InterestRate[]
+
+  @@map("dealerships")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  dealershipId String   @map("dealership_id")
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(seller)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  phone           String?
+  jobTitle        String?
+  commissionRate  Float?  @default(0)
+
+  dealership   Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  vehiclesCreated Vehicle[] @relation("VehicleCreatedBy")
+  leadsAssigned   Lead[]    @relation("LeadAssignedTo")
+  sales        Sale[]
+  auditLogs    AuditLog[]
+  refreshTokens RefreshToken[]
+
+  @@index([dealershipId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Vehicle {
+  id           String        @id @default(uuid())
+  dealershipId String        @map("dealership_id")
+  brand        String
+  model        String
+  version      String?
+  year         Int
+  km           Int           @default(0)
+  color        String?
+  plate        String?
+  fuel         String?
+  transmission String?
+  doors        Int?
+  origin       String?
+  ownerCount   Int?          @map("owner_count")
+  ipvaPaid     Boolean?      @map("ipva_paid")
+  acceptsTrade Boolean?      @map("accepts_trade")
+  hasSpareKey  Boolean?      @map("has_spare_key")
+  hasManual    Boolean?      @map("has_manual")
+  cost         Decimal       @db.Decimal(12, 2)
+  price        Decimal       @db.Decimal(12, 2)
+  status       VehicleStatus @default(available)
+  type         VehicleType   @default(car)
+  description  String?
+  optionals    String[]      @default([])
+  createdById  String?       @map("created_by_id")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  dealership   Dealership    @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  createdBy    User?         @relation("VehicleCreatedBy", fields: [createdById], references: [id])
+  photos       VehiclePhoto[]
+  leads        Lead[]
+  sale         Sale?
+
+  @@index([dealershipId, status])
+  @@map("vehicles")
+}
+
+model VehiclePhoto {
+  id        String  @id @default(uuid())
+  vehicleId String  @map("vehicle_id")
+  url       String
+  order     Int     @default(0)
+
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+  @@map("vehicle_photos")
+}
+
+model Customer {
+  id              String   @id @default(uuid())
+  dealershipId    String   @map("dealership_id")
+  name            String
+  document        String?
+  phone           String?
+  email           String?
+  address         String?
+  birthDate       DateTime? @map("birth_date")
+  gender          String?
+  howMet          String?   @map("how_met")
+  tags            String[]  @default([])
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  dealership      Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  leads           Lead[]
+  sales           Sale[]
+  promissoryNotes PromissoryNote[]
+
+  @@index([dealershipId])
+  @@map("customers")
+}
+
+model Lead {
+  id               String          @id @default(uuid())
+  dealershipId     String          @map("dealership_id")
+  customerId       String?         @map("customer_id")
+  vehicleId        String?         @map("vehicle_id")
+  stage            LeadStage       @default(new)
+  source           String?
+  notes            String?
+  temperature      String?
+  budget           Decimal?        @db.Decimal(12, 2)
+  paymentIntent    String?         @map("payment_intent")
+  nextActionDate   DateTime?       @map("next_action_date")
+  nextActionNote   String?         @map("next_action_note")
+  assignedSellerId String?         @map("assigned_seller_id")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  dealership       Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  customer         Customer?  @relation(fields: [customerId], references: [id])
+  vehicle          Vehicle?   @relation(fields: [vehicleId], references: [id])
+  assignedSeller   User?      @relation("LeadAssignedTo", fields: [assignedSellerId], references: [id])
+
+  @@index([dealershipId, stage])
+  @@map("leads")
+}
+
+model Sale {
+  id            String   @id @default(uuid())
+  dealershipId  String   @map("dealership_id")
+  vehicleId     String   @unique @map("vehicle_id")
+  customerId    String   @map("customer_id")
+  sellerId      String   @map("seller_id")
+  cost          Decimal  @db.Decimal(12, 2)
+  price         Decimal  @db.Decimal(12, 2)
+  profit        Decimal  @default(0) @db.Decimal(12, 2)
+  margin        Decimal  @default(0) @db.Decimal(8, 4)
+  contractNumber String?  @map("contract_number")
+  paymentMethod  String?  @map("payment_method")
+  notes          String?
+  soldAt         DateTime @default(now()) @map("sold_at")
+
+  dealership    Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  vehicle       Vehicle    @relation(fields: [vehicleId], references: [id])
+  customer      Customer   @relation(fields: [customerId], references: [id])
+  seller        User       @relation(fields: [sellerId], references: [id])
+  transactions  FinancialTransaction[]
+  promissoryNotes PromissoryNote[]
+
+  @@index([dealershipId])
+  @@map("sales")
+}
+
+model FinancialTransaction {
+  id           String          @id @default(uuid())
+  dealershipId String          @map("dealership_id")
+  saleId       String?         @map("sale_id")
+  type         TransactionType
+  category     String
+  amount       Decimal         @db.Decimal(12, 2)
+  date         DateTime        @default(now())
+  description  String?
+
+  dealership   Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  sale         Sale?      @relation(fields: [saleId], references: [id])
+
+  @@index([dealershipId, date])
+  @@map("financial_transactions")
+}
+
+model PromissoryNote {
+  id                String   @id @default(uuid())
+  dealershipId      String   @map("dealership_id")
+  saleId            String   @map("sale_id")
+  customerId        String   @map("customer_id")
+  installmentNumber Int      @map("installment_number")
+  totalInstallments Int      @map("total_installments")
+  amount            Decimal  @db.Decimal(12, 2)
+  dueDate           DateTime @map("due_date")
+  paid              Boolean  @default(false)
+  paidAt            DateTime? @map("paid_at")
+
+  dealership        Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  sale              Sale       @relation(fields: [saleId], references: [id])
+  customer          Customer   @relation(fields: [customerId], references: [id])
+
+  @@index([dealershipId, dueDate])
+  @@map("promissory_notes")
+}
+
+model Part {
+  id           String   @id @default(uuid())
+  dealershipId String   @map("dealership_id")
+  name         String
+  sku          String?
+  cost         Decimal  @db.Decimal(12, 2)
+  price        Decimal  @db.Decimal(12, 2)
+  stockQty     Int      @default(0) @map("stock_qty")
+  category     String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  dealership   Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+
+  @@index([dealershipId])
+  @@map("parts")
+}
+
+model Plan {
+  id          String   @id @default(uuid())
+  name        String
+  price       Decimal  @db.Decimal(10, 2)
+  vehicleLimit Int     @map("vehicle_limit")
+  userLimit   Int      @map("user_limit")
+  features    Json     @default("[]")
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                            String             @id @default(uuid())
+  dealershipId                  String             @unique @map("dealership_id")
+  planId                        String             @map("plan_id")
+  status                        SubscriptionStatus @default(trialing)
+  currentPeriodEnd              DateTime?          @map("current_period_end")
+  paymentGatewayCustomerId      String?            @map("payment_gateway_customer_id")
+  paymentGatewaySubscriptionId  String?            @map("payment_gateway_subscription_id")
+
+  dealership                    Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  plan                          Plan       @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  dealershipId String   @map("dealership_id")
+  userId       String?  @map("user_id")
+  action       String
+  entity       String
+  entityId     String?  @map("entity_id")
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  dealership   Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  user         User?      @relation(fields: [userId], references: [id])
+
+  @@index([dealershipId, createdAt])
+  @@map("audit_logs")
+}
+
+model InterestRate {
+  id               String     @id @default(uuid())
+  dealershipId     String     @map("dealership_id")
+  minInstallments  Int        @map("min_installments")
+  maxInstallments  Int        @map("max_installments")
+  rate             Decimal    @db.Decimal(6, 2)
+
+  dealership       Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+
+  @@index([dealershipId])
+  @@map("interest_rates")
+}
