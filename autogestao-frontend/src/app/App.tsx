@@ -15,11 +15,12 @@ import { PromissoryNotes } from "./components/PromissoryNotes";
 import { PartsStore } from "./components/PartsStore";
 import { Globe, Megaphone, Settings, ExternalLink } from "lucide-react";
 import { useAuth } from "../lib/auth-context";
+import { Renave } from "./components/Renave";
 
 type Page =
   | "login" | "onboarding" | "dashboard" | "inventory"
   | "leads" | "financial" | "ads" | "site" | "settings" | "plans" | "storefront"
-  | "sales" | "customers" | "sellers" | "promissory" | "parts";
+  | "sales" | "customers" | "sellers" | "promissory" | "parts" | "renave";
 
 function PlaceholderPage({ title, icon: Icon }: { title: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }) {
   return (
@@ -94,20 +95,21 @@ export default function App() {
 
   // Shell layout
   const renderPage = () => {
-    switch (page) {
-      case "dashboard": return <Dashboard onNavigate={navigate} />;
-      case "inventory": return <Inventory />;
-      case "leads": return <LeadsCRM />;
-      case "financial": return <Financial />;
-      case "sales": return <Sales />;
-      case "customers": return <Customers />;
-      case "sellers": return <Sellers />;
-      case "promissory": return <PromissoryNotes />;
-      case "parts": return <PartsStore />;
-      case "plans": return <Plans />;
-      case "ads": return <PlaceholderPage title="Anúncios" icon={Megaphone} />;
-      case "settings": return <PlaceholderPage title="Configurações" icon={Settings} />;
-      case "site":
+  switch (page) {
+    case "dashboard": return <Dashboard onNavigate={navigate} />;
+    case "inventory": return <Inventory />;
+    case "leads": return <LeadsCRM />;
+    case "financial": return <Financial />;
+    case "sales": return <Sales />;
+    case "customers": return <Customers />;
+    case "sellers": return <Sellers />;
+    case "promissory": return <PromissoryNotes />;
+    case "parts": return <PartsStore />;
+    case "renave": return <Renave />;
+    case "plans": return <Plans />;
+    case "ads": return <PlaceholderPage title="Anúncios" icon={Megaphone} />;
+    case "settings": return <PlaceholderPage title="Configurações" icon={Settings} />;
+    case "site":
         return (
           <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
             <div className="px-6 py-4" style={{ background: "#fff", borderBottom: "0.5px solid rgba(0,0,0,0.08)" }}>
