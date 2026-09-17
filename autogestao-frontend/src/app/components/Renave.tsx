@@ -23,7 +23,7 @@ const BENEFITS = [
   'Menos retrabalho e menos erros de digitação',
 ];
 
-export default function Renave() {
+export function Renave() {
   const [partner, setPartner] = useState<RenavePartner>('Renave Fácil');
   const [isExistingClient, setIsExistingClient] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
