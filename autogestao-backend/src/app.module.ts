@@ -19,6 +19,7 @@ import { SalesModule } from './sales/sales.module';
 import { SellersModule } from './sellers/sellers.module';
 import { StorefrontModule } from './storefront/storefront.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
+import { RenaveModule } from './renave/renave.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { VehiclesModule } from './vehicles/vehicles.module';
     PrismaModule,
     AuthModule,
     VehiclesModule,
+    RenaveModule, 
     CustomersModule,
     LeadsModule,
     SalesModule,
