@@ -366,3 +366,13 @@ model InterestRate {
   @@index([dealershipId])
   @@map("interest_rates")
 }
+
+model RenaveIntegration {
+  id           String   @id @default(uuid())
+  dealershipId String   @unique
+  partner      String?
+  isExistingClient Boolean @default(false)
+  active       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
