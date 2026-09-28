@@ -12,11 +12,26 @@ export class CreateVehicleDto {
 
   @IsOptional() @IsString() version?: string;
 
+  // Ano modelo
   @IsInt() @Min(1900) @Type(() => Number) year: number;
+  // Ano de fabricação (opcional)
+  @IsOptional() @IsInt() @Min(1900) @Type(() => Number) manufactureYear?: number;
+
   @IsInt() @Min(0) @Type(() => Number) km: number;
 
   @IsOptional() @IsString() color?: string;
   @IsOptional() @IsString() plate?: string;
+
+  // Identificação
+  @IsOptional() @IsString() chassis?: string;   // chassi ou nº de série/quadro
+  @IsOptional() @IsString() renavam?: string;
+
+  // Motor
+  @IsOptional() @IsInt() @Min(0) @Type(() => Number) engineCc?: number;    // cilindrada (motos)
+  @IsOptional() @IsInt() @Min(0) @Type(() => Number) motorPower?: number;  // potência em W (elétricos)
+
+  // Subtipo quando type = other (ex.: "Bicicleta elétrica")
+  @IsOptional() @IsString() category?: string;
 
   @IsOptional() @IsString() fuel?: string;
   @IsOptional() @IsString() transmission?: string;
@@ -30,8 +45,8 @@ export class CreateVehicleDto {
   @IsOptional() @IsBoolean() hasSpareKey?: boolean;
   @IsOptional() @IsBoolean() hasManual?: boolean;
 
-  @IsNumber() @Min(0) @Type(() => Number) cost: number;
-  @IsNumber() @Min(0) @Type(() => Number) price: number;
+  @IsNumber({}, { message: 'Preço de custo inválido' }) @Min(0) @Type(() => Number) cost: number;
+  @IsNumber({}, { message: 'Preço de venda inválido' }) @Min(0) @Type(() => Number) price: number;
 
   @IsOptional() @IsEnum(VehicleStatus) status?: VehicleStatus;
   @IsEnum(VehicleType) type: VehicleType;

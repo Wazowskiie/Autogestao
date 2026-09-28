@@ -64,23 +64,26 @@ export function logout() { return request<{ success: boolean }>("/auth/logout", 
 export function getMe() { return request<{ user: AuthUser; dealership: Dealership }>("/auth/me"); }
 
 // ---------- Veículos ----------
-export type VehicleType = "car" | "moto" | "truck";
+export type VehicleType = "car" | "moto" | "truck" | "other";
 export type VehicleStatus = "available" | "reserved" | "sold";
 
 export interface VehiclePhoto { id: string; url: string; order: number; }
 
 export interface Vehicle {
   id: string; dealershipId: string;
+  type: VehicleType; category: string | null;
   brand: string; model: string; version: string | null;
-  year: number; km: number;
+  year: number; manufactureYear: number | null; km: number;
   color: string | null; plate: string | null;
+  chassis: string | null; renavam: string | null;
+  engineCc: number | null; motorPower: number | null;
   fuel: string | null; transmission: string | null;
   doors: number | null; origin: string | null;
   ownerCount: number | null;
   ipvaPaid: boolean | null; acceptsTrade: boolean | null;
   hasSpareKey: boolean | null; hasManual: boolean | null;
   cost: number; price: number;
-  status: VehicleStatus; type: VehicleType;
+  status: VehicleStatus;
   description: string | null; optionals: string[];
   createdById: string | null; createdAt: string; updatedAt: string;
   photos?: VehiclePhoto[];
@@ -90,15 +93,17 @@ export interface VehicleListResponse { items: Vehicle[]; total: number; page: nu
 export interface VehicleListParams { search?: string; status?: VehicleStatus | "all"; type?: VehicleType | "all"; page?: number; pageSize?: number; }
 
 export interface VehicleInput {
-  brand: string; model: string; version?: string;
-  year: number; km: number;
-  color?: string; plate?: string;
-  fuel?: string; transmission?: string;
-  doors?: number; origin?: string; ownerCount?: number;
+  type: VehicleType; category?: string | null; status?: VehicleStatus;
+  brand: string; model: string; version?: string | null;
+  year: number; manufactureYear?: number | null; km: number;
+  color?: string | null; plate?: string | null;
+  chassis?: string | null; renavam?: string | null;
+  engineCc?: number | null; motorPower?: number | null;
+  fuel?: string | null; transmission?: string | null;
+  doors?: number | null; origin?: string | null; ownerCount?: number | null;
   ipvaPaid?: boolean; acceptsTrade?: boolean; hasSpareKey?: boolean; hasManual?: boolean;
   cost: number; price: number;
-  type: VehicleType; status?: VehicleStatus;
-  description?: string; optionals?: string[];
+  description?: string | null; optionals?: string[];
 }
 
 export function listVehicles(params: VehicleListParams = {}) {
@@ -114,11 +119,13 @@ export function getVehicle(id: string) { return request<Vehicle>(`/vehicles/${id
 export function createVehicle(input: VehicleInput) { return request<Vehicle>("/vehicles", { method: "POST", body: input }); }
 export function updateVehicle(id: string, input: Partial<VehicleInput>) { return request<Vehicle>(`/vehicles/${id}`, { method: "PATCH", body: input }); }
 export function deleteVehicle(id: string) { return request<{ success: boolean }>(`/vehicles/${id}`, { method: "DELETE" }); }
+
 export interface PlateLookupResult {
   plate: string; brand: string; model: string; version: string | null;
   year: number | null; manufactureYear: number | null;
   color: string | null; fuel: string | null; origin: string | null;
-  type: VehicleType; city: string | null; uf: string | null; situation: string | null;
+  engineCc: number | null;
+  type: VehicleType | null; city: string | null; uf: string | null; situation: string | null;
   fipe: { code: string; label: string; value: number | null; reference: string | null } | null;
   cached: boolean;
 }

@@ -9,6 +9,13 @@ import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { QueryVehicleDto } from './dto/query-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 
+// "abc-1d23" -> "ABC1D23"
+function normalizePlate(plate?: string | null) {
+  if (!plate) return null;
+  const p = plate.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return p || null;
+}
+
 @Injectable()
 export class VehiclesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -16,19 +23,46 @@ export class VehiclesService {
   async create(dealershipId: string, userId: string, dto: CreateVehicleDto) {
     await this.assertWithinPlanLimit(dealershipId);
 
+    const type = dto.type ?? 'car';
+
+    // ANTES: só alguns campos eram salvos (placa, cor, combustível etc. se perdiam).
+    // AGORA: salva tudo que veio do formulário.
     return this.prisma.vehicle.create({
       data: {
         dealershipId,
         createdById: userId,
+        type,
+        category: type === 'other' ? dto.category ?? null : null,
+        status: dto.status ?? 'available',
+
         brand: dto.brand,
         model: dto.model,
+        version: dto.version ?? null,
         year: dto.year,
+        manufactureYear: dto.manufactureYear ?? null,
         km: dto.km,
+
+        color: dto.color ?? null,
+        plate: normalizePlate(dto.plate),
+        chassis: dto.chassis ? dto.chassis.toUpperCase().trim() : null,
+        renavam: dto.renavam ? dto.renavam.replace(/\D/g, '') : null,
+
+        engineCc: dto.engineCc ?? null,
+        motorPower: dto.motorPower ?? null,
+        fuel: dto.fuel ?? null,
+        transmission: dto.transmission ?? null,
+        doors: dto.doors ?? null,
+        origin: dto.origin ?? null,
+        ownerCount: dto.ownerCount ?? null,
+
+        ipvaPaid: dto.ipvaPaid ?? false,
+        acceptsTrade: dto.acceptsTrade ?? false,
+        hasSpareKey: dto.hasSpareKey ?? false,
+        hasManual: dto.hasManual ?? false,
+
         cost: dto.cost,
         price: dto.price,
-        type: dto.type ?? 'car',
-        status: dto.status ?? 'available',
-        description: dto.description,
+        description: dto.description ?? null,
         optionals: dto.optionals ?? [],
       },
     });
@@ -47,6 +81,8 @@ export class VehiclesService {
             OR: [
               { brand: { contains: query.search, mode: 'insensitive' } },
               { model: { contains: query.search, mode: 'insensitive' } },
+              // Agora também dá pra buscar pela placa (com ou sem hífen)
+              { plate: { contains: query.search.toUpperCase().replace(/[^A-Z0-9]/g, ''), mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -84,7 +120,15 @@ export class VehiclesService {
 
   async update(dealershipId: string, id: string, dto: UpdateVehicleDto) {
     await this.findOne(dealershipId, id);
-    return this.prisma.vehicle.update({ where: { id }, data: dto });
+
+    const data: Prisma.VehicleUpdateInput = { ...dto } as Prisma.VehicleUpdateInput;
+    if (dto.plate !== undefined) data.plate = normalizePlate(dto.plate);
+    if (dto.chassis) data.chassis = dto.chassis.toUpperCase().trim();
+    if (dto.renavam) data.renavam = dto.renavam.replace(/\D/g, '');
+    // Se deixou de ser "Outros", limpa o subtipo
+    if (dto.type && dto.type !== 'other') data.category = null;
+
+    return this.prisma.vehicle.update({ where: { id }, data });
   }
 
   async remove(dealershipId: string, id: string) {

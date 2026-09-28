@@ -20,8 +20,9 @@ export interface PlateLookupResult {
   manufactureYear: number | null;
   color: string | null;
   fuel: string | null;          // texto original, ex.: "Alcool / Gasolina"
+  engineCc: number | null;      // cilindrada, ex.: 160
   origin: string | null;        // "Nacional" ou "Importado"
-  type: 'car' | 'moto' | 'truck';
+  type: 'car' | 'moto' | 'truck' | null;
   city: string | null;
   uf: string | null;
   situation: string | null;     // ex.: "Sem restrição"
@@ -51,11 +52,20 @@ function toNumber(text?: string | number | null) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function guessType(data: any): 'car' | 'moto' | 'truck' {
+function guessType(data: any): 'car' | 'moto' | 'truck' | null {
   const text = `${data?.extra?.tipo_veiculo ?? ''} ${data?.extra?.segmento ?? ''}`.toLowerCase();
   if (/moto|ciclomotor|motoneta/.test(text)) return 'moto';
   if (/caminh|utilit|onibus|ônibus|micro/.test(text)) return 'truck';
-  return 'car';
+  if (text.trim()) return 'car';
+
+  // Sem "extra": tenta pelo tipo da FIPE (1 = carro, 2 = moto, 3 = caminhão)
+  const fipeType = data?.fipe?.dados?.[0]?.tipo_modelo;
+  if (fipeType === 2) return 'moto';
+  if (fipeType === 3) return 'truck';
+  if (fipeType === 1) return 'car';
+
+  // Não dá pra saber: mantém o tipo que a pessoa escolheu
+  return null;
 }
 
 // Transforma a resposta da API Placas no formato que o nosso formulário usa
@@ -83,6 +93,7 @@ function mapResult(plate: string, data: any, cached: boolean): PlateLookupResult
     manufactureYear: toNumber(data.ano || data?.extra?.ano_fabricacao),
     color: data.cor ? prettify(data.cor) : null,
     fuel: data?.extra?.combustivel || null,
+    engineCc: toNumber(data?.extra?.cilindradas),
     origin: origin ? prettify(origin) : null,
     type: guessType(data),
     city: data.municipio || null,
