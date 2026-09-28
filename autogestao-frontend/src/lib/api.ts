@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api/v1";
+const API_URL = (import.meta as any).env?.VITE_API_URL ?? "http://localhost:3000/api/v1";
 
 export class ApiError extends Error {
   status: number;
@@ -230,10 +230,33 @@ export function deleteSeller(id: string) { return request<{ success: boolean }>(
 
 // ---------- Financeiro ----------
 export type TransactionType = "revenue" | "expense";
-export interface FinancialTransaction { id: string; dealershipId: string; type: TransactionType; category: string; amount: number; date: string; description: string | null; saleId: string | null; }
+
+export interface TransactionVehicle { id: string; brand: string; model: string; year: number; plate: string | null; }
+
+export interface FinancialTransaction {
+  id: string; dealershipId: string;
+  type: TransactionType; category: string; amount: number;
+  date: string; description: string | null;
+  saleId: string | null;
+  vehicleId: string | null; vehicle?: TransactionVehicle | null;
+  paid: boolean; paidAt: string | null;
+  recurrenceId: string | null; recurrenceIndex: number | null; recurrenceTotal: number | null;
+}
+
 export interface FinancialListResponse { items: FinancialTransaction[]; total: number; page: number; pageSize: number; }
-export interface FinancialSummary { totalRevenue: number; totalExpense: number; balance: number; transactionCount: number; byCategory: Record<string, { revenue: number; expense: number }>; }
-export interface CreateTransactionInput { type: TransactionType; category: string; amount: number; date?: string; description?: string; }
+
+export interface FinancialSummary {
+  totalRevenue: number; totalExpense: number; balance: number;
+  payableAmount: number; receivableAmount: number; overdueCount: number;
+  transactionCount: number;
+  byCategory: Record<string, { revenue: number; expense: number }>;
+}
+
+export interface CreateTransactionInput {
+  type: TransactionType; category: string; amount: number;
+  date?: string; description?: string;
+  vehicleId?: string; paid?: boolean; repeatMonths?: number;
+}
 
 export function listTransactions(params: { month?: string; type?: TransactionType; page?: number; pageSize?: number } = {}) {
   const query = new URLSearchParams();
@@ -245,6 +268,7 @@ export function listTransactions(params: { month?: string; type?: TransactionTyp
 }
 export function getFinancialSummary(month?: string) { return request<FinancialSummary>(`/financial/summary${month ? `?month=${month}` : ""}`); }
 export function createTransaction(input: CreateTransactionInput) { return request<FinancialTransaction>("/financial", { method: "POST", body: input }); }
+export function payTransaction(id: string) { return request<FinancialTransaction>(`/financial/${id}/pay`, { method: "PATCH" }); }
 export function deleteTransaction(id: string) { return request<{ success: boolean }>(`/financial/${id}`, { method: "DELETE" }); }
 
 // ---------- Promissórias ----------
