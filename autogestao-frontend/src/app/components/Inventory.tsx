@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Plus, Search, Car, Bike, Truck, Edit2, Trash2, Globe, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Plus, Search, Car, Bike, Truck, Edit2, Trash2, Globe, X, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import * as api from "../../lib/api";
 
@@ -25,6 +25,53 @@ function margin(cost: number, price: number) {
 
 function currency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+// ---------- Placa ----------
+// "abc-1d23" -> "ABC1D23"
+function normalizePlate(value: string) {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+// Aceita placa antiga (ABC1234) e Mercosul (ABC1D23)
+function isValidPlate(value: string) {
+  return /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(value);
+}
+
+function stripAccents(text: string) {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+// Traduz o combustível da API ("Alcool / Gasolina") para as opções do formulário ("Flex")
+function mapFuel(raw: string | null) {
+  if (!raw) return "";
+  const t = stripAccents(raw);
+  if (/eletric/.test(t) && /gasolin|alcool|diesel|hibrid/.test(t)) return "Híbrido";
+  if (/hibrid/.test(t)) return "Híbrido";
+  if (/eletric/.test(t)) return "Elétrico";
+  if (/alcool|etanol/.test(t) && /gasolin/.test(t)) return "Flex";
+  if (/flex/.test(t)) return "Flex";
+  if (/gas natural|gnv/.test(t)) return "GNV";
+  if (/diesel/.test(t)) return "Diesel";
+  if (/gasolin/.test(t)) return "Gasolina";
+  return "";
+}
+
+function mapOrigin(raw: string | null) {
+  if (!raw) return "";
+  const t = stripAccents(raw);
+  if (/import|estrangeir/.test(t)) return "Importado";
+  if (/nacional/.test(t)) return "Nacional";
+  return "";
+}
+
+// ---------- Valores em R$ ----------
+// Entende "25000", "25.000", "25.000,50", "25000.50" e "R$ 25.000,00"
+function parseBRL(value: string) {
+  const s = value.trim().replace(/[R$\s]/g, "");
+  if (!s) return NaN;
+  if (s.includes(",")) return Number(s.replace(/\./g, "").replace(",", "."));
+  if (/^\d{1,3}(\.\d{3})+$/.test(s)) return Number(s.replace(/\./g, ""));
+  return Number(s);
 }
 
 export function Inventory() {
@@ -207,6 +254,12 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
+type LookupState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "done"; result: api.PlateLookupResult }
+  | { status: "error"; message: string };
+
 function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle | null; onClose: () => void; onSaved: () => void }) {
   // Identificação
   const [brand, setBrand] = useState(initial?.brand ?? "");
@@ -243,9 +296,54 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ---------- Consulta pela placa ----------
+  const [lookup, setLookup] = useState<LookupState>({ status: "idle" });
+  // Guarda a última placa consultada, para não gastar consulta repetida
+  const lastLookup = useRef<string>(initial?.plate ? normalizePlate(initial.plate) : "");
+
+  const runLookup = useCallback(async (value: string) => {
+    const p = normalizePlate(value);
+    if (!isValidPlate(p)) {
+      setLookup({ status: "error", message: "Placa inválida. Use o formato ABC1234 ou ABC1D23." });
+      return;
+    }
+    lastLookup.current = p;
+    setLookup({ status: "loading" });
+    try {
+      const r = await api.lookupPlate(p);
+      // Se a pessoa mudou a placa enquanto consultava, ignora a resposta antiga
+      if (lastLookup.current !== p) return;
+
+      if (r.brand) setBrand(r.brand);
+      if (r.model) setModel(r.model);
+      if (r.version) setVersion(r.version);
+      if (r.year) setYear(String(r.year));
+      if (r.color) setColor(r.color);
+      const mappedFuel = mapFuel(r.fuel);
+      if (mappedFuel) setFuel(mappedFuel);
+      const mappedOrigin = mapOrigin(r.origin);
+      if (mappedOrigin) setOrigin(mappedOrigin);
+      if (r.type) setType(r.type);
+
+      setLookup({ status: "done", result: r });
+    } catch (err) {
+      if (lastLookup.current !== p) return;
+      setLookup({ status: "error", message: err instanceof Error ? err.message : "Não foi possível consultar a placa." });
+    }
+  }, []);
+
+  // No cadastro novo: consulta sozinho quando a placa fica completa
+  useEffect(() => {
+    if (initial) return;
+    const p = normalizePlate(plate);
+    if (!isValidPlate(p) || p === lastLookup.current) return;
+    const t = setTimeout(() => runLookup(p), 400);
+    return () => clearTimeout(t);
+  }, [plate, initial, runLookup]);
+
   // Indicador de margem em tempo real
-  const costNum = Number(cost);
-  const priceNum = Number(price);
+  const costNum = parseBRL(cost);
+  const priceNum = parseBRL(price);
   const liveMargin = costNum > 0 && priceNum > 0 ? ((priceNum - costNum) / costNum) * 100 : null;
 
   const toggleOptional = (o: string) =>
@@ -253,17 +351,33 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
 
   const handleSubmit = async () => {
     setError(null);
-    if (!brand.trim() || !model.trim() || !year || !cost || !price) {
+    const yearNum = Number(String(year).replace(/\D/g, ""));
+    const maxYear = new Date().getFullYear() + 1;
+
+    if (!brand.trim() || !model.trim() || !year || !cost.trim() || !price.trim()) {
       setError("Preencha pelo menos marca, modelo, ano, custo e preço de venda.");
       return;
     }
+    if (!yearNum || yearNum < 1950 || yearNum > maxYear) {
+      setError(`Ano inválido. Use um ano entre 1950 e ${maxYear}.`);
+      return;
+    }
+    if (Number.isNaN(costNum) || costNum < 0) {
+      setError("Preço de custo inválido. Use só números, ex: 25000 ou 25.000,00.");
+      return;
+    }
+    if (Number.isNaN(priceNum) || priceNum < 0) {
+      setError("Preço de venda inválido. Use só números, ex: 30000 ou 30.000,00.");
+      return;
+    }
+
     setSaving(true);
     try {
       const payload: api.VehicleInput = {
         brand: brand.trim(), model: model.trim(),
         version: version.trim() || undefined,
-        year: Number(year), km: Number(km) || 0,
-        color: color || undefined, plate: plate.toUpperCase().trim() || undefined,
+        year: yearNum, km: Number(String(km).replace(/\D/g, "")) || 0,
+        color: color || undefined, plate: normalizePlate(plate) || undefined,
         fuel: fuel || undefined, transmission: transmission || undefined,
         doors: doors ? Number(doors) : undefined,
         origin: origin || undefined,
@@ -285,6 +399,8 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
   };
 
   const selectStyle = { ...inputStyle, background: "#fff" };
+  const lookupResult = lookup.status === "done" ? lookup.result : null;
+  const hasRestriction = !!lookupResult?.situation && !/sem restri/i.test(stripAccents(lookupResult.situation));
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.5)" }}
@@ -298,6 +414,62 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
 
         <div className="px-6 py-5 space-y-6">
           {error && <div className="rounded-lg px-3 py-2" style={{ background: "#FEE2E2", color: "#991B1B", fontSize: 13 }}>{error}</div>}
+
+          {/* Placa: primeiro campo, preenche o resto sozinho */}
+          <div className="rounded-xl px-4 py-4" style={{ background: "#F4F8FC", border: "0.5px solid rgba(24,95,165,0.2)" }}>
+            <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6, fontWeight: 500 }}>
+              Placa {!initial && <span style={{ color: "#6B7280", fontWeight: 400 }}>· digite para preencher os dados automaticamente</span>}
+            </label>
+            <div className="flex items-center gap-2">
+              <input placeholder="ABC1D23" value={plate} maxLength={8}
+                onChange={(e) => setPlate(e.target.value.toUpperCase())}
+                onKeyDown={(e) => { if (e.key === "Enter") runLookup(plate); }}
+                className="flex-1 rounded-lg px-3 py-2.5"
+                style={{ ...inputStyle, background: "#fff", textTransform: "uppercase", fontSize: 16, fontWeight: 600, letterSpacing: 2 }} />
+              <button type="button" onClick={() => runLookup(plate)} disabled={lookup.status === "loading"}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg"
+                style={{ background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, opacity: lookup.status === "loading" ? 0.7 : 1 }}>
+                {lookup.status === "loading" ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
+                {lookup.status === "loading" ? "Consultando..." : "Buscar"}
+              </button>
+            </div>
+
+            {lookup.status === "done" && (
+              <p className="flex items-center gap-1.5" style={{ fontSize: 12, color: "#27500A", marginTop: 8 }}>
+                <CheckCircle2 size={14} />
+                Dados preenchidos pela placa. Confira antes de salvar.
+                {lookup.result.cached && <span style={{ color: "#6B7280" }}> (já consultada antes, sem custo)</span>}
+              </p>
+            )}
+            {lookup.status === "error" && (
+              <p className="flex items-center gap-1.5" style={{ fontSize: 12, color: "#DC2626", marginTop: 8 }}>
+                <AlertTriangle size={14} /> {lookup.message}
+              </p>
+            )}
+
+            {hasRestriction && (
+              <div className="flex items-start gap-2 rounded-lg px-3 py-2 mt-3" style={{ background: "#FEE2E2", color: "#991B1B", fontSize: 13 }}>
+                <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span><strong>Atenção:</strong> este veículo consta como "{lookupResult!.situation}". Verifique antes de comprar ou vender.</span>
+              </div>
+            )}
+
+            {lookupResult?.fipe?.value && (
+              <div className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 mt-3" style={{ background: "#fff", border: "0.5px solid rgba(0,0,0,0.08)" }}>
+                <div>
+                  <div style={{ fontSize: 12, color: "#6B7280" }}>
+                    Tabela FIPE{lookupResult.fipe.reference ? ` (${lookupResult.fipe.reference})` : ""}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#0F1923" }}>{currency(lookupResult.fipe.value)}</div>
+                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>{lookupResult.fipe.label}</div>
+                </div>
+                <button type="button" onClick={() => setPrice(String(lookupResult.fipe!.value))}
+                  className="px-3 py-1.5 rounded-lg" style={{ fontSize: 12, fontWeight: 500, color: "#185FA5", background: "#EBF2FA", whiteSpace: "nowrap" }}>
+                  Usar no preço de venda
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Tipo */}
           <div>
@@ -337,14 +509,11 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
               <Field label="Versão / Trim">
                 <input placeholder="Ex: EXL, LX, Sport" value={version} onChange={(e) => setVersion(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
               </Field>
-              <Field label="Placa">
-                <input placeholder="ABC-1234" value={plate} onChange={(e) => setPlate(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, textTransform: "uppercase" }} />
-              </Field>
               <Field label="Ano *">
-                <input placeholder="2022" value={year} onChange={(e) => setYear(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+                <input placeholder="2022" value={year} inputMode="numeric" onChange={(e) => setYear(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
               </Field>
               <Field label="Quilometragem">
-                <input placeholder="0" value={km} onChange={(e) => setKm(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+                <input placeholder="0" value={km} inputMode="numeric" onChange={(e) => setKm(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
               </Field>
             </div>
           </div>
@@ -421,15 +590,15 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
             <p style={{ fontSize: 12, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Precificação</p>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Preço de custo (privado) *">
-                <input placeholder="0,00" value={cost} onChange={(e) => setCost(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, background: "#FEF3C7" }} />
+                <input placeholder="Ex: 25.000,00" value={cost} inputMode="decimal" onChange={(e) => setCost(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, background: "#FEF3C7" }} />
               </Field>
               <Field label="Preço de venda *">
-                <input placeholder="0,00" value={price} onChange={(e) => setPrice(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+                <input placeholder="Ex: 30.000,00" value={price} inputMode="decimal" onChange={(e) => setPrice(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
               </Field>
             </div>
             {liveMargin !== null && (
               <div className="mt-2 px-3 py-2 rounded-lg" style={{ background: liveMargin > 0 ? "#EAF3DE" : "#FEE2E2", fontSize: 13, color: liveMargin > 0 ? "#27500A" : "#DC2626" }}>
-                Margem: <strong>{liveMargin.toFixed(1)}%</strong>{liveMargin > 0 ? ` · Lucro: ${(priceNum - costNum).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : " · Preço abaixo do custo"}
+                Margem: <strong>{liveMargin.toFixed(1)}%</strong>{liveMargin > 0 ? ` · Lucro: ${currency(priceNum - costNum)}` : " · Preço abaixo do custo"}
               </div>
             )}
           </div>

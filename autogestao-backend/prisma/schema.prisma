@@ -384,3 +384,9 @@ model RenaveIntegration {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
+
+model PlateLookup {
+  plate     String   @id
+  data      Json
+  createdAt DateTime @default(now())
+}

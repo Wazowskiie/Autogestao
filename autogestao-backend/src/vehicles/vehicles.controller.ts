@@ -15,14 +15,26 @@ import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { QueryVehicleDto } from './dto/query-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { VehiclesService } from './vehicles.service';
+import { PlateLookupService } from './plate-lookup.service';
 
 @Controller('vehicles')
 export class VehiclesController {
-  constructor(private readonly vehiclesService: VehiclesService) {}
+  constructor(
+    private readonly vehiclesService: VehiclesService,
+    private readonly plateLookupService: PlateLookupService,
+  ) {}
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryVehicleDto) {
     return this.vehiclesService.findAll(user.dealershipId, query);
+  }
+
+  // Consulta os dados do veículo pela placa (API Placas, com cache no banco).
+  // Fica ANTES do ":id" para não ser confundida com a busca por id.
+  @Roles('owner', 'admin', 'seller')
+  @Get('plate/:plate')
+  lookupPlate(@Param('plate') plate: string) {
+    return this.plateLookupService.lookup(plate);
   }
 
   @Get(':id')

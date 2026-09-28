@@ -114,6 +114,15 @@ export function getVehicle(id: string) { return request<Vehicle>(`/vehicles/${id
 export function createVehicle(input: VehicleInput) { return request<Vehicle>("/vehicles", { method: "POST", body: input }); }
 export function updateVehicle(id: string, input: Partial<VehicleInput>) { return request<Vehicle>(`/vehicles/${id}`, { method: "PATCH", body: input }); }
 export function deleteVehicle(id: string) { return request<{ success: boolean }>(`/vehicles/${id}`, { method: "DELETE" }); }
+export interface PlateLookupResult {
+  plate: string; brand: string; model: string; version: string | null;
+  year: number | null; manufactureYear: number | null;
+  color: string | null; fuel: string | null; origin: string | null;
+  type: VehicleType; city: string | null; uf: string | null; situation: string | null;
+  fipe: { code: string; label: string; value: number | null; reference: string | null } | null;
+  cached: boolean;
+}
+export function lookupPlate(plate: string) { return request<PlateLookupResult>(`/vehicles/plate/${encodeURIComponent(plate)}`); }
 
 // ---------- Clientes ----------
 export interface Customer {
