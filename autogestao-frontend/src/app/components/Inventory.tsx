@@ -387,9 +387,11 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
       const r = await api.lookupPlate(p);
       if (lastLookup.current !== p) return;
 
-      if (r.type) {
-        setType(r.type);
-        setSelectedOptionals((prev) => prev.filter((o) => OPTIONALS_BY_TYPE[r.type].includes(o)));
+      // Só muda o tipo se a API souber qual é; senão mantém o que a pessoa escolheu
+      const foundType = r.type;
+      if (foundType) {
+        setType(foundType);
+        setSelectedOptionals((prev) => prev.filter((o) => OPTIONALS_BY_TYPE[foundType].includes(o)));
       }
       if (r.brand) setBrand(r.brand);
       if (r.model) setModel(r.model);
@@ -397,7 +399,7 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
       if (r.manufactureYear) setManufactureYear(String(r.manufactureYear));
       if (r.year) setYear(String(r.year));
       if (r.color) setColor(r.color);
-      if (r.engineCc && r.type === "moto") setEngineCc(String(r.engineCc));
+      if (r.engineCc) setEngineCc(String(r.engineCc));
       const mappedFuel = mapFuel(r.fuel);
       if (mappedFuel) setFuel(mappedFuel);
       const mappedOrigin = mapOrigin(r.origin);
@@ -589,12 +591,13 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
                   <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
                   <span><strong>Atenção:</strong> este veículo consta como "{lookupResult!.situation}". Verifique antes de comprar ou vender.</span>
                 </div>
-              )} 
+              )}
 
               {lookupResult && !lookupResult.fipe?.value && (
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>Valor FIPE não disponível para esta placa.</p>)}
-              
-              {lookupResult?.fipe?.value && ( 
+                <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>Valor FIPE não disponível para esta placa.</p>
+              )}
+
+              {lookupResult?.fipe?.value && (
                 <div className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 mt-3" style={{ background: "#fff", border: "0.5px solid rgba(0,0,0,0.08)" }}>
                   <div>
                     <div style={{ fontSize: 12, color: "#6B7280" }}>

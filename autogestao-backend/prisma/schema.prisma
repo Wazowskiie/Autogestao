@@ -24,6 +24,7 @@ enum VehicleType {
   car
   moto
   truck
+  other
 }
 
 enum LeadStage {
@@ -128,33 +129,39 @@ model RefreshToken {
 }
 
 model Vehicle {
-  id           String        @id @default(uuid())
-  dealershipId String        @map("dealership_id")
-  brand        String
-  model        String
-  version      String?
-  year         Int
-  km           Int           @default(0)
-  color        String?
-  plate        String?
-  fuel         String?
-  transmission String?
-  doors        Int?
-  origin       String?
-  ownerCount   Int?          @map("owner_count")
-  ipvaPaid     Boolean?      @map("ipva_paid")
-  acceptsTrade Boolean?      @map("accepts_trade")
-  hasSpareKey  Boolean?      @map("has_spare_key")
-  hasManual    Boolean?      @map("has_manual")
-  cost         Decimal       @db.Decimal(12, 2)
-  price        Decimal       @db.Decimal(12, 2)
-  status       VehicleStatus @default(available)
-  type         VehicleType   @default(car)
-  description  String?
-  optionals    String[]      @default([])
-  createdById  String?       @map("created_by_id")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  id              String        @id @default(uuid())
+  dealershipId    String        @map("dealership_id")
+  brand           String
+  model           String
+  version         String?
+  year            Int
+  manufactureYear Int?          @map("manufacture_year")
+  km              Int           @default(0)
+  color           String?
+  plate           String?
+  chassis         String?
+  renavam         String?
+  engineCc        Int?          @map("engine_cc")
+  motorPower      Int?          @map("motor_power")
+  category        String?
+  fuel            String?
+  transmission    String?
+  doors           Int?
+  origin          String?
+  ownerCount      Int?          @map("owner_count")
+  ipvaPaid        Boolean?      @map("ipva_paid")
+  acceptsTrade    Boolean?      @map("accepts_trade")
+  hasSpareKey     Boolean?      @map("has_spare_key")
+  hasManual       Boolean?      @map("has_manual")
+  cost            Decimal       @db.Decimal(12, 2)
+  price           Decimal       @db.Decimal(12, 2)
+  status          VehicleStatus @default(available)
+  type            VehicleType   @default(car)
+  description     String?
+  optionals       String[]      @default([])
+  createdById     String?       @map("created_by_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
   financialTransactions FinancialTransaction[]
 
   dealership   Dealership    @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
