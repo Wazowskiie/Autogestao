@@ -191,7 +191,7 @@ export function Renave() {
   }
 
   return (
-    <div className="flex flex-col gap-8 p-10">
+        <div className="flex h-full flex-col gap-8 overflow-y-auto p-10">
       <div>
         <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Integrações &nbsp;›&nbsp; Renave
