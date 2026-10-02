@@ -383,13 +383,24 @@ model InterestRate {
 }
 
 model RenaveIntegration {
-  id           String   @id @default(uuid())
-  dealershipId String   @unique
-  partner      String?
-  isExistingClient Boolean @default(false)
-  active       Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String    @id @default(uuid())
+  dealershipId     String    @unique
+  partner          String?
+  isExistingClient Boolean   @default(false)
+  active           Boolean   @default(false)
+  status           String    @default("draft")
+  cnpj             String?
+  legalName        String?
+  tradeName        String?
+  responsibleName  String?
+  mobile           String?
+  phone            String?
+  email            String?
+  city             String?
+  uf               String?
+  requestedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model PlateLookup {
