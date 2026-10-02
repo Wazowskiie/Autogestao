@@ -183,10 +183,18 @@ export interface Sale {
   paymentMethod: string | null; notes: string | null; soldAt: string;
   vehicle: SaleVehicle; customer: SaleCustomer; seller: SaleSeller;
   promissoryNotes?: SalePromissoryNote[];
+  tradeInValue?: number;
+  tradeIns?: SaleTradeIn[];
 }
 export interface SaleListResponse { items: Sale[]; total: number; page: number; pageSize: number; }
 export interface SaleSummary { count: number; totalRevenue: number; totalCost: number; totalProfit: number; avgMargin: number; }
-export interface CreateSaleInput { vehicleId: string; customerId: string; sellerId?: string; price: number; cost: number; paymentMethod?: string; soldAt?: string; notes?: string; }
+export interface TradeInInput {
+  type: VehicleType; brand: string; model: string; version?: string;
+  year: number; manufactureYear?: number; color?: string; plate?: string;
+  km?: number; engineCc?: number; value: number;
+}
+export interface SaleTradeIn { id: string; brand: string; model: string; year: number; plate: string | null; cost: number; status: VehicleStatus; }
+export interface CreateSaleInput { vehicleId: string; customerId: string; sellerId?: string; price: number; cost: number; paymentMethod?: string; soldAt?: string; notes?: string; tradeIns?: TradeInInput[]; }
 export interface UpdateSaleInput { notes?: string; paymentMethod?: string; }
 
 export function listSales(params: { month?: string; page?: number; pageSize?: number } = {}) {

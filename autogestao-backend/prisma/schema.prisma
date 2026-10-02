@@ -160,6 +160,7 @@ model Vehicle {
   description     String?
   optionals       String[]      @default([])
   createdById     String?       @map("created_by_id")
+  tradeInSaleId   String?       @map("trade_in_sale_id")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
   financialTransactions FinancialTransaction[]
@@ -168,7 +169,8 @@ model Vehicle {
   createdBy    User?         @relation("VehicleCreatedBy", fields: [createdById], references: [id])
   photos       VehiclePhoto[]
   leads        Lead[]
-  sale         Sale?
+  sale         Sale?         @relation("SaleVehicle")
+  tradeInSale  Sale?         @relation("SaleTradeIns", fields: [tradeInSaleId], references: [id], onDelete: SetNull)
 
   @@index([dealershipId, status])
   @@map("vehicles")
@@ -238,26 +240,28 @@ model Lead {
 }
 
 model Sale {
-  id            String   @id @default(uuid())
-  dealershipId  String   @map("dealership_id")
-  vehicleId     String   @unique @map("vehicle_id")
-  customerId    String   @map("customer_id")
-  sellerId      String   @map("seller_id")
-  cost          Decimal  @db.Decimal(12, 2)
-  price         Decimal  @db.Decimal(12, 2)
-  profit        Decimal  @default(0) @db.Decimal(12, 2)
-  margin        Decimal  @default(0) @db.Decimal(8, 4)
+  id             String   @id @default(uuid())
+  dealershipId   String   @map("dealership_id")
+  vehicleId      String   @unique @map("vehicle_id")
+  customerId     String   @map("customer_id")
+  sellerId       String   @map("seller_id")
+  cost           Decimal  @db.Decimal(12, 2)
+  price          Decimal  @db.Decimal(12, 2)
+  profit         Decimal  @default(0) @db.Decimal(12, 2)
+  margin         Decimal  @default(0) @db.Decimal(8, 4)
+  tradeInValue   Decimal  @default(0) @db.Decimal(12, 2) @map("trade_in_value")
   contractNumber String?  @map("contract_number")
   paymentMethod  String?  @map("payment_method")
   notes          String?
   soldAt         DateTime @default(now()) @map("sold_at")
 
-  dealership    Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
-  vehicle       Vehicle    @relation(fields: [vehicleId], references: [id])
-  customer      Customer   @relation(fields: [customerId], references: [id])
-  seller        User       @relation(fields: [sellerId], references: [id])
-  transactions  FinancialTransaction[]
+  dealership      Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  vehicle         Vehicle    @relation("SaleVehicle", fields: [vehicleId], references: [id])
+  customer        Customer   @relation(fields: [customerId], references: [id])
+  seller          User       @relation(fields: [sellerId], references: [id])
+  transactions    FinancialTransaction[]
   promissoryNotes PromissoryNote[]
+  tradeIns        Vehicle[]  @relation("SaleTradeIns")
 
   @@index([dealershipId])
   @@map("sales")

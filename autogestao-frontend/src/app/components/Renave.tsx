@@ -16,7 +16,7 @@ import { getRenaveState, requestRenaveActivation, saveRenaveConfig } from './ren
 import type { RenaveCompanyData, RenaveConfig, RenavePartner } from './renave-api';
 import * as api from '../../lib/api';
 
-const PARTNERS: RenavePartner[] = ['Renave Fácil', 'InfoSimples', 'SERPRO Direto'];
+const PARTNERS: RenavePartner[] = ['Renave Fácil'];
 const AVAILABLE_PARTNERS: RenavePartner[] = ['Renave Fácil'];
 
 const BENEFITS = [
