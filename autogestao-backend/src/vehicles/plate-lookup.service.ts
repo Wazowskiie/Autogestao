@@ -69,8 +69,32 @@ function guessType(data: any): 'car' | 'moto' | 'truck' | null {
 }
 
 // Transforma a resposta da API Placas no formato que o nosso formulário usa
+// Pega o primeiro valor preenchido entre vários nomes de campo possíveis
+function pick(...values: any[]): string {
+  for (const v of values) {
+    if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+  }
+  return '';
+}
+
+// Algumas respostas trazem marca e modelo juntos, ex.: "HONDA/CG 160 FAN"
+function splitBrandModel(text: string) {
+  const [brand, ...rest] = text.split('/');
+  return { brand: brand?.trim() ?? '', model: rest.join('/').trim() };
+}
+
+// A resposta tem dados de veículo de verdade?
+export function hasVehicleData(result: PlateLookupResult) {
+  return Boolean(result.brand && result.model);
+}
+
 function mapResult(plate: string, data: any, cached: boolean): PlateLookupResult {
-  const model = data.MODELO || data.modelo || '';
+  data = data ?? {};
+  const joined = splitBrandModel(
+    pick(data.marcaModelo, data.MARCA_MODELO, data?.extra?.marca_modelo, data?.extra?.marcaModelo),
+  );
+  const brandRaw = pick(data.MARCA, data.marca, data?.extra?.marca, joined.brand);
+  const model = pick(data.MODELO, data.modelo, data?.extra?.modelo, joined.model);
   const rawVersion = data.VERSAO || data.SUBMODELO || '';
 
   // Da FIPE, pega o resultado com maior "score" (o mais parecido com o veículo)
@@ -86,7 +110,7 @@ function mapResult(plate: string, data: any, cached: boolean): PlateLookupResult
 
   return {
     plate,
-    brand: prettify(data.MARCA || data.marca),
+    brand: prettify(brandRaw),
     model: prettify(model),
     version,
     year: toNumber(data.anoModelo || data?.extra?.ano_modelo || data.ano),
@@ -126,7 +150,9 @@ export class PlateLookupService {
     const cached = await this.prisma.plateLookup.findUnique({ where: { plate } });
     const maxAge = CACHE_DAYS * 24 * 60 * 60 * 1000;
     if (cached && Date.now() - cached.createdAt.getTime() < maxAge) {
-      return mapResult(plate, cached.data, true);
+      const fromCache = mapResult(plate, cached.data, true);
+      // Só usa o cache se ele tiver dados de verdade (resposta vazia é ignorada)
+      if (hasVehicleData(fromCache)) return fromCache;
     }
 
     // 2) Consulta na API Placas
@@ -151,7 +177,25 @@ export class PlateLookupService {
     if (res.status === 429) throw new ServiceUnavailableException('Acabaram as consultas de placa. Recarregue o saldo na API Placas.');
     if (!res.ok) throw new BadGatewayException('A consulta de placa falhou. Tente novamente.');
 
-    const data = await res.json();
+    let data: any;
+    try {
+      data = await res.json();
+    } catch {
+      throw new BadGatewayException('A API Placas respondeu num formato inesperado. Tente novamente.');
+    }
+
+    const result = mapResult(plate, data, false);
+
+    // Resposta sem marca/modelo: NÃO salva no cache e mostra o motivo
+    if (!hasVehicleData(result)) {
+      console.warn(`[API Placas] ${plate} veio sem dados do veículo. Resposta completa:`, JSON.stringify(data));
+      const motivo = pick(data?.mensagemRetorno, data?.message, data?.mensagem, data?.erro, data?.error);
+      throw new NotFoundException(
+        motivo
+          ? `A API Placas não retornou os dados: ${motivo}`
+          : 'A API Placas não retornou os dados deste veículo. Preencha manualmente.',
+      );
+    }
 
     // 3) Guarda no banco para as próximas vezes
     await this.prisma.plateLookup.upsert({
@@ -160,6 +204,6 @@ export class PlateLookupService {
       update: { data, createdAt: new Date() },
     });
 
-    return mapResult(plate, data, false);
+    return result;
   }
 }

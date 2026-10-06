@@ -1,13 +1,14 @@
-import { Car, Bike, Truck } from "lucide-react";
+import { Car, Bike, Truck, Package } from "lucide-react";
 
 interface VehicleIconProps {
-  type?: "car" | "moto" | "truck";
+  type?: "car" | "moto" | "truck" | "other";
   size?: number;
   className?: string;
 }
 
 export function VehicleIcon({ type = "car", size = 32, className }: VehicleIconProps) {
-  const Icon = type === "moto" ? Bike : type === "truck" ? Truck : Car;
+  const Icon =
+    type === "moto" ? Bike : type === "truck" ? Truck : type === "other" ? Package : Car;
   return (
     <div
       className={className}
