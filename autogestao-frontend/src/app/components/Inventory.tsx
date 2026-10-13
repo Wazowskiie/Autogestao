@@ -226,6 +226,9 @@ export function Inventory() {
               {vehicles.map((v, i) => {
                 const TypeIcon = TYPE_ICON[v.type] ?? Car;
                 const m = margin(Number(v.cost), Number(v.price));
+                // Foto de capa (a primeira), se o veículo tiver fotos
+                const photos = (v as unknown as { photos?: { url: string; order: number }[] }).photos ?? [];
+                const cover = [...photos].sort((a, b) => a.order - b.order)[0];
                 const subtitle = [
                   v.type === "other" ? v.category : null,
                   v.manufactureYear && v.manufactureYear !== v.year ? `${v.manufactureYear}/${v.year}` : String(v.year),
@@ -237,8 +240,12 @@ export function Inventory() {
                     style={{ cursor: "pointer", borderBottom: i < vehicles.length - 1 ? "0.5px solid rgba(0,0,0,0.06)" : "none" }}>
                     <td style={{ padding: "12px 16px" }}>
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center rounded-lg flex-shrink-0" style={{ width: 36, height: 36, background: "#F4F6F9" }}>
-                          <TypeIcon size={16} style={{ color: "#CBD5E1" }} />
+                        <div className="flex items-center justify-center rounded-lg flex-shrink-0 overflow-hidden" style={{ width: 44, height: 36, background: "#F4F6F9" }}>
+                          {cover ? (
+                            <img src={cover.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (
+                            <TypeIcon size={16} style={{ color: "#CBD5E1" }} />
+                          )}
                         </div>
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 500 }}>{v.brand} {v.model} {v.version ?? ""}</div>
@@ -275,9 +282,10 @@ export function Inventory() {
       </div>
 
       <VehicleDetailsModal
-        vehicle={details as VehicleDetails | null}
+        vehicle={details as unknown as VehicleDetails | null}
         onClose={() => setDetails(null)}
-        onEdit={() => { const v = details; setDetails(null); setModalVehicle(v); }} />
+        onChanged={fetchVehicles}
+        onEdit={(v) => { setDetails(null); setModalVehicle(v as unknown as api.Vehicle); }} />
 
       {modalVehicle !== null && (
         <VehicleFormModal key={modalVehicle === "new" ? "new" : modalVehicle.id}

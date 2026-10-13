@@ -20,6 +20,7 @@ import { SellersModule } from './sellers/sellers.module';
 import { StorefrontModule } from './storefront/storefront.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { RenaveModule } from './renave/renave.module';
+import { VehicleDetailsModule } from './vehicle-details/vehicle-details.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { RenaveModule } from './renave/renave.module';
     PrismaModule,
     AuthModule,
     VehiclesModule,
+    VehicleDetailsModule,
     RenaveModule, 
     CustomersModule,
     LeadsModule,

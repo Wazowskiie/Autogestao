@@ -4,3 +4,4 @@ src/generated/
 .env
 *.log
 .DS_Store
+storage/

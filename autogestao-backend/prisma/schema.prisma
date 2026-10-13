@@ -168,6 +168,15 @@ model Vehicle {
   dealership   Dealership    @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
   createdBy    User?         @relation("VehicleCreatedBy", fields: [createdById], references: [id])
   photos       VehiclePhoto[]
+
+  // --- Painel "Dados do veículo" ---
+  files        VehicleFile[]
+  invoices     VehicleInvoice[]
+  renave       VehicleRenave?
+  expenses     VehicleExpense[]
+  acquisition  VehicleAcquisition?
+  pendencies   VehiclePendency[]
+  web          VehicleWeb?
   leads        Lead[]
   sale         Sale?         @relation("SaleVehicle")
   tradeInSale  Sale?         @relation("SaleTradeIns", fields: [tradeInSaleId], references: [id], onDelete: SetNull)
@@ -411,4 +420,161 @@ model PlateLookup {
   plate     String   @id
   data      Json
   createdAt DateTime @default(now())
+}
+
+// =====================================================================
+// Painel "Dados do veículo" (abas Arquivos, NF-e, Lançamentos, Entrada,
+// Pendências e Web)
+// =====================================================================
+
+// Aba Arquivos. category: vehicle | supplier | owner_document | link
+model VehicleFile {
+  id           String   @id @default(uuid())
+  dealershipId String   @map("dealership_id")
+  vehicleId    String   @map("vehicle_id")
+  category     String
+  name         String
+  storageKey   String?  @map("storage_key") // caminho do arquivo no servidor
+  url          String?                      // usado quando category = link
+  mimeType     String?  @map("mime_type")
+  size         Int?
+  uploadedBy   String?  @map("uploaded_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+  @@map("vehicle_files")
+}
+
+// Aba NF-e. direction: issued (emitida) | received (recebida)
+model VehicleInvoice {
+  id                String    @id @default(uuid())
+  dealershipId      String    @map("dealership_id")
+  vehicleId         String    @map("vehicle_id")
+  direction         String
+  number            String?
+  series            String?
+  accessKey         String?   @map("access_key")
+  operation         String?                       // natureza da operação
+  cfop              String?
+  type              String?                       // entrada | saida
+  status            String    @default("authorized")
+  issuerName        String?   @map("issuer_name")
+  issuerDocument    String?   @map("issuer_document")
+  recipientName     String?   @map("recipient_name")
+  recipientDocument String?   @map("recipient_document")
+  amount            Decimal?  @db.Decimal(12, 2)
+  issuedAt          DateTime? @map("issued_at")
+  xmlStorageKey     String?   @map("xml_storage_key")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  vehicle           Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+  @@map("vehicle_invoices")
+}
+
+// Aba NF-e, quadro RENAVE. status: not_sent | pending | done | error
+model VehicleRenave {
+  id            String    @id @default(uuid())
+  dealershipId  String    @map("dealership_id")
+  vehicleId     String    @unique @map("vehicle_id")
+  entryStatus   String    @default("not_sent") @map("entry_status")
+  entryAt       DateTime? @map("entry_at")
+  entryProtocol String?   @map("entry_protocol")
+  exitStatus    String    @default("not_sent") @map("exit_status")
+  exitAt        DateTime? @map("exit_at")
+  exitProtocol  String?   @map("exit_protocol")
+  notes         String?
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@map("vehicle_renave")
+}
+
+// Aba Lançamentos. kind: budget (orçamento) | expense (despesa) | revenue (receita)
+// status: budget -> pending | approved | rejected; expense/revenue -> pending | paid
+model VehicleExpense {
+  id                     String   @id @default(uuid())
+  dealershipId           String   @map("dealership_id")
+  vehicleId              String   @map("vehicle_id")
+  kind                   String
+  date                   DateTime @default(now())
+  description            String
+  supplier               String?
+  requester              String?
+  amount                 Decimal  @db.Decimal(12, 2)
+  status                 String   @default("pending")
+  addToCost              Boolean  @default(true) @map("add_to_cost")
+  financialTransactionId String?  @unique @map("financial_transaction_id")
+  createdByName          String?  @map("created_by_name")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  vehicle                Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+  @@map("vehicle_expenses")
+}
+
+// Aba Entrada. ownershipType: own (próprio) | consigned (consignado)
+model VehicleAcquisition {
+  id                     String   @id @default(uuid())
+  dealershipId           String   @map("dealership_id")
+  vehicleId              String   @unique @map("vehicle_id")
+  entryDate              DateTime @default(now()) @map("entry_date")
+  ownershipType          String   @default("own") @map("ownership_type")
+  supplierName           String?  @map("supplier_name")
+  supplierDocument       String?  @map("supplier_document")
+  supplierPhone          String?  @map("supplier_phone")
+  documentOwnerName      String?  @map("document_owner_name")
+  documentOwnerDocument  String?  @map("document_owner_document")
+  purchaseValue          Decimal  @default(0) @db.Decimal(12, 2) @map("purchase_value")
+  payoffValue            Decimal  @default(0) @db.Decimal(12, 2) @map("payoff_value")
+  debtsValue             Decimal  @default(0) @db.Decimal(12, 2) @map("debts_value")
+  notes                  String?
+  financialTransactionId String?  @unique @map("financial_transaction_id")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  vehicle                Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@map("vehicle_acquisitions")
+}
+
+// Aba Pendências
+model VehiclePendency {
+  id           String    @id @default(uuid())
+  dealershipId String    @map("dealership_id")
+  vehicleId    String    @map("vehicle_id")
+  description  String
+  done         Boolean   @default(false)
+  doneAt       DateTime? @map("done_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  vehicle      Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+  @@map("vehicle_pendencies")
+}
+
+// Aba Web
+model VehicleWeb {
+  id           String   @id @default(uuid())
+  dealershipId String   @map("dealership_id")
+  vehicleId    String   @unique @map("vehicle_id")
+  title        String?
+  description  String?
+  webPrice     Decimal? @db.Decimal(12, 2) @map("web_price")
+  promoPrice   Decimal? @db.Decimal(12, 2) @map("promo_price")
+  youtubeUrl   String?  @map("youtube_url")
+  featured     Boolean  @default(false)
+  published    Boolean  @default(true)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@map("vehicle_web")
 }
