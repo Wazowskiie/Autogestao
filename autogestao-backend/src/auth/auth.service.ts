@@ -88,7 +88,7 @@ export class AuthService {
       include: { user: true },
     });
 
-    if (!stored) {
+    if (!stored || !stored.user.active) {
       throw new UnauthorizedException('Sessão expirada, faça login novamente');
     }
 

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./components/Dashboard";
 import { Inventory } from "./components/Inventory";
-import { LeadsCRM } from "./components/LeadsCRM";
+import { LeadsCRM } from "./components/LeadsCRMNext";
 import { Financial } from "./components/Financial";
 import { Plans } from "./components/Plans";
 import { Login, Onboarding } from "./components/Login";
@@ -16,11 +16,13 @@ import { PartsStore } from "./components/PartsStore";
 import { Globe, Megaphone, Settings, ExternalLink } from "lucide-react";
 import { useAuth } from "../lib/auth-context";
 import { Renave } from "./components/Renave";
+import { ChatInbox } from './components/ChatInbox';
+import { AssistantPanel } from './components/AssistantPanel';
 
 type Page =
   | "login" | "onboarding" | "dashboard" | "inventory"
   | "leads" | "financial" | "ads" | "site" | "settings" | "plans" | "storefront"
-  | "sales" | "customers" | "sellers" | "promissory" | "parts" | "renave";
+  | "sales" | "customers" | "sellers" | "promissory" | "parts" | "renave" | "chat";
 
 function PlaceholderPage({ title, icon: Icon }: { title: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }) {
   return (
@@ -35,6 +37,8 @@ function PlaceholderPage({ title, icon: Icon }: { title: string; icon: React.Com
 }
 
 export default function App() {
+  const [crmLeadId,setCrmLeadId]=useState<string|null>(null);
+  const [chatId,setChatId]=useState<string|null>(null);
   const auth = useAuth();
   const [page, setPage] = useState<Page>("login");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -98,7 +102,7 @@ export default function App() {
   switch (page) {
     case "dashboard": return <Dashboard onNavigate={navigate} />;
     case "inventory": return <Inventory />;
-    case "leads": return <LeadsCRM />;
+    case "leads": return <LeadsCRM initialLeadId={crmLeadId} onCloseLead={()=>setCrmLeadId(null)} onOpenChat={id=>{setChatId(id);setPage('chat');}} />;
     case "financial": return <Financial />;
     case "sales": return <Sales />;
     case "customers": return <Customers />;
@@ -106,6 +110,7 @@ export default function App() {
     case "promissory": return <PromissoryNotes />;
     case "parts": return <PartsStore />;
     case "renave": return <Renave />;
+    case "chat": return <ChatInbox initialId={chatId} onOpenLead={id=>{setCrmLeadId(id);setPage('leads');}} />;
     case "plans": return <Plans />;
     case "ads": return <PlaceholderPage title="Anúncios" icon={Megaphone} />;
     case "settings": return <PlaceholderPage title="Configurações" icon={Settings} />;
@@ -175,7 +180,7 @@ export default function App() {
                 inventory: "Estoque",
                 sales: "Vendas",
                 customers: "Clientes",
-                leads: "Leads",
+                leads: "CRM",
                 sellers: "Vendedores",
                 financial: "Financeiro",
                 promissory: "Promissórias",
@@ -211,6 +216,9 @@ export default function App() {
           {renderPage()}
         </div>
       </div>
+
+      {/* Assistente virtual, disponível em todas as telas */}
+      <AssistantPanel currentPage={page} />
     </div>
   );
 }

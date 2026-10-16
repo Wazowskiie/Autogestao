@@ -9,7 +9,6 @@ export class ApiError extends Error {
 }
 
 let accessToken: string | null = null;
-export function getAccessToken() { return accessToken; }
 export function setAccessToken(token: string | null) { accessToken = token; }
 
 interface RequestOptions { method?: string; body?: unknown; skipAuthRetry?: boolean; }
@@ -163,9 +162,10 @@ export type LeadStage = "new" | "contacted" | "negotiating" | "won" | "lost";
 export interface LeadCustomer { id: string; name: string; phone: string | null; email: string | null; }
 export interface LeadVehicle { id: string; brand: string; model: string; year: number; photos?: { url: string }[]; }
 export interface LeadSeller { id: string; name: string; }
-export interface Lead { id: string; dealershipId: string; stage: LeadStage; source: string | null; notes: string | null; createdAt: string; updatedAt: string; customer: LeadCustomer | null; vehicle: LeadVehicle | null; assignedSeller: LeadSeller | null; }
+export type LeadTemperature = 'hot' | 'warm' | 'cold';
+export interface Lead { id: string; dealershipId: string; stage: LeadStage; source: string | null; notes: string | null; createdAt: string; updatedAt: string; customer: LeadCustomer | null; vehicle: LeadVehicle | null; assignedSeller: LeadSeller | null; temperature: LeadTemperature | null; budget: number | null; paymentIntent: string | null; nextActionDate: string | null; nextActionNote: string | null; }
 export type LeadsGrouped = Record<LeadStage, Lead[]>;
-export interface CreateLeadInput { customerId?: string; vehicleId?: string; assignedSellerId?: string; source?: string; notes?: string; customerName?: string; customerPhone?: string; customerEmail?: string; }
+export interface CreateLeadInput { customerId?: string; vehicleId?: string; assignedSellerId?: string; source?: string; notes?: string; customerName?: string; customerPhone?: string; customerEmail?: string; temperature?: LeadTemperature; budget?: number; paymentIntent?: string; nextActionDate?: string; nextActionNote?: string; }
 
 export function listLeads() { return request<LeadsGrouped>("/leads"); }
 export function createLead(input: CreateLeadInput) { return request<Lead>("/leads", { method: "POST", body: input }); }
@@ -321,13 +321,13 @@ export interface Part { id: string; dealershipId: string; name: string; sku: str
 export interface PartListResponse { items: Part[]; total: number; page: number; pageSize: number; }
 export interface CreatePartInput { name: string; sku?: string; cost: number; price: number; stockQty?: number; category?: string; }
 
-export function listParts(params: { search?: string; category?: string; lowStock?: boolean; page?: number } = {}) {
+export function listParts(params: { search?: string; category?: string; lowStock?: boolean; page?: number; pageSize?: number } = {}) {
   const query = new URLSearchParams();
   if (params.search) query.set("search", params.search);
   if (params.category) query.set("category", params.category);
   if (params.lowStock) query.set("lowStock", "true");
   query.set("page", String(params.page ?? 1));
-  query.set("pageSize", "50");
+  query.set("pageSize", String(params.pageSize ?? 50));
   return request<PartListResponse>(`/parts?${query.toString()}`);
 }
 export function createPart(input: CreatePartInput) { return request<Part>("/parts", { method: "POST", body: input }); }

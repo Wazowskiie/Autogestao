@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+*.tsbuildinfo
+autogestao-backend/src/generated/
+.local-data/
+.local-backups/
+*.bak

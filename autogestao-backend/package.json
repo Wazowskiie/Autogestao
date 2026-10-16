@@ -13,7 +13,12 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "seed:demo": "ts-node prisma/seed-demo.ts",
+    "test:chat": "node --test test/chat.test.cjs",
+    "prisma:deploy": "prisma migrate deploy",
+    "test:crm": "node --test test/crm.test.cjs",
+    "test": "npm run build && node --test --test-concurrency=1 test/chat.test.cjs test/crm.test.cjs test/painel-vendas.test.cjs test/assistant.test.cjs"
   },
   "dependencies": {
     "@nestjs/common": "11.1.27",
@@ -42,6 +47,8 @@
     "@hono/node-server": "^1.19.13"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.9",
+    "@electric-sql/pglite-socket": "^0.2.12",
     "@nestjs/cli": "11.0.23",
     "@types/cookie-parser": "1.4.9",
     "@types/express": "5.0.6",

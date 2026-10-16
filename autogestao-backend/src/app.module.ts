@@ -20,17 +20,23 @@ import { SellersModule } from './sellers/sellers.module';
 import { StorefrontModule } from './storefront/storefront.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { RenaveModule } from './renave/renave.module';
+import { ChatModule } from './chat/chat.module';
+import { CrmModule } from './crm/crm.module';
 import { VehicleDetailsModule } from './vehicle-details/vehicle-details.module';
+import { AssistantModule } from './assistant/assistant.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ChatModule,
+    CrmModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     InterestRatesModule,
     PrismaModule,
     AuthModule,
     VehiclesModule,
     VehicleDetailsModule,
+    AssistantModule,
     RenaveModule, 
     CustomersModule,
     LeadsModule,
@@ -40,8 +46,9 @@ import { VehicleDetailsModule } from './vehicle-details/vehicle-details.module';
     PromissoryNotesModule,
     PartsModule,
     StorefrontModule,
-    BillingModule,
-    FocusNfeModule,
+    // Cobrança (Asaas) e NF-e (Focus) ficam ligadas, a não ser que o .env diga "false"
+    ...(process.env.ENABLE_BILLING !== 'false' ? [BillingModule] : []),
+    ...(process.env.ENABLE_FISCAL !== 'false' ? [FocusNfeModule] : []),
   ],
   controllers: [AppController],
   providers: [

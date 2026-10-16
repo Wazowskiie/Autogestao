@@ -5,26 +5,27 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { UpdateLeadStageDto } from './dto/update-lead-stage.dto';
-import { LeadsService } from './leads.service';
+import { CrmService } from '../crm/crm.service';
+import { CrmLeadDto } from '../crm/crm.dto';
 
 @Controller('leads')
 export class LeadsController {
-  constructor(private readonly leadsService: LeadsService) {}
+  constructor(private readonly leadsService: CrmService) {}
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser) {
-    return this.leadsService.findAll(user.dealershipId);
+    return this.leadsService.legacyGrouped(user);
   }
 
   @Get(':id')
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.leadsService.findOne(user.dealershipId, id);
+    return this.leadsService.detail(user, id);
   }
 
   @Roles('owner', 'admin', 'seller')
   @Post()
-  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateLeadDto) {
-    return this.leadsService.create(user.dealershipId, dto);
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrmLeadDto) {
+    return this.leadsService.create(user, dto);
   }
 
   @Roles('owner', 'admin', 'seller')
@@ -34,7 +35,7 @@ export class LeadsController {
     @Param('id') id: string,
     @Body() dto: UpdateLeadStageDto,
   ) {
-    return this.leadsService.updateStage(user.dealershipId, id, dto);
+    return this.leadsService.update(user, id, { stage: dto.stage });
   }
 
   @Roles('owner', 'admin', 'seller')
@@ -42,14 +43,14 @@ export class LeadsController {
   update(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
-    @Body() dto: UpdateLeadDto,
+    @Body() dto: CrmLeadDto,
   ) {
-    return this.leadsService.update(user.dealershipId, id, dto);
+    return this.leadsService.update(user, id, dto);
   }
 
   @Roles('owner', 'admin')
   @Delete(':id')
   remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.leadsService.remove(user.dealershipId, id);
+    return this.leadsService.archive(user, id, true);
   }
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Search, Car, Bike, Truck, Phone, MapPin, X, Gauge, Calendar } from "lucide-react";
 import * as api from "../../lib/api";
+import { CustomerChat } from './CustomerChat';
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -151,6 +152,7 @@ export function PublicStorefront({ slug, onNavigate }: { slug: string; onNavigat
       {selected && (
         <VehicleDetailModal vehicle={selected} dealership={dealership} primaryColor={primaryColor} onClose={() => setSelected(null)} />
       )}
+      {dealership && <CustomerChat slug={slug} vehicles={vehicles} />}
     </div>
   );
 }

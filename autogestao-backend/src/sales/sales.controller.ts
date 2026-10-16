@@ -5,6 +5,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { QuerySaleDto } from './dto/query-sale.dto';
 import { SalesService } from './sales.service';
+import { UpdateSaleDto } from './dto/update-sale.dto';
 
 @Controller('sales')
 export class SalesController {
@@ -12,23 +13,23 @@ export class SalesController {
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QuerySaleDto) {
-    return this.salesService.findAll(user.dealershipId, query);
+    return this.salesService.findAll(user.dealershipId, query, user);
   }
 
   @Get('summary')
   summary(@CurrentUser() user: AuthenticatedUser, @Query('month') month?: string) {
-    return this.salesService.summary(user.dealershipId, month);
+    return this.salesService.summary(user.dealershipId, month, user);
   }
 
   @Get(':id')
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.salesService.findOne(user.dealershipId, id);
+    return this.salesService.findOne(user.dealershipId, id, user);
   }
 
   @Roles('owner', 'admin', 'seller')
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateSaleDto) {
-    return this.salesService.create(user.dealershipId, user.userId, dto);
+    return this.salesService.create(user.dealershipId, user.userId, dto, user);
   }
 
   // Editar e excluir só para owner e admin
@@ -37,7 +38,7 @@ export class SalesController {
   update(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
-    @Body() data: any,
+    @Body() data: UpdateSaleDto,
   ) {
     return this.salesService.update(user.dealershipId, id, data);
   }

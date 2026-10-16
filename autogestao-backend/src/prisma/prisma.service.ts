@@ -9,7 +9,11 @@ export class PrismaService
 {
   constructor() {
     super({
-      adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+      adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL,
+        // Embedded Postgres has one underlying session; parallel prepared statements
+        // must not be interleaved across pool connections. Normal Postgres is unchanged.
+        ...(process.env.LOCAL_EMBEDDED_DB === 'true' ? { max: 1 } : {}),
+      }),
     });
   }
 

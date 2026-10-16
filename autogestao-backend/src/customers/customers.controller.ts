@@ -13,18 +13,18 @@ export class CustomersController {
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryCustomerDto) {
-    return this.customersService.findAll(user.dealershipId, query);
+    return this.customersService.findAll(user.dealershipId, query, user);
   }
 
   @Get(':id')
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.customersService.findOne(user.dealershipId, id);
+    return this.customersService.findOne(user.dealershipId, id, user);
   }
 
   @Roles('owner', 'admin', 'seller')
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateCustomerDto) {
-    return this.customersService.create(user.dealershipId, dto);
+    return this.customersService.create(user.dealershipId, dto, user);
   }
 
   @Roles('owner', 'admin', 'seller')
@@ -34,7 +34,7 @@ export class CustomersController {
     @Param('id') id: string,
     @Body() dto: UpdateCustomerDto,
   ) {
-    return this.customersService.update(user.dealershipId, id, dto);
+    return this.customersService.update(user.dealershipId, id, dto, user);
   }
 
   @Roles('owner', 'admin')

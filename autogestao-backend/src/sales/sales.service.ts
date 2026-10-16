@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { QuerySaleDto } from './dto/query-sale.dto';
+import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 
 const SALE_INCLUDE = {
   vehicle: true,
@@ -9,20 +10,7 @@ const SALE_INCLUDE = {
   seller: { select: { id: true, name: true } },
   // Veículos que entraram como parte do pagamento
   tradeIns: { select: { id: true, brand: true, model: true, year: true, plate: true, cost: true, status: true } },
-  // Formas de pagamento (PIX, dinheiro, cartão...)
-  payments: { orderBy: { createdAt: 'asc' } },
 } as const;
-
-// Nome de cada forma de pagamento (aparece no Financeiro)
-const PAYMENT_NAMES: Record<string, string> = {
-  pix: 'PIX', cash: 'Dinheiro', transfer: 'Transferência', card_credit: 'Cartão de crédito',
-  card_debit: 'Cartão de débito', financing: 'Financiamento', consortium: 'Consórcio', promissory: 'Promissórias',
-};
-
-// Formas em que o dinheiro ainda vai entrar depois (ficam "pendentes" no Financeiro)
-const RECEIVED_LATER = ['financing', 'consortium', 'promissory'];
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // "abc-1d23" -> "ABC1D23"
 function normalizePlate(plate?: string | null) {
@@ -50,7 +38,10 @@ export class SalesService {
     return `${year}/${seq}`;
   }
 
-  async create(dealershipId: string, userId: string, dto: CreateSaleDto) {
+  async create(dealershipId: string, userId: string, dto: CreateSaleDto, actor?: AuthenticatedUser) {
+    if(actor?.role==='seller' && dto.sellerId && dto.sellerId!==userId) throw new ForbiddenException('Vendedor pode registrar vendas somente para si');
+    const seller=await this.prisma.user.findFirst({where:{id:dto.sellerId??userId,dealershipId,active:true},select:{id:true}});
+    if(!seller) throw new NotFoundException('Vendedor não encontrado');
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: dto.vehicleId, dealershipId },
     });
@@ -58,50 +49,17 @@ export class SalesService {
     if (vehicle.status === 'sold') throw new BadRequestException('Este veículo já foi vendido');
 
     const customer = await this.prisma.customer.findFirst({
-      where: { id: dto.customerId, dealershipId },
+      where: { id: dto.customerId, dealershipId, ...(actor?.role==='seller'?{OR:[{createdById:userId},{leads:{some:{assignedSellerId:userId}}},{sales:{some:{sellerId:userId}}}]}:{}) },
     });
     if (!customer) throw new NotFoundException('Cliente não encontrado');
 
     const tradeIns = dto.tradeIns ?? [];
-    const tradeInValue = round2(tradeIns.reduce((sum, t) => sum + Number(t.value), 0));
+    const tradeInValue = tradeIns.reduce((sum, t) => sum + Number(t.value), 0);
     if (tradeInValue > dto.price) {
       throw new BadRequestException('O valor dos veículos na troca é maior que o preço da venda.');
     }
 
-    // Formas de pagamento: somadas com a troca, precisam fechar o preço
-    const payments = (dto.payments ?? []).map((p) => {
-      const amount = round2(Number(p.amount));
-      const isCard = p.method === 'card_credit' || p.method === 'card_debit';
-      const feePercent = isCard && p.feePercent ? Number(p.feePercent) : null;
-      return {
-        method: p.method,
-        amount,
-        installments: p.method === 'card_credit' ? p.installments ?? 1 : null,
-        feePercent,
-        feeAmount: feePercent ? round2((amount * feePercent) / 100) : 0,
-        notes: p.notes?.trim() || null,
-      };
-    });
-    if (payments.filter((p) => p.method === 'promissory').length > 1) {
-      throw new BadRequestException('Use só uma linha de promissórias por venda.');
-    }
-    if (payments.length) {
-      const paid = round2(payments.reduce((sum, p) => sum + p.amount, 0) + tradeInValue);
-      const diff = round2(dto.price - paid);
-      if (Math.abs(diff) >= 0.01) {
-        throw new BadRequestException(
-          diff > 0
-            ? `O pagamento não fecha o preço da venda: faltam ${diff.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`
-            : `O pagamento passa do preço da venda em ${(-diff).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`,
-        );
-      }
-    }
-    const feesTotal = round2(payments.reduce((sum, p) => sum + p.feeAmount, 0));
-    const paymentMethod =
-      payments.length === 0 ? dto.paymentMethod : payments.length === 1 ? payments[0].method : 'mixed';
-
-    // A taxa da maquininha sai do lucro
-    const profit = dto.price - dto.cost - feesTotal;
+    const profit = dto.price - dto.cost;
     const margin = dto.cost > 0 ? (profit / dto.cost) * 100 : 0;
     const soldAt = parseDateOnly(dto.soldAt);
     const contractNumber = await this.generateContractNumber(dealershipId);
@@ -120,7 +78,7 @@ export class SalesService {
           margin,
           tradeInValue,
           contractNumber,
-          paymentMethod,
+          paymentMethod: dto.paymentMethod,
           notes: dto.notes,
           soldAt,
         },
@@ -131,56 +89,19 @@ export class SalesService {
         data: { status: 'sold' },
       });
 
-      const saleLabel = `Venda ${contractNumber}: ${vehicle.brand} ${vehicle.model} ${vehicle.year} — ${customer.name}`;
-
-      if (payments.length === 0) {
-        // Venda sem formas detalhadas: uma receita com o valor cheio (como antes)
-        await tx.financialTransaction.create({
-          data: {
-            dealershipId, saleId: created.id, vehicleId: dto.vehicleId,
-            type: 'revenue', category: 'Venda de veículo', amount: dto.price, date: soldAt,
-            description: saleLabel,
-          },
-        });
-      } else {
-        // Uma receita para cada forma de pagamento, para o fechamento do mês por PIX, dinheiro, cartão...
-        for (const p of payments) {
-          await tx.salePayment.create({ data: { dealershipId, saleId: created.id, ...p } });
-
-          const later = RECEIVED_LATER.includes(p.method);
-          await tx.financialTransaction.create({
-            data: {
-              dealershipId, saleId: created.id, vehicleId: dto.vehicleId,
-              type: 'revenue', category: `Venda de veículo - ${PAYMENT_NAMES[p.method] ?? p.method}`,
-              amount: p.amount, date: soldAt, paid: !later, paidAt: later ? null : soldAt,
-              description: `${saleLabel} (${PAYMENT_NAMES[p.method] ?? p.method}${p.installments && p.installments > 1 ? ` em ${p.installments}x` : ''})`,
-            },
-          });
-
-          // Taxa da maquininha vira uma despesa
-          if (p.feeAmount > 0) {
-            await tx.financialTransaction.create({
-              data: {
-                dealershipId, saleId: created.id, vehicleId: dto.vehicleId,
-                type: 'expense', category: 'Taxa de cartão',
-                amount: p.feeAmount, date: soldAt, paidAt: soldAt,
-                description: `Taxa ${p.feePercent}% (${PAYMENT_NAMES[p.method]}) — venda ${contractNumber}`,
-              },
-            });
-          }
-        }
-
-        // A parte paga com veículo também conta como receita da venda
-        if (tradeInValue > 0) {
-          await tx.financialTransaction.create({
-            data: {
-              dealershipId, saleId: created.id, vehicleId: dto.vehicleId,
-              type: 'revenue', category: 'Venda de veículo - Troca', amount: tradeInValue, date: soldAt, paidAt: soldAt,
-              description: `${saleLabel} (veículo na troca)`,
-            },
-          });
-        }
-      }
+      // Receita da venda (valor cheio)
+      await tx.financialTransaction.create({
+        data: {
+          dealershipId,
+          saleId: created.id,
+          vehicleId: dto.vehicleId,
+          type: 'revenue',
+          category: 'Venda de veículo',
+          amount: dto.price,
+          date: soldAt,
+          description: `Venda ${contractNumber}: ${vehicle.brand} ${vehicle.model} ${vehicle.year} — ${customer.name}`,
+        },
+      });
 
       // Cada veículo da troca: entra no estoque e vira uma despesa de "Estoque".
       // Assim o saldo do financeiro mostra só o dinheiro que entrou de verdade
@@ -201,9 +122,6 @@ export class SalesService {
             km: t.km ?? 0,
             color: t.color?.trim() || null,
             plate: normalizePlate(t.plate),
-            chassis: t.chassis?.trim().toUpperCase() || null,
-            renavam: t.renavam?.replace(/\D/g, '') || null,
-            fuel: t.fuel?.trim() || null,
             engineCc: t.engineCc ?? null,
             cost: t.value,
             // Preço de venda começa igual ao custo; a revenda ajusta depois no Estoque
@@ -233,7 +151,7 @@ export class SalesService {
     return this.prisma.sale.findUnique({ where: { id: sale.id }, include: SALE_INCLUDE });
   }
 
-  async findAll(dealershipId: string, query: QuerySaleDto) {
+  async findAll(dealershipId: string, query: QuerySaleDto, actor?: AuthenticatedUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const where: any = { dealershipId };
@@ -243,6 +161,7 @@ export class SalesService {
       where.soldAt = { gte: new Date(Date.UTC(year, month - 1, 1)), lt: new Date(Date.UTC(year, month, 1)) };
     }
     if (query.sellerId) where.sellerId = query.sellerId;
+    if(actor?.role==='seller') where.sellerId=actor.userId;
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.sale.findMany({
@@ -258,17 +177,18 @@ export class SalesService {
     return { items, total, page, pageSize };
   }
 
-  async findOne(dealershipId: string, id: string) {
+  async findOne(dealershipId: string, id: string, actor?: AuthenticatedUser) {
     const sale = await this.prisma.sale.findFirst({
-      where: { id, dealershipId },
+      where: { id, dealershipId, ...(actor?.role==='seller'?{sellerId:actor.userId}:{}) },
       include: { ...SALE_INCLUDE, promissoryNotes: true },
     });
     if (!sale) throw new NotFoundException('Venda não encontrada');
     return sale;
   }
 
-  async summary(dealershipId: string, month?: string) {
+  async summary(dealershipId: string, month?: string, actor?: AuthenticatedUser) {
     const where: any = { dealershipId };
+    if(actor?.role==='seller') where.sellerId=actor.userId;
     if (month) {
       const [year, m] = month.split('-').map(Number);
       where.soldAt = { gte: new Date(Date.UTC(year, m - 1, 1)), lt: new Date(Date.UTC(year, m, 1)) };
@@ -289,7 +209,7 @@ export class SalesService {
   async update(dealershipId: string, id: string, data: Partial<{ notes: string; paymentMethod: string }>) {
     const sale = await this.prisma.sale.findFirst({ where: { id, dealershipId } });
     if (!sale) throw new NotFoundException('Venda não encontrada');
-    return this.prisma.sale.update({ where: { id }, data });
+    return this.prisma.sale.update({ where: { id }, data: { notes: data.notes, paymentMethod: data.paymentMethod } });
   }
 
   // Só owner/admin podem excluir

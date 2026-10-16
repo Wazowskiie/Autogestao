@@ -1,13 +1,13 @@
 import {
   LayoutDashboard, Car, Users, DollarSign, Megaphone,
   Globe, Settings, ChevronRight, Plus, LogOut, ShoppingBag,
-  UserCheck, FileText, Package, Plug
+  UserCheck, FileText, Package, Plug, MessageSquare
 } from "lucide-react";
 
 type Page =
   | "dashboard" | "inventory" | "leads" | "financial"
   | "ads" | "site" | "settings" | "plans" | "login" | "storefront" | "onboarding"
-  | "sales" | "customers" | "sellers" | "promissory" | "parts" | "renave"; 
+  | "sales" | "customers" | "sellers" | "promissory" | "parts" | "renave" | "chat";
 
 interface SidebarProps {
   currentPage: Page;
@@ -23,7 +23,8 @@ const navItems = [
   { id: "inventory", label: "Estoque", icon: Car },
   { id: "sales", label: "Vendas", icon: ShoppingBag },
   { id: "customers", label: "Clientes", icon: Users },
-  { id: "leads", label: "Leads", icon: Users },
+  { id: "leads", label: "CRM", icon: Users },
+  { id: "chat", label: "Atendimentos", icon: MessageSquare },
   { id: "sellers", label: "Vendedores", icon: UserCheck },
   { id: "financial", label: "Financeiro", icon: DollarSign },
   { id: "promissory", label: "Promissórias", icon: FileText },

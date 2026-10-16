@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Search, Car, Bike, Truck, Package, Edit2, Trash2, Globe, X, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
-import { VehicleDetailsModal, type VehicleDetails } from "./VehicleDetailsModal";
 import * as api from "../../lib/api";
 
 // ---------- Configuração por tipo de veículo ----------
@@ -127,8 +126,6 @@ export function Inventory() {
   const [statusFilter, setStatusFilter] = useState<api.VehicleStatus | "all">("all");
   const [typeFilter, setTypeFilter] = useState<api.VehicleType | "all">("all");
   const [modalVehicle, setModalVehicle] = useState<api.Vehicle | "new" | null>(null);
-  // Veículo aberto no painel "Dados do veículo"
-  const [details, setDetails] = useState<api.Vehicle | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -226,9 +223,6 @@ export function Inventory() {
               {vehicles.map((v, i) => {
                 const TypeIcon = TYPE_ICON[v.type] ?? Car;
                 const m = margin(Number(v.cost), Number(v.price));
-                // Foto de capa (a primeira), se o veículo tiver fotos
-                const photos = (v as unknown as { photos?: { url: string; order: number }[] }).photos ?? [];
-                const cover = [...photos].sort((a, b) => a.order - b.order)[0];
                 const subtitle = [
                   v.type === "other" ? v.category : null,
                   v.manufactureYear && v.manufactureYear !== v.year ? `${v.manufactureYear}/${v.year}` : String(v.year),
@@ -236,16 +230,11 @@ export function Inventory() {
                   v.fuel,
                 ].filter(Boolean).join(" · ");
                 return (
-                  <tr key={v.id} onClick={() => setDetails(v)} className="hover:bg-gray-50"
-                    style={{ cursor: "pointer", borderBottom: i < vehicles.length - 1 ? "0.5px solid rgba(0,0,0,0.06)" : "none" }}>
+                  <tr key={v.id} style={{ borderBottom: i < vehicles.length - 1 ? "0.5px solid rgba(0,0,0,0.06)" : "none" }}>
                     <td style={{ padding: "12px 16px" }}>
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center rounded-lg flex-shrink-0 overflow-hidden" style={{ width: 44, height: 36, background: "#F4F6F9" }}>
-                          {cover ? (
-                            <img src={cover.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          ) : (
-                            <TypeIcon size={16} style={{ color: "#CBD5E1" }} />
-                          )}
+                        <div className="flex items-center justify-center rounded-lg flex-shrink-0" style={{ width: 36, height: 36, background: "#F4F6F9" }}>
+                          <TypeIcon size={16} style={{ color: "#CBD5E1" }} />
                         </div>
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 500 }}>{v.brand} {v.model} {v.version ?? ""}</div>
@@ -268,9 +257,9 @@ export function Inventory() {
                     </td>
                     <td style={{ padding: "12px 16px" }}>
                       <div className="flex items-center gap-2">
-                        <button title="Editar" onClick={(e) => { e.stopPropagation(); setModalVehicle(v); }} className="p-1.5 rounded" style={{ color: "#6B7280", background: "#F4F6F9" }}><Edit2 size={13} /></button>
-                        <button title="Publicar no site" onClick={(e) => e.stopPropagation()} className="p-1.5 rounded" style={{ color: "#185FA5", background: "#EBF2FA" }}><Globe size={13} /></button>
-                        <button title="Excluir" onClick={(e) => { e.stopPropagation(); handleDelete(v); }} className="p-1.5 rounded" style={{ color: "#DC2626", background: "#FEE2E2" }}><Trash2 size={13} /></button>
+                        <button onClick={() => setModalVehicle(v)} className="p-1.5 rounded" style={{ color: "#6B7280", background: "#F4F6F9" }}><Edit2 size={13} /></button>
+                        <button className="p-1.5 rounded" style={{ color: "#185FA5", background: "#EBF2FA" }}><Globe size={13} /></button>
+                        <button onClick={() => handleDelete(v)} className="p-1.5 rounded" style={{ color: "#DC2626", background: "#FEE2E2" }}><Trash2 size={13} /></button>
                       </div>
                     </td>
                   </tr>
@@ -280,12 +269,6 @@ export function Inventory() {
           </table>
         </div>
       </div>
-
-      <VehicleDetailsModal
-        vehicle={details as unknown as VehicleDetails | null}
-        onClose={() => setDetails(null)}
-        onChanged={fetchVehicles}
-        onEdit={(v) => { setDetails(null); setModalVehicle(v as unknown as api.Vehicle); }} />
 
       {modalVehicle !== null && (
         <VehicleFormModal key={modalVehicle === "new" ? "new" : modalVehicle.id}

@@ -1,6 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+const PUBLIC_VEHICLE_SELECT = {
+  id: true, brand: true, model: true, version: true, year: true, manufactureYear: true,
+  km: true, color: true, price: true, status: true, type: true, description: true,
+  optionals: true, fuel: true, transmission: true, doors: true,
+  createdAt: true, updatedAt: true, photos: { orderBy: { order: 'asc' as const } },
+} as const;
+
 @Injectable()
 export class StorefrontService {
   constructor(private readonly prisma: PrismaService) {}
@@ -59,7 +66,7 @@ export class StorefrontService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.vehicle.findMany({
         where,
-        include: { photos: { orderBy: { order: 'asc' } } },
+        select: PUBLIC_VEHICLE_SELECT,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -68,9 +75,7 @@ export class StorefrontService {
     ]);
 
     // Remove o custo (preço de compra) da resposta pública — informação privada da revenda
-    const publicItems = items.map(({ cost, createdById, dealershipId, ...rest }) => rest);
-
-    return { items: publicItems, total, page, pageSize };
+    return { items, total, page, pageSize };
   }
 
   async getVehicle(slug: string, vehicleId: string) {
@@ -79,11 +84,10 @@ export class StorefrontService {
 
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: vehicleId, dealershipId: dealership.id, status: 'available' },
-      include: { photos: { orderBy: { order: 'asc' } } },
+      select: PUBLIC_VEHICLE_SELECT,
     });
     if (!vehicle) throw new NotFoundException('Veículo não encontrado');
 
-    const { cost, createdById, dealershipId, ...publicVehicle } = vehicle;
-    return publicVehicle;
+    return vehicle;
   }
 }

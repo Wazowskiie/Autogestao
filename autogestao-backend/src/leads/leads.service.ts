@@ -15,6 +15,7 @@ export class LeadsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dealershipId: string, dto: CreateLeadDto) {
+    await this.assertRelations(dealershipId, dto);
     let customerId = dto.customerId;
 
     // Se não foi passado um customerId mas sim dados do cliente, cria o cliente
@@ -38,6 +39,11 @@ export class LeadsService {
         assignedSellerId: dto.assignedSellerId,
         source: dto.source,
         notes: dto.notes,
+        temperature: dto.temperature,
+        budget: dto.budget,
+        paymentIntent: dto.paymentIntent,
+        nextActionDate: dto.nextActionDate ? new Date(dto.nextActionDate) : undefined,
+        nextActionNote: dto.nextActionNote,
         stage: 'new',
       },
       include: LEAD_INCLUDE,
@@ -88,9 +94,10 @@ export class LeadsService {
 
   async update(dealershipId: string, id: string, dto: UpdateLeadDto) {
     await this.findOne(dealershipId, id);
+    await this.assertRelations(dealershipId, dto);
     return this.prisma.lead.update({
       where: { id },
-      data: dto,
+      data: { ...dto, nextActionDate: dto.nextActionDate ? new Date(dto.nextActionDate) : undefined },
       include: LEAD_INCLUDE,
     });
   }
@@ -99,5 +106,11 @@ export class LeadsService {
     await this.findOne(dealershipId, id);
     await this.prisma.lead.delete({ where: { id } });
     return { success: true };
+  }
+
+  private async assertRelations(dealershipId: string, dto: { customerId?: string; vehicleId?: string; assignedSellerId?: string }) {
+    if (dto.customerId && !await this.prisma.customer.findFirst({ where: { id: dto.customerId, dealershipId }, select: { id: true } })) throw new NotFoundException('Cliente não encontrado');
+    if (dto.vehicleId && !await this.prisma.vehicle.findFirst({ where: { id: dto.vehicleId, dealershipId }, select: { id: true } })) throw new NotFoundException('Veículo não encontrado');
+    if (dto.assignedSellerId && !await this.prisma.user.findFirst({ where: { id: dto.assignedSellerId, dealershipId, active: true }, select: { id: true } })) throw new NotFoundException('Vendedor não encontrado');
   }
 }

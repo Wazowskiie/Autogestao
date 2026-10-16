@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: autogestao
+      POSTGRES_PASSWORD: autogestao_dev
+      POSTGRES_DB: autogestao_dev
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: ["chat_db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autogestao -d autogestao_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  backend:
+    build: ./autogestao-backend
+    env_file: ./autogestao-backend/.env
+    environment:
+      DATABASE_URL: postgresql://autogestao:autogestao_dev@db:5432/autogestao_dev?schema=public
+      DIRECT_URL: postgresql://autogestao:autogestao_dev@db:5432/autogestao_dev?schema=public
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["127.0.0.1:3000:3000"]
+    command: ["sh", "-c", "npx prisma migrate deploy && npm run prisma:seed && if [ \"$$DEMO_SEED\" = \"true\" ]; then npm run seed:demo; fi && node dist/src/main.js"]
+  frontend:
+    build: ./autogestao-frontend
+    ports: ["127.0.0.1:5173:5173"]
+    depends_on: [backend]
+volumes:
+  chat_db:
