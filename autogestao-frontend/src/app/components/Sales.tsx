@@ -764,6 +764,12 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   // Promissórias: a taxa incide sobre o valor da linha "Promissórias"
   const promissoryLine = payments.find(p => p.method === "promissory") ?? null;
   const financedAmount = promissoryLine ? num(promissoryLine.amount) : 0;
+
+  // Entrada = tudo que não é promissória (troca + PIX + dinheiro + cartão...)
+  // e quanto ela representa do valor do veículo. Ex.: 10.000 de 20.000 = 50%
+  const downPayment = round2(tradeInTotal + payments.filter(p => p.method !== "promissory").reduce((s, p) => s + num(p.amount), 0));
+  const downPaymentPct = Number.isFinite(priceNum) && priceNum > 0 ? (downPayment / priceNum) * 100 : 0;
+  const pctText = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
   const installmentsNum = Number(installments) || 0;
   const activeRate = interestRates.find(r => installmentsNum >= r.minInstallments && installmentsNum <= r.maxInstallments);
   const ownerOverrideActive = isOwner && useCustomRate && customRate !== "";
@@ -1238,6 +1244,28 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
                     <FileText size={15} style={{ color: "#185FA5" }} />
                     <span style={{ fontSize: 13, fontWeight: 600, color: "#185FA5" }}>Promissórias sobre {currency(financedAmount)}</span>
                   </div>
+
+                  {/* Entrada e porcentagem dela sobre o valor do veículo */}
+                  {Number.isFinite(priceNum) && priceNum > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { label: "Valor do veículo", value: currency(priceNum), strong: false },
+                        { label: "Entrada", value: currency(downPayment), strong: false },
+                        { label: "Entrada (%)", value: pctText(downPaymentPct), strong: true },
+                      ].map((c) => (
+                        <div key={c.label} className="rounded-lg px-3 py-2" style={{ background: c.strong ? "#EBF2FA" : "#F9FAFB", border: c.strong ? "1px solid #185FA5" : "0.5px solid rgba(0,0,0,0.06)" }}>
+                          <div style={{ fontSize: 11, color: "#6B7280" }}>{c.label}</div>
+                          <div style={{ fontSize: c.strong ? 16 : 13, fontWeight: 700, color: c.strong ? "#185FA5" : "#0F1923" }}>{c.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {downPayment === 0 && (
+                    <p style={{ fontSize: 11, color: "#9CA3AF" }}>Sem entrada. Adicione as outras formas (PIX, dinheiro, troca...) para calcular.</p>
+                  )}
+                  {Number.isFinite(priceNum) && downPayment > priceNum && (
+                    <p style={{ fontSize: 11, color: "#DC2626" }}>A entrada passou do valor do veículo. Confira os valores.</p>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label style={smallLabel}>Nº de parcelas</label>
