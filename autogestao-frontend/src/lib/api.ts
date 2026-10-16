@@ -9,6 +9,7 @@ export class ApiError extends Error {
 }
 
 let accessToken: string | null = null;
+export function getAccessToken() { return accessToken; }
 export function setAccessToken(token: string | null) { accessToken = token; }
 
 interface RequestOptions { method?: string; body?: unknown; skipAuthRetry?: boolean; }
