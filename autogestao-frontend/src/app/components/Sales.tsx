@@ -765,10 +765,12 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   const promissoryLine = payments.find(p => p.method === "promissory") ?? null;
   const financedAmount = promissoryLine ? num(promissoryLine.amount) : 0;
 
-  // Entrada = tudo que não é promissória (troca + PIX + dinheiro + cartão...)
-  // e quanto ela representa do valor do veículo. Ex.: 10.000 de 20.000 = 50%
-  const downPayment = round2(tradeInTotal + payments.filter(p => p.method !== "promissory").reduce((s, p) => s + num(p.amount), 0));
+  // Entrada = valor do veículo − promissórias, e quanto ela representa do valor.
+  // Ex.: veículo de 20.000 com 10.000 em promissórias = entrada de 10.000 = 50%
+  const downPayment = Number.isFinite(priceNum) && priceNum > 0 ? Math.max(0, round2(priceNum - financedAmount)) : 0;
   const downPaymentPct = Number.isFinite(priceNum) && priceNum > 0 ? (downPayment / priceNum) * 100 : 0;
+  // Parte da entrada que já foi lançada em alguma forma (troca, PIX, dinheiro, cartão...)
+  const downPaymentLaunched = round2(tradeInTotal + payments.filter(p => p.method !== "promissory").reduce((s, p) => s + num(p.amount), 0));
   const pctText = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
   const installmentsNum = Number(installments) || 0;
   const activeRate = interestRates.find(r => installmentsNum >= r.minInstallments && installmentsNum <= r.maxInstallments);
@@ -781,10 +783,23 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   let installmentValue = 0;
   let lastInstallmentValue = 0;
   if (financedAmount > 0 && installmentsNum > 0 && rate !== null) {
-    totalPromissory = Math.round(financedAmount * (rate / 100) * 100) / 100;
-    installmentValue = Math.ceil((totalPromissory / installmentsNum) * 100) / 100;
+    // Total = valor em promissórias + juros. Ex.: 10.000 a 65% = 16.500
+    // (mesma conta do backend: parcelas em reais inteiros, a última ajusta a diferença)
+    totalPromissory = Math.round(financedAmount * (1 + rate / 100));
+    installmentValue = installmentsNum > 1 ? Math.ceil(totalPromissory / installmentsNum) : totalPromissory;
     lastInstallmentValue = Math.round((totalPromissory - installmentValue * (installmentsNum - 1)) * 100) / 100;
+    if (installmentsNum > 1 && lastInstallmentValue <= 0) {
+      installmentValue = Math.round((totalPromissory / installmentsNum) * 100) / 100;
+      lastInstallmentValue = Math.round((totalPromissory - installmentValue * (installmentsNum - 1)) * 100) / 100;
+    }
   }
+  // Juros ao mês como na tabela da loja: taxa da faixa ÷ maior nº de parcelas da faixa
+  // (40% em 4x a 6x = 6,66% a.m.). Taxa personalizada/manual: taxa ÷ nº de parcelas.
+  const truncPct = (v: number) => `${(Math.floor(v * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+  const monthlyOf = (r: { rate: number | string; maxInstallments: number }) => Number(r.rate) / r.maxInstallments;
+  const monthlyRate = rate === null || installmentsNum <= 0 ? null
+    : !ownerOverrideActive && activeRate ? monthlyOf(activeRate) : rate / installmentsNum;
+  const interestAmount = totalPromissory > 0 ? round2(totalPromissory - financedAmount) : 0;
   const lastInstallmentDiffers = Math.abs(lastInstallmentValue - installmentValue) >= 0.01;
 
   // ---------- Formas de pagamento ----------
@@ -1260,11 +1275,13 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
                       ))}
                     </div>
                   )}
-                  {downPayment === 0 && (
-                    <p style={{ fontSize: 11, color: "#9CA3AF" }}>Sem entrada. Adicione as outras formas (PIX, dinheiro, troca...) para calcular.</p>
+                  {Number.isFinite(priceNum) && financedAmount > priceNum && (
+                    <p style={{ fontSize: 11, color: "#DC2626" }}>O valor em promissórias passou do valor do veículo. Confira.</p>
                   )}
-                  {Number.isFinite(priceNum) && downPayment > priceNum && (
-                    <p style={{ fontSize: 11, color: "#DC2626" }}>A entrada passou do valor do veículo. Confira os valores.</p>
+                  {downPayment > 0 && downPaymentLaunched + 0.009 < downPayment && (
+                    <p style={{ fontSize: 11, color: "#B45309" }}>
+                      Falta dizer como a entrada foi paga: {currency(round2(downPayment - downPaymentLaunched))}. Adicione PIX, dinheiro, troca... acima.
+                    </p>
                   )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1295,7 +1312,10 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
                             <div key={r.id} className="flex items-center justify-between px-2.5 py-2 rounded-lg"
                               style={{ background: active ? "#EBF2FA" : "#F9FAFB", border: active ? "1.5px solid #185FA5" : "0.5px solid rgba(0,0,0,0.08)" }}>
                               <span style={{ fontSize: 11, color: active ? "#185FA5" : "#6B7280" }}>{r.minInstallments}–{r.maxInstallments}x</span>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: active ? "#185FA5" : "#374151" }}>{Number(r.rate)}%</span>
+                              <span className="text-right" style={{ lineHeight: 1.2 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: active ? "#185FA5" : "#374151", display: "block" }}>{Number(r.rate)}%</span>
+                                <span style={{ fontSize: 10, color: active ? "#185FA5" : "#9CA3AF" }}>{truncPct(monthlyOf(r))} a.m.</span>
+                              </span>
                             </div>
                           );
                         })}
@@ -1329,8 +1349,10 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
 
                   {rate !== null && financedAmount > 0 && installmentsNum > 0 && (
                     <div className="rounded-lg px-3 py-2.5 space-y-1" style={{ background: "#F7FAFD", fontSize: 12 }}>
-                      <div className="flex justify-between"><span style={{ color: "#6B7280" }}>Taxa ({installmentsNum}x){ownerOverrideActive ? " · personalizada" : ""}</span><span>{rate}%</span></div>
-                      <div className="flex justify-between"><span style={{ color: "#185FA5", fontWeight: 600 }}>Total das promissórias</span><span style={{ color: "#185FA5", fontWeight: 700 }}>{currency(totalPromissory)}</span></div>
+                      <div className="flex justify-between"><span style={{ color: "#6B7280" }}>Valor em promissórias</span><span>{currency(financedAmount)}</span></div>
+                      <div className="flex justify-between"><span style={{ color: "#6B7280" }}>Taxa ({installmentsNum}x){ownerOverrideActive ? " · personalizada" : ""}</span><span>{rate}%{monthlyRate !== null ? ` · ${truncPct(monthlyRate)} ao mês` : ""}</span></div>
+                      <div className="flex justify-between"><span style={{ color: "#6B7280" }}>Juros</span><span>+ {currency(interestAmount)}</span></div>
+                      <div className="flex justify-between pt-1" style={{ borderTop: "0.5px solid rgba(24,95,165,0.15)" }}><span style={{ color: "#185FA5", fontWeight: 600 }}>Total das promissórias</span><span style={{ color: "#185FA5", fontWeight: 700 }}>{currency(totalPromissory)}</span></div>
                       {lastInstallmentDiffers ? (
                         <div className="flex justify-between"><span style={{ color: "#6B7280" }}>{installmentsNum - 1}x de {currency(installmentValue)} + última</span><span>{currency(lastInstallmentValue)}</span></div>
                       ) : (
