@@ -33,8 +33,8 @@ export class VehiclesController {
   // Fica ANTES do ":id" para não ser confundida com a busca por id.
   @Roles('owner', 'admin', 'seller')
   @Get('plate/:plate')
-  lookupPlate(@Param('plate') plate: string) {
-    return this.plateLookupService.lookup(plate);
+  lookupPlate(@CurrentUser() user: AuthenticatedUser, @Param('plate') plate: string) {
+    return this.plateLookupService.lookup(plate, user);
   }
 
   @Get(':id')

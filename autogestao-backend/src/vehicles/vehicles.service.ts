@@ -1,8 +1,8 @@
 import {
   ForbiddenException,
   Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+  NotFoundException, Optional } from '@nestjs/common';
+import { PlansService } from '../plans/plans.service';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -18,7 +18,7 @@ function normalizePlate(plate?: string | null) {
 
 @Injectable()
 export class VehiclesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly plans?: PlansService) {}
 
   async create(dealershipId: string, userId: string, dto: CreateVehicleDto) {
     await this.assertWithinPlanLimit(dealershipId);
@@ -138,24 +138,8 @@ export class VehiclesService {
   }
 
   private async assertWithinPlanLimit(dealershipId: string) {
-    const subscription = await this.prisma.subscription.findUnique({
-      where: { dealershipId },
-      include: { plan: true },
-    });
-
-    // Sem assinatura ainda (ex.: revenda em onboarding) — não bloqueia.
-    // Quando o módulo de cobrança (fase 4) estiver no ar, toda revenda
-    // passa a ter uma subscription desde o registro.
-    if (!subscription) return;
-
-    const currentCount = await this.prisma.vehicle.count({
-      where: { dealershipId },
-    });
-
-    if (currentCount >= subscription.plan.vehicleLimit) {
-      throw new ForbiddenException(
-        `Seu plano permite até ${subscription.plan.vehicleLimit} veículos em estoque. Faça upgrade para cadastrar mais.`,
-      );
-    }
+    // Limite de veículos em estoque do plano (vendidos não contam)
+    if (this.plans) await this.plans.assertVehicleSlot(dealershipId);
   }
+
 }

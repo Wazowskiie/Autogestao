@@ -1,3 +1,4 @@
+import { RequiresFeature } from '../plans/requires-feature.decorator';
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query, ParseIntPipe, DefaultValuePipe, BadRequestException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
@@ -21,6 +22,7 @@ export class PublicChatController {
 }
 
 @Roles('owner', 'admin', 'seller')
+@RequiresFeature('chat')
 @Controller('chat')
 export class AgentChatController {
   constructor(private readonly service: ChatService) {}

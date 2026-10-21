@@ -3,8 +3,10 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 import { CrmService } from './crm.service';
+import { RequiresFeature } from '../plans/requires-feature.decorator';
 import { CrmActivityDto, CrmArchiveDto, CrmContactDto, CrmLeadDto, CrmQueryDto, CrmSaleDto, CrmTaskDto, CrmTaskQueryDto, CrmTaskStatusDto } from './crm.dto';
 @Roles('owner','admin','seller')
+@RequiresFeature('crm')
 @Controller('crm')
 export class CrmController {
   constructor(private readonly service: CrmService) {}

@@ -2,8 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+  NotFoundException, Optional } from '@nestjs/common';
+import { PlansService } from '../plans/plans.service';
 import * as argon2 from 'argon2';
 import {
   IsBoolean,
@@ -89,7 +89,7 @@ const SELLER_SELECT = {
 
 @Injectable()
 export class SellersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly plans?: PlansService) {}
 
   async findAll(dealershipId: string, month?: string) {
     const sellers = await this.prisma.user.findMany({
@@ -158,6 +158,9 @@ export class SellersService {
       throw new BadRequestException('Comissão deve estar entre 0 e 100');
     }
 
+    // Limite de usuários do plano
+    if (this.plans) await this.plans.assertUserSlot(dealershipId);
+
     const passwordHash = await argon2.hash(dto.password);
 
     const seller = await this.prisma.user.create({
@@ -179,7 +182,9 @@ export class SellersService {
   }
 
   async update(dealershipId: string, id: string, dto: UpdateSellerDto) {
-    await this.findOne(dealershipId, id);
+    const current = await this.findOne(dealershipId, id);
+    // Reativar um vendedor também conta no limite de usuários do plano
+    if (dto.active === true && !(current as { active?: boolean }).active && this.plans) await this.plans.assertUserSlot(dealershipId);
 
     if (
       dto.commissionRate !== undefined &&

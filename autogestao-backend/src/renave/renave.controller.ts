@@ -3,8 +3,10 @@ import type { Request } from 'express';
 import { RenaveService } from './renave.service';
 import { SaveRenaveConfigDto } from './dto/save-renave-config.dto';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
+import { RequiresFeature } from '../plans/requires-feature.decorator';
 
 // Rotas protegidas pelo guard global de autenticação (nenhum @Public() aqui).
+@RequiresFeature('renave')
 @Controller('renave')
 export class RenaveController {
   constructor(private readonly renaveService: RenaveService) {}

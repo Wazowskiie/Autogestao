@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { PlansService } from '../plans/plans.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const PUBLIC_VEHICLE_SELECT = {
@@ -10,7 +11,7 @@ const PUBLIC_VEHICLE_SELECT = {
 
 @Injectable()
 export class StorefrontService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly plans?: PlansService) {}
 
   async getDealership(slug: string) {
     const dealership = await this.prisma.dealership.findUnique({ where: { slug } });
@@ -32,6 +33,8 @@ export class StorefrontService {
       coverUrl: dealership.coverUrl,
       primaryColor: dealership.primaryColor,
       vehicleCount,
+      // O site só mostra o chat se o plano da loja tiver "Atendimentos"
+      chatEnabled: this.plans ? await this.plans.has(dealership.id, 'chat') : true,
     };
   }
 

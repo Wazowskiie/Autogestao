@@ -1,4 +1,5 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { PlansService } from '../plans/plans.service';
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,6 +31,7 @@ export class AssistantService {
     private readonly prisma: PrismaService,
     private readonly llm: AssistantLlmService,
     private readonly tools: AssistantToolsService,
+    @Optional() private readonly plans?: PlansService,
   ) {}
 
   status() {
@@ -93,7 +95,10 @@ ${SYSTEM_GUIDE}`;
     if (!history.length || history[history.length - 1].role !== 'user') {
       throw new BadRequestException('A última mensagem precisa ser sua.');
     }
+    // Limite do plano (perguntas por dia para a loja toda) + limite geral por pessoa do .env
+    if (this.plans) await this.plans.assertAssistant(u.dealershipId);
     this.countUse(u);
+    if (this.plans) await this.plans.logUse(u.dealershipId, u.userId, 'assistant_question');
 
     // A conversa enviada pelo navegador tem só os textos; as ferramentas rodam aqui dentro
     const messages: LlmMessage[] = [];

@@ -3,6 +3,7 @@
   import App from "./app/App.tsx";
   import { PublicStorefront } from "./app/components/PublicStorefront";
   import { AuthProvider } from "./lib/auth-context";
+  import { PlanProvider } from "./lib/plan-context";
   import "./styles/index.css";
 
   // Roteamento mínimo: a vitrine pública (/loja/:slug) não precisa de login
@@ -17,7 +18,9 @@
   } else {
     root.render(
       <AuthProvider>
-        <App />
+        <PlanProvider>
+          <App />
+        </PlanProvider>
       </AuthProvider>,
     );
   }

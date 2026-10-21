@@ -15,9 +15,12 @@ import { PromissoryNotes } from "./components/PromissoryNotes";
 import { PartsStore } from "./components/PartsStore";
 import { Globe, Megaphone, Settings, ExternalLink } from "lucide-react";
 import { useAuth } from "../lib/auth-context";
+import { usePlan, type PlanFeature } from "../lib/plan-context";
+import { Lock } from "lucide-react";
 import { Renave } from "./components/Renave";
 import { ChatInbox } from './components/ChatInbox';
 import { AssistantPanel } from './components/AssistantPanel';
+import { Settings as SettingsPage } from './components/Settings';
 
 type Page =
   | "login" | "onboarding" | "dashboard" | "inventory"
@@ -40,6 +43,7 @@ export default function App() {
   const [crmLeadId,setCrmLeadId]=useState<string|null>(null);
   const [chatId,setChatId]=useState<string|null>(null);
   const auth = useAuth();
+  const plan = usePlan();
   const [page, setPage] = useState<Page>("login");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -97,8 +101,26 @@ export default function App() {
     );
   }
 
+  // Telas que dependem do plano da loja
+  const PAGE_FEATURE: Partial<Record<Page, PlanFeature>> = { leads: "crm", chat: "chat", renave: "renave" };
+  const hiddenPages = (Object.keys(PAGE_FEATURE) as Page[]).filter((p) => !plan.has(PAGE_FEATURE[p]!));
+
   // Shell layout
   const renderPage = () => {
+  if (hiddenPages.includes(page)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ background: "var(--background)" }}>
+        <div className="flex items-center justify-center rounded-2xl" style={{ width: 64, height: 64, background: "#EBF2FA" }}>
+          <Lock size={28} style={{ color: "#185FA5" }} />
+        </div>
+        <h2>Essa função não está no seu plano</h2>
+        <p style={{ fontSize: 14, color: "#6B7280" }}>Você está no plano {plan.current?.plan.name}. Veja os planos para liberar.</p>
+        <button onClick={() => navigate("plans")} className="px-4 py-2 rounded-lg" style={{ background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500 }}>
+          Ver planos
+        </button>
+      </div>
+    );
+  }
   switch (page) {
     case "dashboard": return <Dashboard onNavigate={navigate} />;
     case "inventory": return <Inventory />;
@@ -113,7 +135,7 @@ export default function App() {
     case "chat": return <ChatInbox initialId={chatId} onOpenLead={id=>{setCrmLeadId(id);setPage('leads');}} />;
     case "plans": return <Plans />;
     case "ads": return <PlaceholderPage title="Anúncios" icon={Megaphone} />;
-    case "settings": return <PlaceholderPage title="Configurações" icon={Settings} />;
+    case "settings": return <SettingsPage onNavigate={navigate} />;
     case "site":
         return (
           <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
@@ -152,6 +174,8 @@ export default function App() {
         userName={auth.user?.name}
         dealershipName={auth.dealership?.name}
         onLogout={handleLogout}
+        hiddenPages={hiddenPages}
+        planName={plan.current?.plan.name}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -174,7 +198,7 @@ export default function App() {
 
           {/* Breadcrumb / page links */}
           <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-            {(["dashboard", "inventory", "sales", "customers", "leads", "sellers", "financial", "promissory", "parts"] as Page[]).map((p, i) => {
+            {(["dashboard", "inventory", "sales", "customers", "leads", "sellers", "financial", "promissory", "parts"] as Page[]).filter((p) => !hiddenPages.includes(p)).map((p) => {
               const labels: Record<string, string> = {
                 dashboard: "Dashboard",
                 inventory: "Estoque",
@@ -218,7 +242,7 @@ export default function App() {
       </div>
 
       {/* Assistente virtual, disponível em todas as telas */}
-      <AssistantPanel currentPage={page} />
+      {plan.has("assistant") && <AssistantPanel currentPage={page} />}
     </div>
   );
 }

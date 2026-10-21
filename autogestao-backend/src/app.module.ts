@@ -24,6 +24,8 @@ import { ChatModule } from './chat/chat.module';
 import { CrmModule } from './crm/crm.module';
 import { VehicleDetailsModule } from './vehicle-details/vehicle-details.module';
 import { AssistantModule } from './assistant/assistant.module';
+import { SettingsModule } from './settings/settings.module';
+import { PlansModule } from './plans/plans.module';
 
 @Module({
   imports: [
@@ -33,10 +35,12 @@ import { AssistantModule } from './assistant/assistant.module';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     InterestRatesModule,
     PrismaModule,
+    PlansModule,
     AuthModule,
     VehiclesModule,
     VehicleDetailsModule,
     AssistantModule,
+    SettingsModule,
     RenaveModule, 
     CustomersModule,
     LeadsModule,

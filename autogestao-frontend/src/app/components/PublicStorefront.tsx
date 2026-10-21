@@ -152,7 +152,7 @@ export function PublicStorefront({ slug, onNavigate }: { slug: string; onNavigat
       {selected && (
         <VehicleDetailModal vehicle={selected} dealership={dealership} primaryColor={primaryColor} onClose={() => setSelected(null)} />
       )}
-      {dealership && <CustomerChat slug={slug} vehicles={vehicles} />}
+      {dealership && dealership.chatEnabled !== false && <CustomerChat slug={slug} vehicles={vehicles} />}
     </div>
   );
 }

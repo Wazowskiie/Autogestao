@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
+import { PlansService } from '../plans/plans.service';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatAiService } from './chat-ai.service';
@@ -13,11 +14,13 @@ const hash = (token: string) => createHash('sha256').update(token).digest('hex')
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService, private readonly ai: ChatAiService) {}
+  constructor(private readonly prisma: PrismaService, private readonly ai: ChatAiService, @Optional() private readonly plans?: PlansService) {}
 
   async start(slug: string) {
     const shop = await this.prisma.dealership.findUnique({ where: { slug }, select: { id: true, name: true } });
     if (!shop) throw new NotFoundException('Loja não encontrada');
+    // Chat com clientes só nos planos que têm "Atendimentos"
+    if (this.plans && !(await this.plans.has(shop.id, 'chat'))) throw new ForbiddenException('O chat desta loja não está disponível.');
     const token = randomBytes(32).toString('hex');
     const conversation = await this.prisma.chatConversation.create({ data: {
       dealershipId: shop.id, tokenHash: hash(token), expiresAt: new Date(Date.now() + 7 * 86400000),

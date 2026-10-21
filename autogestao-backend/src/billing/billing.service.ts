@@ -2,12 +2,15 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AsaasService } from './asaas.service';
 import { CheckoutDto } from './dto/checkout.dto';
+import { PlansService } from '../plans/plans.service';
+import { PLAN_CATALOG } from '../plans/plan-catalog';
 
 @Injectable()
 export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly asaas: AsaasService,
+    private readonly plans: PlansService,
   ) {}
 
   async getStatus(dealershipId: string) {
@@ -22,6 +25,10 @@ export class BillingService {
   async checkout(dealershipId: string, userEmail: string, userName: string, dto: CheckoutDto) {
     const plan = await this.prisma.plan.findUnique({ where: { id: dto.planId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
+    const spec = PLAN_CATALOG.find((p) => p.id === plan.id);
+    if (spec) await this.plans.assertFits(dealershipId, spec);
+    // No teste grátis o plano muda na hora; depois disso, só quando o pagamento for confirmado
+    const { canSwitchFree } = await this.plans.entitlements(dealershipId);
 
     let subscription = await this.prisma.subscription.findUnique({ where: { dealershipId } });
 
@@ -52,6 +59,7 @@ export class BillingService {
       billingType: dto.billingType,
       nextDueDate,
       description: `Assinatura AutoGestão — Plano ${plan.name}`,
+      externalReference: plan.id,
     });
 
     subscription = await this.prisma.subscription.upsert({
@@ -64,8 +72,7 @@ export class BillingService {
         paymentGatewaySubscriptionId: asaasSubscription.id,
       },
       update: {
-        planId: plan.id,
-        status: 'trialing',
+        ...(canSwitchFree ? { planId: plan.id } : {}),
         paymentGatewayCustomerId: asaasCustomerId,
         paymentGatewaySubscriptionId: asaasSubscription.id,
       },
@@ -125,10 +132,15 @@ export class BillingService {
     const currentPeriodEnd = new Date();
     currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
 
+    // Pagamento confirmado: aplica o plano que foi pago (guardado no externalReference)
+    const paidPlanId = payload?.payment?.externalReference as string | undefined;
+    const paidPlan = newStatus === 'active' && paidPlanId ? await this.prisma.plan.findUnique({ where: { id: paidPlanId } }) : null;
+
     await this.prisma.subscription.update({
       where: { id: subscription.id },
       data: {
         status: newStatus,
+        ...(paidPlan ? { planId: paidPlan.id } : {}),
         ...(newStatus === 'active' ? { currentPeriodEnd } : {}),
       },
     });

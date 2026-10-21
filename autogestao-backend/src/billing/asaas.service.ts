@@ -68,6 +68,7 @@ export class AsaasService {
     billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD';
     nextDueDate: string; // YYYY-MM-DD
     description: string;
+    externalReference?: string; // id do plano: volta no webhook
   }) {
     return this.request<AsaasSubscription>('/subscriptions', {
       method: 'POST',
@@ -78,6 +79,7 @@ export class AsaasService {
         nextDueDate: params.nextDueDate,
         cycle: 'MONTHLY',
         description: params.description,
+        externalReference: params.externalReference,
       }),
     });
   }

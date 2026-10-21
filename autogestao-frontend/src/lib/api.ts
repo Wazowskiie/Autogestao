@@ -350,7 +350,7 @@ export function getBillingStatus() { return request<Subscription>("/billing/stat
 export function checkout(planId: string, billingType: BillingType) { return request<CheckoutResponse>("/billing/checkout", { method: "POST", body: { planId, billingType } }); }
 
 // ---------- Vitrine pública ----------
-export interface StorefrontDealership { id: string; name: string; slug: string; city: string | null; state: string | null; phone: string | null; logoUrl: string | null; coverUrl: string | null; primaryColor: string | null; vehicleCount: number; }
+export interface StorefrontDealership { id: string; name: string; slug: string; city: string | null; state: string | null; phone: string | null; logoUrl: string | null; coverUrl: string | null; primaryColor: string | null; vehicleCount: number; chatEnabled?: boolean; }
 export interface StorefrontVehicle { id: string; brand: string; model: string; year: number; km: number; price: number; status: VehicleStatus; type: VehicleType; description: string | null; optionals: string[]; createdAt: string; updatedAt: string; photos?: VehiclePhoto[]; }
 export interface StorefrontVehicleListResponse { items: StorefrontVehicle[]; total: number; page: number; pageSize: number; }
 export interface StorefrontVehicleParams { search?: string; type?: VehicleType | "all"; minPrice?: number; maxPrice?: number; page?: number; pageSize?: number; }

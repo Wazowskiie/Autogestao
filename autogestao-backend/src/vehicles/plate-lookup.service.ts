@@ -4,9 +4,11 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlansService } from '../plans/plans.service';
 
 // Quanto tempo uma placa consultada fica guardada antes de consultar de novo (em dias)
 const CACHE_DAYS = 90;
@@ -137,9 +139,9 @@ function mapResult(plate: string, data: any, cached: boolean): PlateLookupResult
 
 @Injectable()
 export class PlateLookupService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, @Optional() private readonly plans?: PlansService) {}
 
-  async lookup(rawPlate: string): Promise<PlateLookupResult> {
+  async lookup(rawPlate: string, who?: { dealershipId: string; userId: string }): Promise<PlateLookupResult> {
     // Aceita "abc-1234", "ABC 1D23" etc. e deixa no formato ABC1234 / ABC1D23
     const plate = String(rawPlate ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(plate)) {
@@ -155,7 +157,8 @@ export class PlateLookupService {
       if (hasVehicleData(fromCache)) return fromCache;
     }
 
-    // 2) Consulta na API Placas
+    // 2) Consulta na API Placas (essa conta no limite do plano)
+    if (this.plans && who) await this.plans.assertPlateLookup(who.dealershipId);
     const token = process.env.PLACAS_API_TOKEN;
     if (!token) {
       throw new InternalServerErrorException('Consulta de placa não configurada (falta PLACAS_API_TOKEN no .env).');
@@ -185,6 +188,8 @@ export class PlateLookupService {
     }
 
     const result = mapResult(plate, data, false);
+    // A API cobrou essa consulta: conta no limite do plano
+    if (this.plans && who) await this.plans.logUse(who.dealershipId, who.userId, 'plate_lookup', plate);
 
     // Resposta sem marca/modelo: NÃO salva no cache e mostra o motivo
     if (!hasVehicleData(result)) {

@@ -16,6 +16,10 @@ interface SidebarProps {
   userName?: string;
   dealershipName?: string;
   onLogout?: () => void;
+  /** Telas que não fazem parte do plano da loja (somem do menu) */
+  hiddenPages?: string[];
+  /** Nome do plano atual, mostrado no rodapé */
+  planName?: string;
 }
 
 const navItems = [
@@ -42,6 +46,8 @@ export function Sidebar({
   userName = "Usuário",
   dealershipName = "",
   onLogout,
+  hiddenPages = [],
+  planName,
 }: SidebarProps) {
   const initials = userName
     .split(" ")
@@ -80,7 +86,7 @@ export function Sidebar({
 
       {/* Nav items */}
       <nav className="flex flex-col gap-0.5 px-2 py-3 flex-1">
-        {navItems.map(({ id, label, icon: Icon }) => {
+        {navItems.filter(({ id }) => !hiddenPages.includes(id)).map(({ id, label, icon: Icon }) => {
           const active = currentPage === id;
           return (
             <button
@@ -112,7 +118,7 @@ export function Sidebar({
           className="w-full rounded-lg px-3 py-2 mb-2 flex items-center gap-2 transition-colors"
           style={{ background: "rgba(24,95,165,0.35)", color: "#93C5FD" }}
         >
-          {!collapsed && <span style={{ fontSize: 12 }}>⚡ Upgrade de plano</span>}
+          {!collapsed && <span style={{ fontSize: 12 }}>⚡ {planName ? `Plano ${planName} · mudar` : "Upgrade de plano"}</span>}
           {collapsed && <Plus size={16} />}
         </button>
 
