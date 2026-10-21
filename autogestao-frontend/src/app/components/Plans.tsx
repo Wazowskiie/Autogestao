@@ -36,6 +36,7 @@ export function Plans() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [switching, setSwitching] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ planId: string; text: string } | null>(null);
   const [checkoutPlan, setCheckoutPlan] = useState<PlanSpec | null>(null);
   const canManage = auth.user?.role === "owner" || auth.user?.role === "admin";
   const current = plan.current;
@@ -47,14 +48,15 @@ export function Plans() {
   }, []);
 
   const choose = async (p: PlanSpec) => {
-    setError(null); setSuccess(null);
+    setError(null); setSuccess(null); setCardError(null);
     if (!current?.canSwitchFree) { setCheckoutPlan(p); return; }
     setSwitching(p.id);
     try {
       plan.setCurrent(await changePlan(p.id)); // o menu do sistema muda na hora
       setSuccess(`Pronto! Agora a loja está no plano ${p.name}. O menu já mostra só o que esse plano tem.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Não foi possível trocar de plano");
+      // Mostra o motivo logo abaixo do botão clicado (ex.: loja tem mais veículos do que o plano permite)
+      setCardError({ planId: p.id, text: e instanceof Error ? e.message : "Não foi possível trocar de plano" });
     } finally {
       setSwitching(null);
     }
@@ -165,6 +167,11 @@ export function Plans() {
                   </button>
                 ) : (
                   <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 16, textAlign: "center" }}>Só o dono pode trocar de plano</p>
+                )}
+                {cardError?.planId === p.id && (
+                  <div className="rounded-lg px-3 py-2 mt-3 flex items-start gap-2" style={{ background: "#FEE2E2", color: "#991B1B", fontSize: 13 }}>
+                    <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} /> <span>{cardError.text}</span>
+                  </div>
                 )}
               </div>
             );

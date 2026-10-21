@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException, Optional } from '@nestjs/common';
@@ -133,7 +134,25 @@ export class VehiclesService {
 
   async remove(dealershipId: string, id: string) {
     await this.findOne(dealershipId, id);
-    await this.prisma.vehicle.delete({ where: { id } });
+
+    // Veículo vendido: a venda aponta para ele, então o banco não deixa apagar direto
+    const sale = await this.prisma.sale.findFirst({ where: { vehicleId: id }, select: { soldAt: true } });
+    if (sale) {
+      throw new BadRequestException(
+        `Este veículo tem uma venda registrada (${sale.soldAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}). ` +
+          'Para excluir, vá em Vendas e exclua a venda primeiro: o veículo volta para o estoque e aí pode ser excluído.',
+      );
+    }
+
+    try {
+      await this.prisma.vehicle.delete({ where: { id } });
+    } catch (e) {
+      // Algum outro registro ainda usa este veículo (ex.: promissória ou lançamento antigo)
+      if ((e as { code?: string })?.code === 'P2003') {
+        throw new BadRequestException('Não dá para excluir: este veículo ainda está ligado a outros registros (venda, promissória ou financeiro).');
+      }
+      throw e;
+    }
     return { success: true };
   }
 
