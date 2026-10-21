@@ -16,6 +16,7 @@ Menu da esquerda e o que tem em cada tela:
 - Peças: estoque de peças com código, quantidade, custo e preço.
 - Renave: configuração da integração com o Renave Fácil.
 - Meu Site / vitrine: página pública da loja com os veículos disponíveis e o chat de atendimento.
-- Configurações e Plano: dados da loja e assinatura.
+- Configurações (menu lateral): abas Loja (nome, CNPJ, telefone, cidade, logo, capa e cor do site), Juros das promissórias (tabela de faixas de parcelas: editar a porcentagem, adicionar faixa como 19x a 21x, apagar faixa; o juro total é aplicado sobre o valor parcelado), Nota fiscal (token e dados da Focus NFe, ambiente de homologação ou produção), Integrações (o que está ligado: NF-e, RENAVE, assistente, consulta de placa, chat) e Minha conta (mudar o nome e trocar a senha). Vendedores só veem Minha conta e a tabela de juros (sem editar).
+- Plano: assinatura do sistema.
 Atalho: o botão roxo da assistente (canto inferior direito) abre esta conversa em qualquer tela.
 `;

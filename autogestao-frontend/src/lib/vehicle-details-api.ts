@@ -127,7 +127,7 @@ async function authedFetch(path: string, init: RequestInit = {}, retry = true): 
   return res;
 }
 
-async function upload<T>(path: string, form: FormData): Promise<T> {
+export async function upload<T>(path: string, form: FormData): Promise<T> {
   const res = await authedFetch(path, { method: "POST", body: form });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;

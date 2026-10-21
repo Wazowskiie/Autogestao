@@ -13,6 +13,8 @@ interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   register: (input: api.RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
+  /** Recarrega nome do usuário e da loja (ex.: depois de salvar as Configurações) */
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -60,8 +62,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ status: "unauthenticated", user: null, dealership: null });
   }, []);
 
+  const refresh = useCallback(async () => {
+    try {
+      const { user, dealership } = await api.getMe();
+      setState({ status: "authenticated", user, dealership });
+    } catch {
+      // mantém o que já estava na tela
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout }}>
+    <AuthContext.Provider value={{ ...state, login, register, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );
