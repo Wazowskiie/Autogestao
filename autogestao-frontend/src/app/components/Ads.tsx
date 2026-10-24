@@ -32,6 +32,19 @@ const vehicleLabel = (ad: Ad) => {
   return [v?.brand, v?.model, v?.year].filter((x) => x !== null && x !== undefined && x !== "").join(" ") || ad.title;
 };
 
+// Checklist local: valida apenas dados já disponíveis, sem afirmar aprovação da OLX.
+function publicationChecklist(ad: Ad) {
+  const items = [
+    { label: "Título preenchido", ok: !!ad.title?.trim() && ad.title.trim().length >= 10 },
+    { label: "Descrição preenchida", ok: !!ad.description?.trim() && ad.description.trim().length >= 30 },
+    { label: "Preço válido", ok: Number(ad.price) > 0 },
+    { label: "Pelo menos uma foto", ok: (ad.photos?.length ?? 0) > 0 },
+    { label: "Veículo disponível", ok: canShare(ad) && ad.vehicle?.status === "available" },
+    { label: "Preço e fotos sincronizados", ok: !ad.inventorySync?.priceChanged && !ad.inventorySync?.photosChanged },
+  ];
+  return { items, ready: items.every((item) => item.ok), count: items.filter((item) => item.ok).length };
+}
+
 // ---------- Formatação ----------
 const brl = (v: unknown) => Number(v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const phoneBR = (p: string | null) => {
@@ -303,6 +316,7 @@ export function Ads() {
             const archived = isArchived(ad);
             const sold = isSold(ad);
             const shareable = canShare(ad);
+            const checklist = publicationChecklist(ad);
             const statusLabel = archived ? "Arquivado" : sold ? "Vendido / indisponível" : ad.status === "draft" ? "Rascunho" : ad.status;
             return (
               <div key={ad.id} style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, overflow: "hidden" }}>
@@ -333,6 +347,21 @@ export function Ads() {
                         )}
                       </div>
                     )}
+                    <details className="rounded-lg mt-2 px-3 py-2" style={{ border: "1px solid #E5E7EB", background: "#FAFBFC", fontSize: 12 }}>
+                      <summary style={{ cursor: "pointer", fontWeight: 600, color: checklist.ready ? "#047857" : "#92400E" }}>
+                        {checklist.ready ? "✓ Checklist básico completo" : `Checklist de divulgação: ${checklist.count}/${checklist.items.length} itens`}
+                      </summary>
+                      <div className="flex flex-col gap-1 mt-2">
+                        {checklist.items.map((item) => (
+                          <div key={item.label} style={{ color: item.ok ? "#047857" : "#B45309" }}>
+                            {item.ok ? "✓" : "!"} {item.label}
+                          </div>
+                        ))}
+                        <div style={{ color: "#6B7280", marginTop: 5 }}>
+                          Verificação interna. Não garante aprovação ou publicação na plataforma.
+                        </div>
+                      </div>
+                    </details>
                     {ad.price != null && <div style={{ fontSize: 13, fontWeight: 600, color: BLUE, marginTop: 5 }}>Preço salvo: {brl(ad.price)}</div>}
                     <div style={{ fontSize: 15, fontWeight: 600, color: "#0F1923", marginTop: 4 }}>{ad.title}</div>
                     <div style={{ fontSize: 12, color: empty ? "#B45309" : "#6B7280", marginTop: 2, whiteSpace: "pre-line", maxHeight: 54, overflow: "hidden" }}>
@@ -340,9 +369,9 @@ export function Ads() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5" style={{ flex: "0 0 auto" }}>
-                    <CopyButton label="Copiar título" text={ad.title} disabled={!shareable} />
-                    <CopyButton label="Copiar texto" text={ad.description} disabled={empty || !shareable} />
-                    {photos.length > 0 && shareable && (
+                    <CopyButton label="Copiar título" text={ad.title} disabled={!shareable || !checklist.ready} />
+                    <CopyButton label="Copiar texto" text={ad.description} disabled={empty || !shareable || !checklist.ready} />
+                    {photos.length > 0 && shareable && checklist.ready && (
                       <ActionButton icon={Download} label={`Baixar fotos (${photos.length})`}
                         onClick={() => downloadPhotos(photos.map((p) => p.url), vehicleLabel(ad).toLowerCase().replace(/\s+/g, "-"))} />
                     )}
