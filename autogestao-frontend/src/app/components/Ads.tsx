@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Megaphone, Plus, Copy, Check, Download, Sparkles, Pencil, Trash2, X, ImageOff, Loader2, Wand2, Eye, RefreshCw, Archive, CarFront, FileText, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Megaphone, Plus, Copy, Check, Download, Sparkles, Pencil, Trash2, X, ImageOff, Loader2, Wand2, Eye, RefreshCw, Archive, CarFront, FileText, Search, ExternalLink, Link2, Send, CheckCircle2 } from "lucide-react";
 import { request } from "../../lib/api";
 import { getVehicle, type VehicleFull } from "../../lib/vehicle-details-api";
 import { getSettings } from "../../lib/settings-api";
@@ -15,6 +15,7 @@ type Ad = {
   vehicle?: { id?: string; brand: string; model: string; year: number; status?: string; price?: string | number; photos?: { url: string }[] } | null;
   vehicleSnapshot?: { brand?: string; model?: string; year?: number } | null;
   archivedAt?: string | null;
+  externalUrl?: string | null; publishedAt?: string | null; publishedById?: string | null; removedAt?: string | null; removedById?: string | null;
 };
 type Store = { name: string; phone: string | null; city: string | null; state: string | null; slug: string };
 
@@ -23,7 +24,7 @@ const CHANNELS: Record<string, { label: string; color: string; bg: string }> = {
   instagram: { label: "Instagram", color: "#C13584", bg: "#FCE7F3" },
 };
 const BLUE = "#185FA5";
-type Filter = "all" | "draft" | "sold" | "archived";
+type Filter = "all" | "draft" | "published" | "sold" | "archived";
 const isArchived = (ad: Ad) => ad.status === "archived" || !!ad.archivedAt || !ad.vehicle;
 const isSold = (ad: Ad) => !isArchived(ad) && (ad.vehicle?.status === "sold" || !!ad.inventorySync?.unavailable);
 const canShare = (ad: Ad) => !isArchived(ad) && !isSold(ad);
@@ -152,6 +153,7 @@ export function Ads() {
   const [vehicleId, setVehicleId] = useState("");
   const [channel, setChannel] = useState("olx");
   const [editing, setEditing] = useState<Ad | null>(null);
+  const [publishing, setPublishing] = useState<Ad | null>(null);
   const [preview, setPreview] = useState<Ad | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -205,6 +207,29 @@ export function Ads() {
     } finally { setBusy(false); }
   }
 
+  async function markPublished(ad: Ad, externalUrl: string) {
+    setBusy(true); setError("");
+    try {
+      await request(`/ads/listings/${ad.id}/mark-published`, { method: "POST", body: { externalUrl } });
+      setPublishing(null);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível registrar a publicação.");
+      throw e;
+    } finally { setBusy(false); }
+  }
+
+  async function markRemoved(ad: Ad) {
+    if (ad.status !== "published") return;
+    if (!window.confirm("Você já retirou este anúncio da plataforma externa? O AutoGestão apenas registrará essa retirada; ele não excluirá a publicação na OLX ou no Instagram.")) return;
+    setBusy(true); setError("");
+    try {
+      await request(`/ads/listings/${ad.id}/mark-removed`, { method: "POST" });
+      await reload();
+    } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível registrar a retirada."); }
+    finally { setBusy(false); }
+  }
+
   async function remove(ad: Ad) {
     if (!canShare(ad) || ad.status !== "draft") return;
     if (!window.confirm("Excluir este rascunho?")) return;
@@ -217,11 +242,13 @@ export function Ads() {
   const counts = useMemo(() => ({
     all: ads.length,
     draft: ads.filter((a) => a.status === "draft" && !isArchived(a) && !isSold(a)).length,
+    published: ads.filter((a) => a.status === "published").length,
     sold: ads.filter(isSold).length,
     archived: ads.filter(isArchived).length,
   }), [ads]);
   const visibleAds = useMemo(() => ads.filter((ad) => {
     if (filter === "draft" && (ad.status !== "draft" || isArchived(ad) || isSold(ad))) return false;
+    if (filter === "published" && ad.status !== "published") return false;
     if (filter === "sold" && !isSold(ad)) return false;
     if (filter === "archived" && !isArchived(ad)) return false;
     const q = search.trim().toLocaleLowerCase("pt-BR");
@@ -274,9 +301,9 @@ export function Ads() {
           </div>
 
           {/* Histórico e filtros */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {([
-              ["all", "Todos", Megaphone], ["draft", "Rascunhos", FileText],
+              ["all", "Todos", Megaphone], ["draft", "Rascunhos", FileText], ["published", "Publicados", Send],
               ["sold", "Vendidos", CarFront], ["archived", "Arquivados", Archive],
             ] as const).map(([key, label, Icon]) => (
               <button key={key} type="button" onClick={() => setFilter(key)}
@@ -317,7 +344,7 @@ export function Ads() {
             const sold = isSold(ad);
             const shareable = canShare(ad);
             const checklist = publicationChecklist(ad);
-            const statusLabel = archived ? "Arquivado" : sold ? "Vendido / indisponível" : ad.status === "draft" ? "Rascunho" : ad.status;
+            const statusLabel = ad.status === "removed" ? "Retirado" : archived ? "Arquivado" : sold ? "Vendido / indisponível" : ad.status === "published" ? "Publicado manualmente" : ad.status === "draft" ? "Rascunho" : ad.status;
             return (
               <div key={ad.id} style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, overflow: "hidden" }}>
                 <div className="flex gap-4 flex-wrap" style={{ padding: 14 }}>
@@ -394,6 +421,34 @@ export function Ads() {
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await reload(); }} />
       )}
+    </div>
+  );
+}
+
+// ---------- Registro de publicação manual ----------
+function PublishModal({ ad, busy, onClose, onPublish }: {
+  ad: Ad; busy: boolean; onClose: () => void; onPublish: (url: string) => Promise<void>;
+}) {
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
+  const validUrl = (() => { try { const u = new URL(url.trim()); return ["https:", "http:"].includes(u.protocol) && !!u.hostname.includes("."); } catch { return false; } })();
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!validUrl) return setError("Informe o link completo da publicação (https://...).");
+    setError("");
+    try { await onPublish(url.trim()); } catch (e) { setError(e instanceof Error ? e.message : "Erro ao registrar publicação."); }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }} onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
+      <form onSubmit={submit} role="dialog" aria-modal="true" aria-label="Registrar publicação manual" className="w-full rounded-xl p-5 flex flex-col gap-3" style={{ maxWidth: 520, background: "#fff" }}>
+        <div className="flex items-center justify-between"><h3 style={{ fontSize: 17, fontWeight: 600 }}>Registrar publicação · {CHANNELS[ad.channel]?.label ?? ad.channel}</h3><button type="button" disabled={busy} onClick={onClose} aria-label="Fechar"><X size={20}/></button></div>
+        <p style={{ fontSize: 13, color: "#4B5563" }}>Publique primeiro o anúncio na plataforma. Depois cole o link aqui para registrar a publicação no AutoGestão. Este botão não publica automaticamente.</p>
+        <label style={{ fontSize: 13, fontWeight: 500 }}>Link da publicação externa
+          <input type="url" required value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className="w-full rounded-lg px-3 py-2 mt-1" style={{ border: "1px solid #D1D5DB" }}/>
+        </label>
+        {error && <p role="alert" style={{ color: "#B91C1C", fontSize: 12 }}>{error}</p>}
+        <div className="flex justify-end gap-2"><button type="button" disabled={busy} onClick={onClose} className="rounded-lg px-4 py-2" style={{ border: "1px solid #D1D5DB" }}>Cancelar</button><button type="submit" disabled={busy || !validUrl} className="rounded-lg px-4 py-2" style={{ background: BLUE, color: "#fff", opacity: busy || !validUrl ? .5 : 1 }}>{busy ? "Registrando..." : "Confirmar publicação manual"}</button></div>
+      </form>
     </div>
   );
 }
