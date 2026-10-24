@@ -26,6 +26,7 @@ import { VehicleDetailsModule } from './vehicle-details/vehicle-details.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { SettingsModule } from './settings/settings.module';
 import { PlansModule } from './plans/plans.module';
+import { AdsModule } from './ads/ads.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { PlansModule } from './plans/plans.module';
     RenaveModule, 
     CustomersModule,
     LeadsModule,
+    AdsModule,
     SalesModule,
     SellersModule,
     FinancialModule,
