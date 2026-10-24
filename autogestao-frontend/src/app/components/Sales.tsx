@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, Plus, Car, Bike, Truck, X, FileText, Edit2, Trash2, ChevronDown, UserPlus, RefreshCw, Wallet, Loader2, Printer, CheckCircle2 } from "lucide-react";
 import { openSaleDocument } from "../../lib/sale-documents";
+import { getSettings } from "../../lib/settings-api";
 import * as api from "../../lib/api";
 import * as sapi from "../../lib/sales-api";
 import { useAuth } from "../../lib/auth-context";
@@ -683,6 +684,10 @@ const newTradeIn = (): TradeInForm => ({
 function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (saleId?: string) => void }) {
   const auth = useAuth();
   const isOwner = auth.user?.role === "owner";
+  const isManager = isOwner || auth.user?.role === "admin";
+  // Entrada mínima da loja (Configurações → Juros das promissórias)
+  const [minDownPct, setMinDownPct] = useState(0);
+  useEffect(() => { getSettings().then((d) => setMinDownPct(Number(d.dealership.minDownPaymentPercent) || 0)).catch(() => {}); }, []);
 
   const [vehicles, setVehicles] = useState<api.Vehicle[]>([]);
   const [customers, setCustomers] = useState<api.Customer[]>([]);
@@ -880,6 +885,10 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
   }
   const entryLine = payments.find(p => p.key === entryKey && p.method !== "promissory") ?? null;
   const entryMissing = round2(downPayment - downPaymentLaunched);
+  // Quanto a entrada precisa ter pela regra da loja e quanto falta para chegar lá
+  const requiredEntry = minDownPct > 0 && Number.isFinite(priceNum) ? round2((priceNum * minDownPct) / 100) : 0;
+  const belowMinEntry = !!promissoryLine && requiredEntry > 0 && downPayment + 0.009 < requiredEntry;
+  const missingToMin = belowMinEntry ? round2(requiredEntry - downPayment) : 0;
 
   // ---------- Troca ----------
   function updateTradeIn(key: number, patch: Partial<TradeInForm>) {
@@ -953,6 +962,15 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
       setError("Confira as promissórias: número de parcelas e taxa.");
       return;
     }
+    let allowBelowMin = false;
+    if (belowMinEntry) {
+      if (!isManager) {
+        setError(`A entrada está abaixo do mínimo de ${pctText(minDownPct)} (faltam ${currency(missingToMin)}). Só o dono ou o administrador pode liberar esta venda.`);
+        return;
+      }
+      if (!window.confirm(`A entrada (${currency(downPayment)}) está abaixo do mínimo de ${pctText(minDownPct)} (${currency(requiredEntry)}). Liberar esta venda mesmo assim?`)) return;
+      allowBelowMin = true;
+    }
 
     setSaving(true);
     try {
@@ -965,6 +983,7 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
         cost: round2(costNum),
         soldAt: soldAt || undefined,
         notes: notes || undefined,
+        allowBelowMinDownPayment: allowBelowMin || undefined,
         tradeIns: tradeIns.map(t => ({
           type: t.type,
           brand: t.brand.trim(), model: t.model.trim(), version: t.version.trim() || undefined,
@@ -1349,6 +1368,29 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
                   <p style={{ fontSize: 11, color: "#6B7280", marginTop: -6 }}>
                     Digite a entrada do cliente: o que falta para o valor do veículo vai automaticamente para as promissórias.
                   </p>
+                  {requiredEntry > 0 && (
+                    belowMinEntry ? (
+                      <div className="rounded-lg px-3 py-2" style={{ background: "#FEF2F2", border: "1px solid #FECACA", fontSize: 12, color: "#991B1B" }}>
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span>
+                            Entrada mínima da loja: <b>{pctText(minDownPct)}</b> = <b>{currency(requiredEntry)}</b>.
+                            {" "}Faltam <b>{currency(missingToMin)}</b> para atingir.
+                          </span>
+                          <button type="button" onClick={() => applyEntry(requiredEntry)}
+                            className="px-3 py-1 rounded-lg" style={{ background: "#fff", border: "1px solid #FCA5A5", color: "#991B1B", fontWeight: 600 }}>
+                            Usar entrada mínima
+                          </button>
+                        </div>
+                        <div style={{ marginTop: 4 }}>
+                          {isManager
+                            ? "Você pode liberar esta venda: vamos pedir confirmação ao finalizar."
+                            : "Com essa entrada só o dono ou o administrador pode fechar a venda."}
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: 12, color: "#27500A" }}>✓ Entrada acima do mínimo da loja ({pctText(minDownPct)} = {currency(requiredEntry)}).</p>
+                    )
+                  )}
                   {(entryLine || (downPayment > 0 && entryMissing >= 0.01)) && (
                     <div className="flex items-center gap-2 flex-wrap rounded-lg px-3 py-2"
                       style={{ background: entryMissing >= 0.01 ? "#FFFBEB" : "#F9FAFB", border: `0.5px solid ${entryMissing >= 0.01 ? "#FCD34D" : "rgba(0,0,0,0.06)"}`, fontSize: 12 }}>
@@ -1509,9 +1551,10 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
         <div className="flex items-center justify-end gap-3 px-6 py-4 sticky bottom-0" style={{ borderTop: "0.5px solid rgba(0,0,0,0.08)", background: "#fff" }}>
           <button onClick={onClose} className="px-5 py-2 rounded-lg"
             style={{ border: "0.5px solid rgba(0,0,0,0.1)", fontSize: 13, color: "#374151" }}>Cancelar</button>
-          <button onClick={handleSubmit} disabled={saving} className="px-6 py-2 rounded-lg"
-            style={{ background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, opacity: saving ? 0.7 : 1 }}>
-            {saving ? "Registrando..." : "Confirmar venda"}
+          <button onClick={handleSubmit} disabled={saving || (belowMinEntry && !isManager)} className="px-6 py-2 rounded-lg"
+            title={belowMinEntry && !isManager ? "Entrada abaixo do mínimo: peça ao dono ou administrador" : undefined}
+            style={{ background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, opacity: saving || (belowMinEntry && !isManager) ? 0.5 : 1 }}>
+            {saving ? "Registrando..." : belowMinEntry && isManager ? "Liberar e confirmar venda" : "Confirmar venda"}
           </button>
         </div>
       </div>

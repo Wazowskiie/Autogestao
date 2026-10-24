@@ -16,6 +16,8 @@ export class UpdateDealershipDto {
   @IsOptional() @trim() @IsString() @MaxLength(20) number?: string;
   @IsOptional() @trim() @IsString() @MaxLength(80) district?: string;
   @IsOptional() @trim() @IsString() @MaxLength(10) zip?: string;
+  // Entrada mínima nas promissórias (%); null remove o mínimo
+  @IsOptional() @IsNumber({}, { message: 'Entrada mínima inválida' }) @Min(0) @Max(100, { message: 'A entrada mínima vai até 100%' }) @Type(() => Number) minDownPaymentPercent?: number | null;
 }
 
 // ---------- Minha conta ----------

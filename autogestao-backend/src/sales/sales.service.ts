@@ -150,6 +150,27 @@ export class SalesService {
     if (payments.filter((p) => p.method === 'promissory').length > 1) {
       throw new BadRequestException('Use só uma linha de promissórias por venda.');
     }
+
+    // Entrada mínima da loja (vale para vendas com promissória)
+    const promissory = payments.find((p) => p.method === 'promissory');
+    if (promissory && dto.price > 0) {
+      const shop = await this.prisma.dealership.findUnique({ where: { id: dealershipId }, select: { minDownPaymentPercent: true } });
+      const minPct = shop?.minDownPaymentPercent != null ? Number(shop.minDownPaymentPercent) : 0;
+      const entry = round2(dto.price - promissory.amount);
+      const required = round2((dto.price * minPct) / 100);
+      if (minPct > 0 && entry + 0.009 < required) {
+        const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const manager = !actor || actor.role === 'owner' || actor.role === 'admin';
+        if (!manager) {
+          throw new ForbiddenException(
+            `A entrada (${brl(entry)}) está abaixo do mínimo de ${minPct}% (${brl(required)}). Faltam ${brl(round2(required - entry))}. Só o dono ou o administrador pode liberar esta venda.`,
+          );
+        }
+        if (!dto.allowBelowMinDownPayment) {
+          throw new BadRequestException(`A entrada está abaixo do mínimo de ${minPct}% (${brl(required)}). Confirme a liberação para continuar.`);
+        }
+      }
+    }
     if (payments.length) {
       const paid = round2(payments.reduce((sum, p) => sum + p.amount, 0) + tradeInValue);
       const diff = round2(dto.price - paid);

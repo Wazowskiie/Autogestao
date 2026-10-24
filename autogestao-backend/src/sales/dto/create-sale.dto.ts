@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize, IsArray, IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString,
+  ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString,
   Max, Min, MinLength, ValidateNested,
 } from 'class-validator';
 import { VehicleType } from '../../generated/prisma/client';
@@ -102,6 +102,11 @@ export class CreateSaleDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  // Dono/admin confirmou a venda mesmo com entrada abaixo do mínimo da loja
+  @IsOptional()
+  @IsBoolean()
+  allowBelowMinDownPayment?: boolean;
 
   @IsOptional()
   @IsArray()

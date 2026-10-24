@@ -26,6 +26,8 @@ export interface CreateSaleFullInput {
   price: number; cost: number; soldAt?: string; notes?: string;
   tradeIns?: TradeInInput[];
   payments?: SalePaymentInput[];
+  /** Dono/admin liberou a venda com entrada abaixo do mínimo */
+  allowBelowMinDownPayment?: boolean;
 }
 
 export interface SalePaymentItem {

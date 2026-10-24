@@ -89,3 +89,22 @@ test('Documentos da venda: contrato com número, troca, pagamentos e promissóri
   assert.ok(again.contractNumber);
   await assert.rejects(sales.documents(shop.id, '00000000-0000-0000-0000-000000000000', actor), /não encontrada/);
 });
+
+test('Entrada mínima: vendedor é bloqueado, dono libera confirmando', async () => {
+  await prisma.dealership.update({ where: { id: shop.id }, data: { minDownPaymentPercent: 60 } });
+  const seller = await prisma.user.create({ data: { dealershipId: shop.id, role: 'seller', name: 'Zé', email: 'ze.min@x.invalid', passwordHash: 'x' } });
+  const cust = await prisma.customer.create({ data: { dealershipId: shop.id, name: 'Cliente do Zé', createdById: seller.id } });
+  const mk = () => prisma.vehicle.create({ data: { dealershipId: shop.id, brand: 'Yamaha', model: 'Fazer 250', year: 2025, price: 28000, cost: 23000 } });
+  const v1 = await mk();
+  const body = (vehicleId, entry) => ({ vehicleId, customerId: cust.id, price: 28000, cost: 23000, payments: [{ method: 'cash', amount: entry }, { method: 'promissory', amount: 28000 - entry }] });
+  const sellerActor = { userId: seller.id, dealershipId: shop.id, role: 'seller' };
+  // 13.000 de 28.000 = 46,4% < 60% (mínimo 16.800)
+  await assert.rejects(sales.create(shop.id, seller.id, body(v1.id, 13000), sellerActor), /abaixo do mínimo de 60%.*Faltam R\$\s?3\.800,00.*dono ou o administrador/);
+  const ownerActor = { userId: owner.id, dealershipId: shop.id, role: 'owner' };
+  await assert.rejects(sales.create(shop.id, owner.id, body(v1.id, 13000), ownerActor), /Confirme a liberação/);
+  await sales.create(shop.id, owner.id, { ...body(v1.id, 13000), allowBelowMinDownPayment: true, sellerId: seller.id }, ownerActor);
+  // Com entrada suficiente o vendedor fecha normalmente
+  const v2 = await mk();
+  await sales.create(shop.id, seller.id, body(v2.id, 16800), sellerActor);
+  await prisma.dealership.update({ where: { id: shop.id }, data: { minDownPaymentPercent: null } });
+});

@@ -7,6 +7,7 @@ export interface StoreInfo {
   city: string | null; state: string | null;
   logoUrl: string | null; coverUrl: string | null; primaryColor: string | null;
   street: string | null; number: string | null; district: string | null; zip: string | null;
+  minDownPaymentPercent: number | null;
 }
 
 export interface FiscalInfo {

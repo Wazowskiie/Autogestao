@@ -40,6 +40,7 @@ export class SettingsService {
         name: d.name, slug: d.slug, cnpj: d.cnpj, phone: d.phone, city: d.city, state: d.state,
         logoUrl: d.logoUrl, coverUrl: d.coverUrl, primaryColor: d.primaryColor,
         street: d.focusNfeLogradouro, number: d.focusNfeNumero, district: d.focusNfeBairro, zip: d.focusNfeCep,
+        minDownPaymentPercent: d.minDownPaymentPercent != null ? Number(d.minDownPaymentPercent) : null,
       },
       // O token da NF-e nunca sai do servidor: só dizemos se ele existe
       fiscal: isManager(u)
@@ -86,6 +87,7 @@ export class SettingsService {
         city: dto.city !== undefined ? dto.city || null : undefined,
         state: dto.state !== undefined ? dto.state.toUpperCase() || null : undefined,
         primaryColor: dto.primaryColor,
+        minDownPaymentPercent: dto.minDownPaymentPercent === undefined ? undefined : dto.minDownPaymentPercent || null,
         focusNfeLogradouro: dto.street !== undefined ? dto.street || null : undefined,
         focusNfeNumero: dto.number !== undefined ? dto.number || null : undefined,
         focusNfeBairro: dto.district !== undefined ? dto.district || null : undefined,

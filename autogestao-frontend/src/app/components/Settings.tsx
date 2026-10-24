@@ -147,7 +147,7 @@ export function Settings({ onNavigate }: { onNavigate?: (page: string) => void }
           {error && <Notice kind="error" text={error} />}
           {!data && !error && <p style={{ fontSize: 13, color: "#6B7280" }}>Carregando...</p>}
           {data && tab === "loja" && <StoreTab data={data} onSaved={onSaved} />}
-          {data && tab === "juros" && <InterestTab canEdit={data.canEdit} />}
+          {data && tab === "juros" && <InterestTab canEdit={data.canEdit} store={data.dealership} onSaved={onSaved} />}
           {data && tab === "fiscal" && data.fiscal && <FiscalTab fiscal={data.fiscal} onSaved={onSaved} />}
           {data && tab === "integracoes" && <IntegrationsTab data={data} onNavigate={onNavigate} onGo={setTab} has={plan.has} />}
           {data && tab === "usuarios" && <UsersTab me={data.me} onNavigate={onNavigate} />}
@@ -275,7 +275,7 @@ function ImageSlot({ label, url, square, busy, onPick, onRemove }: {
 // =========================== Juros ===========================
 type BandRow = { min: string; max: string; rate: string };
 
-function InterestTab({ canEdit }: { canEdit: boolean }) {
+function InterestTab({ canEdit, store, onSaved }: { canEdit: boolean; store: s.StoreInfo; onSaved: (d: s.SettingsData) => void }) {
   const [bands, setBands] = useState<s.InterestBand[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null); // id ou "new"
   const [row, setRow] = useState<BandRow>({ min: "", max: "", rate: "" });
@@ -352,6 +352,7 @@ function InterestTab({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="flex flex-col gap-4">
       {n.el}
+      <MinDownPaymentCard canEdit={canEdit} store={store} onSaved={onSaved} />
       <div style={card}>
         <SectionTitle title="Juros das promissórias"
           subtitle="O juro é aplicado sobre o valor parcelado: total = valor × (1 + juros). O vendedor vê essa tabela na hora da venda." />
@@ -708,6 +709,50 @@ function UsersTab({ me, onNavigate }: { me: s.SettingsData["me"]; onNavigate?: (
           {onNavigate ? <button onClick={() => onNavigate("sellers")} style={{ color: BLUE, fontWeight: 500 }}>Vendedores</button> : "Vendedores"}.
           {" "}Usuários desativados não contam no limite do plano.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// Entrada mínima exigida nas vendas com promissória
+function MinDownPaymentCard({ canEdit, store, onSaved }: { canEdit: boolean; store: s.StoreInfo; onSaved: (d: s.SettingsData) => void }) {
+  const current = store.minDownPaymentPercent;
+  const [value, setValue] = useState(current != null ? String(current).replace(".", ",") : "");
+  const [saving, setSaving] = useState(false);
+  const n = useNotice();
+  const pctNum = Number(value.replace(",", "."));
+  const example = value && Number.isFinite(pctNum) ? (20000 * pctNum) / 100 : null;
+
+  const save = async () => {
+    if (value && (!Number.isFinite(pctNum) || pctNum < 0 || pctNum > 100)) return n.show("error", "Digite uma porcentagem entre 0 e 100.");
+    setSaving(true);
+    try {
+      onSaved(await s.updateStore({ minDownPaymentPercent: value ? pctNum : null }));
+      n.show("ok", value ? `Entrada mínima de ${value}% salva.` : "Entrada mínima removida.");
+    } catch (e) { n.show("error", msg(e)); } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={card}>
+      <SectionTitle title="Entrada mínima"
+        subtitle="Porcentagem do valor do veículo que o cliente precisa dar de entrada para parcelar em promissória. Abaixo disso, o vendedor não consegue fechar a venda: só o dono ou o administrador libera." />
+      {n.el && <div style={{ marginBottom: 12 }}>{n.el}</div>}
+      <div className="flex items-end gap-3 flex-wrap">
+        <Field label="Entrada mínima (%)">
+          <div className="flex items-center gap-1">
+            <input style={{ ...inputStyle, width: 100 }} inputMode="decimal" placeholder="Sem mínimo" disabled={!canEdit}
+              value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d,.]/g, ""))} />
+            <span style={{ color: "#6B7280" }}>%</span>
+          </div>
+        </Field>
+        {canEdit && (
+          <button onClick={save} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>{saving ? "Salvando..." : "Salvar"}</button>
+        )}
+        {example !== null && (
+          <span style={{ fontSize: 12, color: "#6B7280", paddingBottom: 8 }}>
+            Ex.: moto de R$ 20.000,00 → entrada mínima de {example.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+          </span>
+        )}
       </div>
     </div>
   );
