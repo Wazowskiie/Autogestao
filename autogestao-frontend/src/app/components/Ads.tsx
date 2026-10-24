@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Megaphone, Plus, Copy, Check, Download, Sparkles, Pencil, Trash2, X, ImageOff, Loader2, Wand2, Eye, RefreshCw } from "lucide-react";
+import { Megaphone, Plus, Copy, Check, Download, Sparkles, Pencil, Trash2, X, ImageOff, Loader2, Wand2 } from "lucide-react";
 import { request } from "../../lib/api";
 import { getVehicle, type VehicleFull } from "../../lib/vehicle-details-api";
 import { getSettings } from "../../lib/settings-api";
@@ -43,7 +43,7 @@ function makeText(v: VehicleFull, channel: string, store: Store | null) {
   const kind = v.type === "moto" ? "moto" : "veículo";
   const facts = [
     `Ano: ${year}`,
-    v.km != null ? `KM: ${v.km.toLocaleString("pt-BR")}` : null,
+    v.km ? `KM: ${v.km.toLocaleString("pt-BR")}` : null,
     v.color ? `Cor: ${v.color}` : null,
     v.fuel ? `Combustível: ${v.fuel}` : null,
     v.engineCc ? `Cilindrada: ${v.engineCc} cc` : null,
@@ -72,8 +72,9 @@ function makeText(v: VehicleFull, channel: string, store: Store | null) {
       ...(optionals.length ? ["", `⭐ ${optionals.join(" • ")}`] : []),
       ...(v.description ? ["", v.description.trim()] : []),
       "",
-      Number(v.price) > 0 ? `💰 ${brl(v.price)}` : null,
+      `💰 ${brl(v.price)}`,
       v.acceptsTrade ? "🔄 Aceitamos sua troca" : null,
+      "📝 Parcelamos no crediário próprio",
       "",
       phone ? `📲 Chame no WhatsApp: ${phone}` : "📲 Chame no direct",
       where ? `📍 ${where}` : null,
@@ -84,16 +85,16 @@ function makeText(v: VehicleFull, channel: string, store: Store | null) {
 
   // OLX (texto mais direto, sem hashtags)
   return [
-    `${v.brand} ${v.model}${v.version ? ` ${v.version}` : ""} ${year}.`,
+    `${v.brand} ${v.model}${v.version ? ` ${v.version}` : ""} ${year} em ótimo estado.`,
     "",
     ...facts.map((f) => `• ${f}`),
     ...(extras.length ? [`• ${extras.join(" • ")}`] : []),
     ...(optionals.length ? ["", `Opcionais: ${optionals.join(", ")}.`] : []),
     ...(v.description ? ["", v.description.trim()] : []),
     "",
-    Number(v.price) > 0 ? `Valor: ${brl(v.price)}` : null,
+    `Valor: ${brl(v.price)}`,
     v.acceptsTrade ? "Aceitamos troca." : null,
-    `Entre em contato para conhecer ${kind === "moto" ? "a moto" : "o veículo"} e consultar as condições disponíveis.`,
+    `Parcelamos no crediário próprio. Venha conhecer a ${kind}!`,
     "",
     where ? `${where}` : null,
     phone ? `WhatsApp: ${phone}` : null,
@@ -127,7 +128,6 @@ export function Ads() {
   const [vehicleId, setVehicleId] = useState("");
   const [channel, setChannel] = useState("olx");
   const [editing, setEditing] = useState<Ad | null>(null);
-  const [preview, setPreview] = useState<Ad | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -287,20 +287,17 @@ function EditModal({ ad, vehicleId, store, canUseAi, onClose, onSaved }: {
   const [title, setTitle] = useState(ad.title);
   const [description, setDescription] = useState(ad.description || "");
   const [busy, setBusy] = useState<"save" | "gen" | "ai" | null>(null);
-  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [error, setError] = useState("");
   const ch = CHANNELS[ad.channel]?.label ?? ad.channel;
   const limits = useMemo(() => ({ title: ad.channel === "olx" ? 90 : 150 }), [ad.channel]);
 
   const generate = async () => {
-    if (description.trim() && !confirmRegenerate) { setConfirmRegenerate(true); return; }
     if (!vehicleId) return setError("Não achei o veículo deste anúncio no estoque.");
     setBusy("gen"); setError("");
     try {
       const v = await getVehicle(vehicleId);
       setTitle(makeTitle(v));
       setDescription(makeText(v, ad.channel, store));
-      setConfirmRegenerate(false);
     } catch (e) { setError(e instanceof Error ? e.message : "Erro ao gerar o texto"); } finally { setBusy(null); }
   };
 
@@ -363,50 +360,6 @@ function EditModal({ ad, vehicleId, store, canUseAi, onClose, onSaved }: {
               style={{ background: BLUE, color: "#fff", fontSize: 13, fontWeight: 500, opacity: busy || !title.trim() ? 0.6 : 1 }}>
               {busy === "save" ? "Salvando..." : "Salvar"}
             </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-
-// ---------- Pré-visualização (não publica em plataformas externas) ----------
-function PreviewModal({ ad, store, onClose }: { ad: Ad; store: Store | null; onClose: () => void }) {
-  const photos = ad.vehicle.photos ?? [];
-  const [photoIndex, setPhotoIndex] = useState(0);
-  const instagram = ad.channel === "instagram";
-  const photo = photos[photoIndex]?.url;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full flex flex-col" role="dialog" aria-modal="true" aria-label="Pré-visualização do anúncio"
-        style={{ background: "#fff", borderRadius: 14, maxWidth: instagram ? 560 : 800, maxHeight: "92vh", overflow: "hidden" }}>
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid #E5E7EB" }}>
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Pré-visualização · {instagram ? "Instagram" : "OLX"}</h3>
-            <p style={{ fontSize: 12, color: "#6B7280" }}>Simulação visual. Nada foi publicado.</p>
-          </div>
-          <button aria-label="Fechar pré-visualização" onClick={onClose}><X size={20} /></button>
-        </div>
-        <div className="overflow-auto p-5">
-          {instagram && <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{store?.name || "Concessionária"}</div>}
-          <div style={{ background: "#F3F4F6", borderRadius: 10, overflow: "hidden", height: instagram ? 330 : 280, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            {photo ? <img src={photo} alt={`Foto ${photoIndex + 1} do veículo`} style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <ImageOff size={32} color="#9CA3AF" />}
-          </div>
-          {photos.length > 1 && (
-            <div className="flex items-center justify-between mt-2" style={{ fontSize: 12 }}>
-              <button onClick={() => setPhotoIndex((photoIndex + photos.length - 1) % photos.length)}>← Anterior</button>
-              <span>{photoIndex + 1} de {photos.length}</span>
-              <button onClick={() => setPhotoIndex((photoIndex + 1) % photos.length)}>Próxima →</button>
-            </div>
-          )}
-          <h3 style={{ fontSize: 18, fontWeight: 650, marginTop: 16 }}>{ad.title}</h3>
-          <p style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.6, color: "#374151", marginTop: 10 }}>{ad.description || "Sem descrição cadastrada."}</p>
-          <div className="flex gap-2 flex-wrap mt-4">
-            <CopyButton label="Copiar título" text={ad.title} />
-            <CopyButton label="Copiar descrição" text={ad.description} disabled={!ad.description?.trim()} />
           </div>
         </div>
       </div>
