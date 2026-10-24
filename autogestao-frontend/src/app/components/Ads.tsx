@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Megaphone, Plus, Copy, Check, Download, Sparkles, Pencil, Trash2, X, ImageOff, Loader2, Wand2, Eye, RefreshCw } from "lucide-react";
+import { Megaphone, Plus, Copy, Check, Download, Sparkles, Pencil, Trash2, X, ImageOff, Loader2, Wand2, Eye, RefreshCw, Archive, CarFront, FileText, Search } from "lucide-react";
 import { request } from "../../lib/api";
 import { getVehicle, type VehicleFull } from "../../lib/vehicle-details-api";
 import { getSettings } from "../../lib/settings-api";
@@ -12,7 +12,9 @@ type Ad = {
   id: string; channel: string; title: string; description: string; status: string; vehicleId?: string;
   price?: string | number; photos?: string[];
   inventorySync?: { priceChanged: boolean; photosChanged: boolean; unavailable: boolean; needsAttention: boolean };
-  vehicle: { id?: string; brand: string; model: string; year: number; status?: string; price?: string | number; photos: { url: string }[] };
+  vehicle?: { id?: string; brand: string; model: string; year: number; status?: string; price?: string | number; photos?: { url: string }[] } | null;
+  vehicleSnapshot?: { brand?: string; model?: string; year?: number } | null;
+  archivedAt?: string | null;
 };
 type Store = { name: string; phone: string | null; city: string | null; state: string | null; slug: string };
 
@@ -21,6 +23,14 @@ const CHANNELS: Record<string, { label: string; color: string; bg: string }> = {
   instagram: { label: "Instagram", color: "#C13584", bg: "#FCE7F3" },
 };
 const BLUE = "#185FA5";
+type Filter = "all" | "draft" | "sold" | "archived";
+const isArchived = (ad: Ad) => ad.status === "archived" || !!ad.archivedAt || !ad.vehicle;
+const isSold = (ad: Ad) => !isArchived(ad) && (ad.vehicle?.status === "sold" || !!ad.inventorySync?.unavailable);
+const canShare = (ad: Ad) => !isArchived(ad) && !isSold(ad);
+const vehicleLabel = (ad: Ad) => {
+  const v = ad.vehicle ?? ad.vehicleSnapshot;
+  return [v?.brand, v?.model, v?.year].filter((x) => x !== null && x !== undefined && x !== "").join(" ") || ad.title;
+};
 
 // ---------- Formatação ----------
 const brl = (v: unknown) => Number(v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -132,6 +142,8 @@ export function Ads() {
   const [preview, setPreview] = useState<Ad | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useState("");
 
   const reload = useCallback(async () => {
     const [v, a] = await Promise.all([request<Vehicle[]>("/ads/vehicles"), request<Ad[]>("/ads/listings")]);
@@ -145,8 +157,9 @@ export function Ads() {
 
   // Liga cada anúncio ao veículo certo (o backend manda a marca/modelo/ano)
   const vehicleOf = useCallback((ad: Ad) => {
-    if (ad.vehicleId || ad.vehicle.id) return ad.vehicleId ?? ad.vehicle.id!;
-    return vehicles.find((v) => v.brand === ad.vehicle.brand && v.model === ad.vehicle.model && v.year === ad.vehicle.year)?.id ?? null;
+    if (isArchived(ad)) return null;
+    if (ad.vehicleId || ad.vehicle?.id) return ad.vehicleId ?? ad.vehicle?.id ?? null;
+    return vehicles.find((v) => v.brand === ad.vehicle?.brand && v.model === ad.vehicle?.model && v.year === ad.vehicle?.year)?.id ?? null;
   }, [vehicles]);
 
   // Cria o rascunho e já preenche o texto com os dados do veículo
@@ -168,6 +181,7 @@ export function Ads() {
   }
 
   async function syncInventory(ad: Ad) {
+    if (!canShare(ad) || ad.status !== "draft") return;
     if (!window.confirm("Atualizar preço e fotos deste rascunho com os dados atuais do estoque? O título e a descrição serão preservados.")) return;
     setBusy(true); setError("");
     try {
@@ -179,12 +193,27 @@ export function Ads() {
   }
 
   async function remove(ad: Ad) {
+    if (!canShare(ad) || ad.status !== "draft") return;
     if (!window.confirm("Excluir este rascunho?")) return;
     setBusy(true); setError("");
     try { await request(`/ads/listings/${ad.id}`, { method: "DELETE" }); await reload(); }
     catch (e) { setError(e instanceof Error ? e.message : "Erro ao excluir"); }
     finally { setBusy(false); }
   }
+
+  const counts = useMemo(() => ({
+    all: ads.length,
+    draft: ads.filter((a) => a.status === "draft" && !isArchived(a) && !isSold(a)).length,
+    sold: ads.filter(isSold).length,
+    archived: ads.filter(isArchived).length,
+  }), [ads]);
+  const visibleAds = useMemo(() => ads.filter((ad) => {
+    if (filter === "draft" && (ad.status !== "draft" || isArchived(ad) || isSold(ad))) return false;
+    if (filter === "sold" && !isSold(ad)) return false;
+    if (filter === "archived" && !isArchived(ad)) return false;
+    const q = search.trim().toLocaleLowerCase("pt-BR");
+    return !q || `${ad.title} ${vehicleLabel(ad)} ${ad.description ?? ""}`.toLocaleLowerCase("pt-BR").includes(q);
+  }), [ads, filter, search]);
 
   const storeLink = store ? `${window.location.origin}/loja/${store.slug}` : "";
 
@@ -231,24 +260,50 @@ export function Ads() {
             </p>
           </div>
 
+          {/* Histórico e filtros */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {([
+              ["all", "Todos", Megaphone], ["draft", "Rascunhos", FileText],
+              ["sold", "Vendidos", CarFront], ["archived", "Arquivados", Archive],
+            ] as const).map(([key, label, Icon]) => (
+              <button key={key} type="button" onClick={() => setFilter(key)}
+                aria-pressed={filter === key}
+                className="flex items-center gap-3 rounded-xl p-3 text-left"
+                style={{ background: "#fff", border: `1px solid ${filter === key ? BLUE : "rgba(0,0,0,0.10)"}` }}>
+                <Icon size={19} style={{ color: filter === key ? BLUE : "#6B7280" }} />
+                <span><span className="block" style={{ fontSize: 20, fontWeight: 700 }}>{counts[key]}</span>
+                  <span className="block" style={{ fontSize: 12, color: "#6B7280" }}>{label}</span></span>
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.12)" }}>
+            <Search size={16} style={{ color: "#6B7280" }} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar anúncio por título ou veículo"
+              aria-label="Buscar anúncios" className="flex-1 outline-none" style={{ fontSize: 13, background: "transparent" }} />
+          </div>
+
           {/* Lista */}
           <div className="flex items-center justify-between">
-            <h3 style={{ fontSize: 15, fontWeight: 600 }}>Anúncios ({ads.length})</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 600 }}>Anúncios ({visibleAds.length} de {ads.length})</h3>
             {storeLink && (
               <CopyButton label="Copiar link do site da loja" text={storeLink} />
             )}
           </div>
-          {ads.length === 0 && (
+          {visibleAds.length === 0 && (
             <div className="flex flex-col items-center gap-2 py-10" style={{ background: "#fff", borderRadius: 12, border: "1px dashed rgba(0,0,0,0.12)", color: "#9CA3AF", fontSize: 13 }}>
-              <Megaphone size={26} /> Nenhum anúncio ainda. Escolha um veículo acima.
+              <Megaphone size={26} /> Nenhum anúncio encontrado para este filtro.
             </div>
           )}
 
-          {ads.map((ad) => {
+          {visibleAds.map((ad) => {
             const ch = CHANNELS[ad.channel] ?? { label: ad.channel.toUpperCase(), color: "#374151", bg: "#F3F4F6" };
             const photos = (ad.photos ?? []).map((url) => ({ url }));
             const sync = ad.inventorySync;
             const empty = !ad.description?.trim();
+            const archived = isArchived(ad);
+            const sold = isSold(ad);
+            const shareable = canShare(ad);
+            const statusLabel = archived ? "Arquivado" : sold ? "Vendido / indisponível" : ad.status === "draft" ? "Rascunho" : ad.status;
             return (
               <div key={ad.id} style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 12, overflow: "hidden" }}>
                 <div className="flex gap-4 flex-wrap" style={{ padding: 14 }}>
@@ -258,10 +313,16 @@ export function Ads() {
                   <div style={{ flex: "1 1 280px", minWidth: 0 }}>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="px-2 py-0.5 rounded-full" style={{ fontSize: 11, fontWeight: 700, background: ch.bg, color: ch.color }}>{ch.label}</span>
-                      <span className="px-2 py-0.5 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: "#F3F4F6", color: "#4B5563" }}>{ad.status === "draft" ? "Rascunho" : ad.status}</span>
+                      <span className="px-2 py-0.5 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: "#F3F4F6", color: "#4B5563" }}>{statusLabel}</span>
                       <span style={{ fontSize: 12, color: "#9CA3AF" }}>{photos.length} {photos.length === 1 ? "foto" : "fotos"}</span>
                     </div>
-                    {sync?.needsAttention && (
+                    {(archived || sold) && (
+                      <div className="rounded-lg px-3 py-2 mt-2" style={{ background: archived ? "#F3F4F6" : "#FEE2E2", color: archived ? "#374151" : "#991B1B", fontSize: 12 }}>
+                        <strong>{archived ? "Histórico preservado — veículo excluído" : "Veículo vendido ou indisponível"}</strong>
+                        <div>{archived ? "Anúncio somente para consulta. Não é possível editar, sincronizar ou divulgar." : "Revise a disponibilidade antes de divulgar. Cópia e edição estão bloqueadas."}</div>
+                      </div>
+                    )}
+                    {!archived && !sold && sync?.needsAttention && (
                       <div className="rounded-lg px-3 py-2 mt-2" style={{ background: sync.unavailable ? "#FEE2E2" : "#FFFBEB", color: sync.unavailable ? "#991B1B" : "#92400E", fontSize: 12 }}>
                         <strong>{sync.unavailable ? "Veículo indisponível no estoque" : "Alterações detectadas no estoque"}</strong>
                         <div>{[sync.priceChanged && "Preço alterado", sync.photosChanged && "Fotos alteradas", sync.unavailable && "Não copie nem publique antes de revisar a disponibilidade"].filter(Boolean).join(" · ")}</div>
@@ -279,11 +340,11 @@ export function Ads() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5" style={{ flex: "0 0 auto" }}>
-                    <CopyButton label="Copiar título" text={ad.title} disabled={!!sync?.unavailable} />
-                    <CopyButton label="Copiar texto" text={ad.description} disabled={empty || !!sync?.unavailable} />
-                    {photos.length > 0 && (
+                    <CopyButton label="Copiar título" text={ad.title} disabled={!shareable} />
+                    <CopyButton label="Copiar texto" text={ad.description} disabled={empty || !shareable} />
+                    {photos.length > 0 && shareable && (
                       <ActionButton icon={Download} label={`Baixar fotos (${photos.length})`}
-                        onClick={() => downloadPhotos(photos.map((p) => p.url), `${ad.vehicle.brand}-${ad.vehicle.model}`.toLowerCase().replace(/\s+/g, "-"))} />
+                        onClick={() => downloadPhotos(photos.map((p) => p.url), vehicleLabel(ad).toLowerCase().replace(/\s+/g, "-"))} />
                     )}
                   </div>
                   <div className="flex flex-col gap-1.5" style={{ flex: "0 0 auto" }}>
@@ -420,6 +481,7 @@ function PreviewModal({ ad, store, onClose }: { ad: Ad; store: Store | null; onC
         </div>
         <div className="overflow-auto p-5">
           {instagram && <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{store?.name || "Concessionária"}</div>}
+          {(isArchived(ad) || isSold(ad)) && <p style={{ color: "#991B1B", fontSize: 12, marginBottom: 12 }}>Somente consulta — anúncio indisponível para divulgação.</p>}
           <div style={{ background: "#F3F4F6", borderRadius: 10, overflow: "hidden", height: instagram ? 330 : 280, display: "flex", alignItems: "center", justifyContent: "center" }}>
             {photo ? <img src={photo} alt={`Foto ${photoIndex + 1} do veículo`} style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <ImageOff size={32} color="#9CA3AF" />}
           </div>
