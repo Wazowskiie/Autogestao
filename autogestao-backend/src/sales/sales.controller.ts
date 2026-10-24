@@ -21,6 +21,12 @@ export class SalesController {
     return this.salesService.summary(user.dealershipId, month, user);
   }
 
+  /** Dados para imprimir o contrato de venda e as notas promissórias */
+  @Get(':id/documents')
+  documents(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.salesService.documents(user.dealershipId, id, user);
+  }
+
   @Get(':id')
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.salesService.findOne(user.dealershipId, id, user);

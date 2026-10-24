@@ -1,11 +1,12 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 import { TokenEncryptionService } from '../common/crypto/token-encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService, UploadedFileLike } from '../vehicle-details/storage.service';
-import { ChangePasswordDto, InterestBandDto, UpdateDealershipDto, UpdateFiscalDto, UpdateMeDto } from './settings.dto';
+import { ChangePasswordDto, InterestBandDto, UpdateDealershipDto, UpdateFiscalDto, UpdateMeDto, UpdateUserDto } from './settings.dto';
+import { PlansService } from '../plans/plans.service';
 
 const isManager = (u: AuthenticatedUser) => u.role === 'owner' || u.role === 'admin';
 const digits = (v?: string | null) => (v ?? '').replace(/\D/g, '');
@@ -16,6 +17,7 @@ export class SettingsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly config: ConfigService,
+    @Optional() private readonly plans?: PlansService,
   ) {}
 
   private needManager(u: AuthenticatedUser) {
@@ -37,6 +39,7 @@ export class SettingsService {
       dealership: {
         name: d.name, slug: d.slug, cnpj: d.cnpj, phone: d.phone, city: d.city, state: d.state,
         logoUrl: d.logoUrl, coverUrl: d.coverUrl, primaryColor: d.primaryColor,
+        street: d.focusNfeLogradouro, number: d.focusNfeNumero, district: d.focusNfeBairro, zip: d.focusNfeCep,
       },
       // O token da NF-e nunca sai do servidor: só dizemos se ele existe
       fiscal: isManager(u)
@@ -83,6 +86,13 @@ export class SettingsService {
         city: dto.city !== undefined ? dto.city || null : undefined,
         state: dto.state !== undefined ? dto.state.toUpperCase() || null : undefined,
         primaryColor: dto.primaryColor,
+        focusNfeLogradouro: dto.street !== undefined ? dto.street || null : undefined,
+        focusNfeNumero: dto.number !== undefined ? dto.number || null : undefined,
+        focusNfeBairro: dto.district !== undefined ? dto.district || null : undefined,
+        focusNfeCep: dto.zip !== undefined ? digits(dto.zip) || null : undefined,
+        // A cidade/UF da nota acompanham a da loja, se ainda não tiverem sido preenchidas
+        ...(dto.city ? { focusNfeMunicipio: dto.city } : {}),
+        ...(dto.state ? { focusNfeUf: dto.state.toUpperCase() } : {}),
       },
     });
     return this.get(u);
@@ -123,6 +133,51 @@ export class SettingsService {
     await this.prisma.user.update({ where: { id: u.userId }, data: { passwordHash: await argon2.hash(dto.newPassword) } });
     await this.prisma.auditLog.create({ data: { dealershipId: u.dealershipId, userId: u.userId, action: 'password_changed', entity: 'user', entityId: u.userId } }).catch(() => undefined);
     return { ok: true };
+  }
+
+  // ================= Usuários da loja =================
+
+  /** Todo mundo que tem acesso: dono, administradores e vendedores */
+  async listUsers(u: AuthenticatedUser) {
+    this.needManager(u);
+    const [users, spec] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { dealershipId: u.dealershipId },
+        select: { id: true, name: true, email: true, role: true, active: true, createdAt: true, jobTitle: true },
+        orderBy: [{ active: 'desc' }, { role: 'asc' }, { name: 'asc' }],
+      }),
+      this.plans ? this.plans.spec(u.dealershipId) : Promise.resolve(null),
+    ]);
+    return {
+      users,
+      activeCount: users.filter((x) => x.active).length,
+      limit: spec?.userLimit ?? null,
+      planName: spec?.name ?? null,
+    };
+  }
+
+  async updateUser(u: AuthenticatedUser, id: string, dto: UpdateUserDto) {
+    this.needManager(u);
+    const target = await this.prisma.user.findFirst({ where: { id, dealershipId: u.dealershipId } });
+    if (!target) throw new NotFoundException('Usuário não encontrado');
+    if (target.role === 'owner') throw new BadRequestException('O dono da loja não pode ser desativado nem mudar de função.');
+    if (target.id === u.userId) throw new BadRequestException('Você não pode mudar o seu próprio acesso por aqui.');
+    // Administrador mexe só em vendedores; mexer em administradores e trocar função é com o dono
+    if (u.role !== 'owner' && (target.role === 'admin' || dto.role !== undefined)) {
+      throw new ForbiddenException('Só o dono pode alterar administradores ou trocar a função de alguém.');
+    }
+
+    if (dto.active === true && !target.active && this.plans) await this.plans.assertUserSlot(u.dealershipId);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id }, data: { active: dto.active, role: dto.role } }),
+      // Desativado: derruba o login dele na hora
+      ...(dto.active === false ? [this.prisma.refreshToken.updateMany({ where: { userId: id, revoked: false }, data: { revoked: true } })] : []),
+    ]);
+    await this.prisma.auditLog
+      .create({ data: { dealershipId: u.dealershipId, userId: u.userId, action: 'user_updated', entity: 'user', entityId: id, metadata: { ...dto } } })
+      .catch(() => undefined);
+    return this.listUsers(u);
   }
 
   // ================= Nota fiscal (Focus NFe) =================

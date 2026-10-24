@@ -1,5 +1,6 @@
+import { openSaleDocument } from "../../lib/sale-documents";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Check, AlertTriangle, Clock, Trash2, X, Calendar, Receipt, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Check, AlertTriangle, Clock, Trash2, X, Calendar, Receipt, ChevronDown, ChevronRight, Printer } from "lucide-react";
 import * as api from "../../lib/api";
 
 function currency(v: number) {
@@ -226,12 +227,18 @@ export function PromissoryNotes() {
                         <span className="px-2 py-1 rounded" style={{ fontSize: 11, background: status.bg, color: status.color }}>{status.label}</span>
                       </td>
                       <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                        <button onClick={(e) => { e.stopPropagation(); openSaleDocument(g.saleId, "promissory").catch((err) => alert(err instanceof Error ? err.message : "Erro ao gerar promissórias")); }}
+                          className="p-1.5 rounded" style={{ color: "#185FA5", background: "#EBF2FA" }} title="Imprimir promissórias desta venda">
+                          <Printer size={13} />
+                        </button>
                         {filter === "all" && (
                           <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g); }}
                             className="p-1.5 rounded" style={{ color: "#DC2626", background: "#FEE2E2" }} title="Remover todas as parcelas desta venda">
                             <Trash2 size={13} />
                           </button>
                         )}
+                        </div>
                       </td>
                     </tr>
 

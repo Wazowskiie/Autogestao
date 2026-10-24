@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 const trim = () => Transform(({ value }) => (typeof value === 'string' ? value.trim() : value));
 
@@ -11,6 +11,11 @@ export class UpdateDealershipDto {
   @IsOptional() @trim() @IsString() @MaxLength(80) city?: string;
   @IsOptional() @trim() @IsString() @MaxLength(2) state?: string;
   @IsOptional() @IsString() @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'Cor inválida' }) primaryColor?: string;
+  // Endereço (aparece no contrato e nas promissórias; é o mesmo da nota fiscal)
+  @IsOptional() @trim() @IsString() @MaxLength(120) street?: string;
+  @IsOptional() @trim() @IsString() @MaxLength(20) number?: string;
+  @IsOptional() @trim() @IsString() @MaxLength(80) district?: string;
+  @IsOptional() @trim() @IsString() @MaxLength(10) zip?: string;
 }
 
 // ---------- Minha conta ----------
@@ -44,4 +49,10 @@ export class InterestBandDto {
   @IsInt({ message: 'Parcelas inválidas' }) @Min(1) @Max(60, { message: 'Máximo de 60 parcelas' }) @Type(() => Number) minInstallments: number;
   @IsInt({ message: 'Parcelas inválidas' }) @Min(1) @Max(60, { message: 'Máximo de 60 parcelas' }) @Type(() => Number) maxInstallments: number;
   @IsNumber({}, { message: 'Porcentagem inválida' }) @Min(0) @Max(500) @Type(() => Number) rate: number;
+}
+
+// ---------- Usuários da loja ----------
+export class UpdateUserDto {
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsIn(['admin', 'seller'], { message: 'Função inválida' }) role?: 'admin' | 'seller';
 }

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Store, Percent, FileText, Plug, UserCircle, Upload, Trash2, Plus, Check, X, Pencil,
+  Store, Percent, FileText, Plug, UserCircle, Users, Upload, Trash2, Plus, Check, X, Pencil,
   CheckCircle2, AlertCircle, Eye, EyeOff, Image as ImageIcon, Lock,
 } from "lucide-react";
 import * as s from "../../lib/settings-api";
 import { useAuth } from "../../lib/auth-context";
 import { usePlan } from "../../lib/plan-context";
 
-type Tab = "loja" | "juros" | "fiscal" | "integracoes" | "conta";
+type Tab = "loja" | "usuarios" | "juros" | "fiscal" | "integracoes" | "conta";
 
 const BLUE = "#185FA5";
 const card: React.CSSProperties = { background: "#fff", border: "1px solid var(--border, rgba(0,0,0,0.08))", borderRadius: 12, padding: 20 };
@@ -112,6 +112,7 @@ export function Settings({ onNavigate }: { onNavigate?: (page: string) => void }
     { id: "juros", label: "Juros das promissórias", icon: Percent },
     { id: "fiscal", label: "Nota fiscal", icon: FileText, managerOnly: true },
     { id: "integracoes", label: "Integrações", icon: Plug, managerOnly: true },
+    { id: "usuarios", label: "Usuários", icon: Users, managerOnly: true },
     { id: "conta", label: "Minha conta", icon: UserCircle },
   ];
   // A aba de nota fiscal só aparece se o plano tiver NF-e
@@ -149,6 +150,7 @@ export function Settings({ onNavigate }: { onNavigate?: (page: string) => void }
           {data && tab === "juros" && <InterestTab canEdit={data.canEdit} />}
           {data && tab === "fiscal" && data.fiscal && <FiscalTab fiscal={data.fiscal} onSaved={onSaved} />}
           {data && tab === "integracoes" && <IntegrationsTab data={data} onNavigate={onNavigate} onGo={setTab} has={plan.has} />}
+          {data && tab === "usuarios" && <UsersTab me={data.me} onNavigate={onNavigate} />}
           {data && tab === "conta" && <AccountTab data={data} onSaved={onSaved} />}
         </div>
       </div>
@@ -162,6 +164,7 @@ function StoreTab({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.Sett
   const [form, setForm] = useState({
     name: d.name, cnpj: maskCnpj(d.cnpj ?? ""), phone: maskPhone(d.phone ?? ""),
     city: d.city ?? "", state: d.state ?? "", primaryColor: d.primaryColor ?? BLUE,
+    street: d.street ?? "", number: d.number ?? "", district: d.district ?? "", zip: maskCep(d.zip ?? ""),
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<"logo" | "cover" | null>(null);
@@ -174,6 +177,7 @@ function StoreTab({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.Sett
       onSaved(await s.updateStore({
         name: form.name, cnpj: onlyDigits(form.cnpj), phone: onlyDigits(form.phone),
         city: form.city, state: form.state.toUpperCase(), primaryColor: form.primaryColor,
+        street: form.street, number: form.number, district: form.district, zip: onlyDigits(form.zip),
       }));
       n.show("ok", "Dados da loja salvos.");
     } catch (e) { n.show("error", msg(e)); } finally { setSaving(false); }
@@ -197,13 +201,17 @@ function StoreTab({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.Sett
     <div className="flex flex-col gap-4">
       {n.el}
       <div style={card}>
-        <SectionTitle title="Dados da loja" subtitle="Aparecem no sistema, no site e nos documentos" />
+        <SectionTitle title="Dados da loja" subtitle="Aparecem no sistema, no site, no contrato de venda e nas promissórias" />
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           <Field label="Nome da loja"><input style={inputStyle} value={form.name} onChange={set("name")} /></Field>
           <Field label="CNPJ"><input style={inputStyle} value={form.cnpj} placeholder="00.000.000/0000-00"
             onChange={(e) => setForm({ ...form, cnpj: maskCnpj(e.target.value) })} /></Field>
           <Field label="Telefone / WhatsApp"><input style={inputStyle} value={form.phone} placeholder="(00) 00000-0000"
             onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} /></Field>
+          <Field label="CEP"><input style={inputStyle} value={form.zip} placeholder="00000-000" onChange={(e) => setForm({ ...form, zip: maskCep(e.target.value) })} /></Field>
+          <Field label="Rua"><input style={inputStyle} value={form.street} onChange={set("street")} /></Field>
+          <Field label="Número"><input style={inputStyle} value={form.number} onChange={set("number")} /></Field>
+          <Field label="Bairro"><input style={inputStyle} value={form.district} onChange={set("district")} /></Field>
           <Field label="Cidade"><input style={inputStyle} value={form.city} onChange={set("city")} /></Field>
           <Field label="UF"><input style={inputStyle} value={form.state} maxLength={2} placeholder="SP"
             onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })} /></Field>
@@ -593,6 +601,113 @@ function AccountTab({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.Se
             {savingPw ? "Trocando..." : "Trocar senha"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// =========================== Usuários ===========================
+function UsersTab({ me, onNavigate }: { me: s.SettingsData["me"]; onNavigate?: (p: string) => void }) {
+  const [data, setData] = useState<s.UsersData | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const n = useNotice();
+  const plan = usePlan();
+
+  useEffect(() => { s.listUsers().then(setData).catch((e) => n.show("error", msg(e))); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  const change = async (u: s.StoreUser, patch: { active?: boolean; role?: "admin" | "seller" }, question?: string) => {
+    if (question && !confirm(question)) return;
+    setBusy(u.id);
+    try {
+      setData(await s.updateUser(u.id, patch));
+      plan.refresh(); // atualiza a contagem de usuários na tela de Planos
+      n.show("ok", patch.active === false ? `${u.name} foi desativado e não consegue mais entrar.` : patch.active ? `${u.name} foi reativado.` : "Função alterada.");
+    } catch (e) { n.show("error", msg(e)); } finally { setBusy(null); }
+  };
+
+  const full = data?.limit != null && data.activeCount >= data.limit;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {n.el}
+      <div style={card}>
+        <div className="flex items-start justify-between gap-3 flex-wrap" style={{ marginBottom: 16 }}>
+          <div>
+            <h3 style={{ fontSize: 15, fontWeight: 600 }}>Usuários da loja</h3>
+            <p style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
+              Todo mundo que acessa o sistema conta no limite do plano: você (dono), administradores e vendedores.
+            </p>
+          </div>
+          {data?.limit != null && (
+            <span style={{
+              fontSize: 13, fontWeight: 600, padding: "6px 12px", borderRadius: 99, whiteSpace: "nowrap",
+              background: full ? "#FEF3C7" : "#EBF2FA", color: full ? "#B45309" : BLUE,
+            }}>
+              {data.activeCount} de {data.limit} usuários ativos · plano {data.planName}
+            </span>
+          )}
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ color: "#6B7280", textAlign: "left" }}>
+                <th style={th}>Nome</th><th style={th}>E-mail</th><th style={th}>Função</th><th style={th}>Situação</th><th style={th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {!data && <tr><td style={td} colSpan={5}>Carregando...</td></tr>}
+              {data?.users.map((u) => {
+                const locked = u.role === "owner" || u.id === me.id;
+                const canEditRole = me.role === "owner" && !locked;
+                const canToggle = !locked && (me.role === "owner" || u.role === "seller");
+                return (
+                  <tr key={u.id} style={{ borderTop: "1px solid rgba(0,0,0,0.06)", opacity: u.active ? 1 : 0.55 }}>
+                    <td style={td}>
+                      <strong>{u.name}</strong>{u.id === me.id && <span style={{ color: "#6B7280" }}> (você)</span>}
+                      {u.jobTitle && <div style={{ fontSize: 12, color: "#6B7280" }}>{u.jobTitle}</div>}
+                    </td>
+                    <td style={{ ...td, color: "#4B5563" }}>{u.email}</td>
+                    <td style={td}>
+                      {canEditRole ? (
+                        <select value={u.role} disabled={busy === u.id} style={{ ...inputStyle, width: "auto", padding: "5px 8px" }}
+                          onChange={(e) => change(u, { role: e.target.value as "admin" | "seller" },
+                            e.target.value === "admin" ? `${u.name} vai poder mexer em tudo da loja (menos no plano e nos administradores). Confirmar?` : undefined)}>
+                          <option value="admin">Administrador</option>
+                          <option value="seller">Vendedor</option>
+                        </select>
+                      ) : ROLE_NAMES[u.role]}
+                    </td>
+                    <td style={td}>
+                      <span style={{ fontSize: 12, fontWeight: 500, padding: "3px 8px", borderRadius: 99,
+                        background: u.active ? "#ECFDF5" : "#F3F4F6", color: u.active ? "#047857" : "#6B7280" }}>
+                        {u.active ? "Ativo" : "Desativado"}
+                      </span>
+                    </td>
+                    <td style={{ ...td, textAlign: "right" }}>
+                      {canToggle && (u.active ? (
+                        <button disabled={busy === u.id} style={{ ...ghostBtn, color: "#B91C1C" }}
+                          onClick={() => change(u, { active: false }, `Desativar ${u.name}? Ele perde o acesso na hora, mas as vendas dele continuam no histórico.`)}>
+                          Desativar
+                        </button>
+                      ) : (
+                        <button disabled={busy === u.id || full} title={full ? "O plano está no limite de usuários" : undefined}
+                          style={{ ...ghostBtn, opacity: full ? 0.5 : 1 }} onClick={() => change(u, { active: true })}>
+                          Reativar
+                        </button>
+                      ))}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 12 }}>
+          Para cadastrar um vendedor novo, use a tela{" "}
+          {onNavigate ? <button onClick={() => onNavigate("sellers")} style={{ color: BLUE, fontWeight: 500 }}>Vendedores</button> : "Vendedores"}.
+          {" "}Usuários desativados não contam no limite do plano.
+        </p>
       </div>
     </div>
   );

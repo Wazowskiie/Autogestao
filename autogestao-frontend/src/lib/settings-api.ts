@@ -6,6 +6,7 @@ export interface StoreInfo {
   name: string; slug: string; cnpj: string | null; phone: string | null;
   city: string | null; state: string | null;
   logoUrl: string | null; coverUrl: string | null; primaryColor: string | null;
+  street: string | null; number: string | null; district: string | null; zip: string | null;
 }
 
 export interface FiscalInfo {
@@ -64,3 +65,14 @@ export const createBand = (b: BandInput) => request<InterestBand[]>("/settings/i
 export const updateBand = (id: string, b: BandInput) =>
   request<InterestBand[]>(`/settings/interest-rates/${id}`, { method: "PUT", body: b });
 export const deleteBand = (id: string) => request<InterestBand[]>(`/settings/interest-rates/${id}`, { method: "DELETE" });
+
+// ---------- Usuários da loja ----------
+export interface StoreUser {
+  id: string; name: string; email: string; role: "owner" | "admin" | "seller";
+  active: boolean; createdAt: string; jobTitle: string | null;
+}
+export interface UsersData { users: StoreUser[]; activeCount: number; limit: number | null; planName: string | null }
+
+export const listUsers = () => request<UsersData>("/settings/users");
+export const updateUser = (id: string, data: { active?: boolean; role?: "admin" | "seller" }) =>
+  request<UsersData>(`/settings/users/${id}`, { method: "PATCH", body: data });

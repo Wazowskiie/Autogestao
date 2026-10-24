@@ -46,9 +46,70 @@ export class SalesService {
 
   private async generateContractNumber(dealershipId: string): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await this.prisma.sale.count({ where: { dealershipId } });
-    const seq = String(count + 1).padStart(4, '0');
-    return `${year}/${seq}`;
+    // Pega o maior número do ano (contar as vendas repetiria número depois de excluir alguma)
+    const used = await this.prisma.sale.findMany({
+      where: { dealershipId, contractNumber: { startsWith: `${year}/` } },
+      select: { contractNumber: true },
+    });
+    const max = used.reduce((m, s) => Math.max(m, Number(s.contractNumber?.split('/')[1]) || 0), 0);
+    return `${year}/${String(max + 1).padStart(4, '0')}`;
+  }
+
+  /** Tudo o que o contrato e as promissórias precisam, numa chamada só */
+  async documents(dealershipId: string, id: string, actor?: AuthenticatedUser) {
+    const sale = await this.prisma.sale.findFirst({
+      where: { id, dealershipId, ...(actor?.role === 'seller' ? { sellerId: actor.userId } : {}) },
+      include: {
+        vehicle: true,
+        customer: true,
+        seller: { select: { name: true } },
+        payments: { orderBy: { createdAt: 'asc' } },
+        tradeIns: {
+          select: { brand: true, model: true, version: true, year: true, manufactureYear: true, color: true, plate: true, chassis: true, renavam: true, km: true, cost: true },
+        },
+        promissoryNotes: { orderBy: { installmentNumber: 'asc' } },
+      },
+    });
+    if (!sale) throw new NotFoundException('Venda não encontrada');
+
+    // Vendas antigas sem número de contrato ganham um agora
+    let contractNumber = sale.contractNumber;
+    if (!contractNumber) {
+      contractNumber = await this.generateContractNumber(dealershipId);
+      await this.prisma.sale.update({ where: { id }, data: { contractNumber } });
+    }
+
+    const d = await this.prisma.dealership.findUniqueOrThrow({ where: { id: dealershipId } });
+    const v = sale.vehicle;
+    return {
+      id: sale.id,
+      contractNumber,
+      soldAt: sale.soldAt,
+      price: Number(sale.price),
+      notes: sale.notes,
+      seller: sale.seller.name,
+      dealership: {
+        name: d.name, cnpj: d.cnpj, phone: d.phone, logoUrl: d.logoUrl,
+        street: d.focusNfeLogradouro, number: d.focusNfeNumero, district: d.focusNfeBairro, zip: d.focusNfeCep,
+        city: d.focusNfeMunicipio || d.city, state: d.focusNfeUf || d.state,
+      },
+      customer: {
+        name: sale.customer.name, document: sale.customer.document, phone: sale.customer.phone,
+        email: sale.customer.email, address: sale.customer.address,
+      },
+      vehicle: {
+        type: v.type, brand: v.brand, model: v.model, version: v.version, year: v.year, manufactureYear: v.manufactureYear,
+        color: v.color, plate: v.plate, chassis: v.chassis, renavam: v.renavam, km: v.km, fuel: v.fuel,
+      },
+      payments: sale.payments.map((p) => ({
+        method: p.method, amount: Number(p.amount), installments: p.installments, notes: p.notes,
+      })),
+      tradeIns: sale.tradeIns.map((t) => ({ ...t, value: Number(t.cost) })),
+      promissoryNotes: sale.promissoryNotes.map((n) => ({
+        id: n.id, number: n.installmentNumber, total: n.totalInstallments, amount: Number(n.amount),
+        dueDate: n.dueDate, paid: n.paid, paidAt: n.paidAt,
+      })),
+    };
   }
 
   async create(dealershipId: string, userId: string, dto: CreateSaleDto, actor?: AuthenticatedUser) {

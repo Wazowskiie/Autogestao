@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search, Plus, Car, Bike, Truck, X, FileText, Edit2, Trash2, ChevronDown, UserPlus, RefreshCw, Wallet, Loader2 } from "lucide-react";
+import { Search, Plus, Car, Bike, Truck, X, FileText, Edit2, Trash2, ChevronDown, UserPlus, RefreshCw, Wallet, Loader2, Printer, CheckCircle2 } from "lucide-react";
+import { openSaleDocument } from "../../lib/sale-documents";
 import * as api from "../../lib/api";
 import * as sapi from "../../lib/sales-api";
 import { useAuth } from "../../lib/auth-context";
@@ -134,6 +135,7 @@ export function Sales() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [viewingSaleId, setViewingSaleId] = useState<string | null>(null);
+  const [justCreated, setJustCreated] = useState(false);
   const [editingSale, setEditingSale] = useState<api.Sale | null>(null);
 
   const fetchSales = useCallback(async () => {
@@ -277,6 +279,8 @@ export function Sales() {
                     {canEdit && (
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
+                          <button onClick={() => openSaleDocument(s.id, "contract").catch((e) => alert(e instanceof Error ? e.message : "Erro ao gerar contrato"))}
+                            className="p-1.5 rounded" style={{ color: "#374151", background: "#F4F6F9" }} title="Imprimir contrato"><Printer size={13} /></button>
                           <button onClick={() => setEditingSale(s)} className="p-1.5 rounded"
                             style={{ color: "#185FA5", background: "#EBF2FA" }} title="Editar"><Edit2 size={13} /></button>
                           <button onClick={() => setDeleteId(s.id)} className="p-1.5 rounded"
@@ -293,14 +297,19 @@ export function Sales() {
       </div>
 
       {showModal && (
-        <NewSaleModal onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); fetchSales(); }} />
+        <NewSaleModal onClose={() => setShowModal(false)} onSaved={(saleId) => {
+          setShowModal(false); fetchSales();
+          // Abre a venda recém-criada já com os botões de contrato e promissórias
+          if (saleId) { setJustCreated(true); setViewingSaleId(saleId); }
+        }} />
       )}
 
       {viewingSaleId && (
         <SaleDetailsModal
           saleId={viewingSaleId}
           canEdit={canEdit}
-          onClose={() => setViewingSaleId(null)}
+          justCreated={justCreated}
+          onClose={() => { setViewingSaleId(null); setJustCreated(false); }}
           onEdit={(sale) => { setViewingSaleId(null); setEditingSale(sale); }}
         />
       )}
@@ -337,10 +346,11 @@ export function Sales() {
 }
 
 function SaleDetailsModal({
-  saleId, canEdit, onClose, onEdit,
+  saleId, canEdit, onClose, onEdit, justCreated = false,
 }: {
   saleId: string;
   canEdit: boolean;
+  justCreated?: boolean;
   onClose: () => void;
   onEdit: (sale: api.Sale) => void;
 }) {
@@ -378,6 +388,18 @@ function SaleDetailsModal({
 
           {sale && (
             <div className="flex flex-col gap-5">
+              {justCreated && (
+                <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "#ECFDF5", color: "#047857", fontSize: 13, border: "1px solid #A7F3D0" }}>
+                  <CheckCircle2 size={15} /> Venda registrada! Imprima o contrato e as promissórias para o cliente assinar.
+                </div>
+              )}
+              {/* Documentos para imprimir */}
+              <div className="flex flex-wrap gap-2">
+                <DocButton label="Contrato de venda" onClick={() => openSaleDocument(sale.id, "contract")} />
+                {((sale as { promissoryNotes?: unknown[] }).promissoryNotes?.length ?? 0) > 0 && (
+                  <DocButton label="Notas promissórias" onClick={() => openSaleDocument(sale.id, "promissory")} />
+                )}
+              </div>
               {/* Veículo */}
               <div className="rounded-lg p-4" style={{ background: "#F4F6F9" }}>
                 <p style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Veículo</p>
@@ -658,7 +680,7 @@ const newTradeIn = (): TradeInForm => ({
   color: "", km: "", engineCc: "", fuel: "", value: "", lookup: "idle",
 });
 
-function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (saleId?: string) => void }) {
   const auth = useAuth();
   const isOwner = auth.user?.role === "owner";
 
@@ -933,7 +955,7 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
           firstDueDate,
         });
       }
-      onSaved();
+      onSaved(sale.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao registrar venda");
     } finally {
@@ -1424,6 +1446,22 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DocButton({ label, onClick }: { label: string; onClick: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <div>
+      <button disabled={busy}
+        onClick={async () => { setErr(null); setBusy(true); try { await onClick(); } catch (e) { setErr(e instanceof Error ? e.message : "Erro ao gerar documento"); } finally { setBusy(false); } }}
+        className="flex items-center gap-2 px-3 py-2 rounded-lg"
+        style={{ background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, opacity: busy ? 0.7 : 1 }}>
+        <Printer size={14} /> {busy ? "Gerando..." : label}
+      </button>
+      {err && <p style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>{err}</p>}
     </div>
   );
 }
