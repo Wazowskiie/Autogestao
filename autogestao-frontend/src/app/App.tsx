@@ -21,6 +21,7 @@ import { Renave } from "./components/Renave";
 import { ChatInbox } from './components/ChatInbox';
 import { AssistantPanel } from './components/AssistantPanel';
 import { Settings as SettingsPage } from './components/Settings';
+import { Ads } from './components/Ads';
 
 type Page =
   | "login" | "onboarding" | "dashboard" | "inventory"
@@ -134,7 +135,7 @@ export default function App() {
     case "renave": return <Renave />;
     case "chat": return <ChatInbox initialId={chatId} onOpenLead={id=>{setCrmLeadId(id);setPage('leads');}} />;
     case "plans": return <Plans />;
-    case "ads": return <PlaceholderPage title="Anúncios" icon={Megaphone} />;
+    case "ads": return <Ads />;
     case "settings": return <SettingsPage onNavigate={navigate} />;
     case "site":
         return (
