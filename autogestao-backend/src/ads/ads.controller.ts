@@ -14,6 +14,9 @@ export class AdsController {
   @Post('listings') create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateAdDto) { return this.ads.create(user.dealershipId, dto); }
   @Roles('owner', 'admin', 'seller')
   @Patch('listings/:id') update(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdateAdDto) { return this.ads.update(user.dealershipId, id, dto); }
+  @Roles('owner', 'admin', 'seller')
+  @Post('listings/:id/sync-inventory')
+  syncInventory(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) { return this.ads.syncInventory(user.dealershipId, id); }
   @Roles('owner', 'admin')
   @Delete('listings/:id') remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) { return this.ads.remove(user.dealershipId, id); }
 }
