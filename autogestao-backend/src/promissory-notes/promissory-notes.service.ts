@@ -111,7 +111,7 @@ export class PromissoryNotesService {
     // Resumo de vencidas, a vencer e pagas
     const allNotes = await this.prisma.promissoryNote.findMany({
       where: { dealershipId },
-      select: { paid: true, dueDate: true, amount: true },
+      select: { paid: true, dueDate: true, amount: true, saleId: true },
     });
 
     // Parcela que vence HOJE ainda não conta como vencida
@@ -119,6 +119,10 @@ export class PromissoryNotesService {
     const overdue = allNotes.filter((n) => !n.paid && new Date(n.dueDate) < today);
     const pending = allNotes.filter((n) => !n.paid && new Date(n.dueDate) >= today);
     const paid = allNotes.filter((n) => n.paid);
+    // Contagem por promissória (uma venda = uma promissória, com várias parcelas)
+    const salesOf = (list: { saleId: string }[]) => new Set(list.map((n) => n.saleId)).size;
+    const openSales = new Set(allNotes.filter((n) => !n.paid).map((n) => n.saleId));
+    const settledSales = new Set(allNotes.filter((n) => !openSales.has(n.saleId)).map((n) => n.saleId));
 
     return {
       items,
@@ -132,6 +136,9 @@ export class PromissoryNotesService {
         pendingAmount: pending.reduce((sum, n) => sum + Number(n.amount), 0),
         paidCount: paid.length,
         paidAmount: paid.reduce((sum, n) => sum + Number(n.amount), 0),
+        overdueSales: salesOf(overdue),   // promissórias com alguma parcela atrasada
+        pendingSales: salesOf(pending),   // promissórias com parcelas a vencer
+        settledSales: settledSales.size,  // promissórias quitadas (todas as parcelas pagas)
       },
     };
   }

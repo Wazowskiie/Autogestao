@@ -144,18 +144,33 @@ export function PromissoryNotes() {
         {/* Summary */}
         {summary && (
           <div className="grid grid-cols-3 gap-4 mb-4">
-            <div className="p-4 rounded-xl" style={{ background: "#FEE2E2" }}>
-              <div className="flex items-center gap-2 mb-1"><AlertTriangle size={16} style={{ color: "#DC2626" }} /><span style={{ fontSize: 12, color: "#DC2626" }}>Vencidas</span></div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: "#DC2626" }}>{summary.overdueCount} · {currency(summary.overdueAmount)}</div>
-            </div>
-            <div className="p-4 rounded-xl" style={{ background: "#FEF3C7" }}>
-              <div className="flex items-center gap-2 mb-1"><Clock size={16} style={{ color: "#D97706" }} /><span style={{ fontSize: 12, color: "#D97706" }}>A vencer</span></div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: "#D97706" }}>{summary.pendingCount} · {currency(summary.pendingAmount)}</div>
-            </div>
-            <div className="p-4 rounded-xl" style={{ background: "#EAF3DE" }}>
-              <div className="flex items-center gap-2 mb-1"><Check size={16} style={{ color: "#27500A" }} /><span style={{ fontSize: 12, color: "#27500A" }}>Pagas</span></div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: "#27500A" }}>{summary.paidCount} · {currency(summary.paidAmount)}</div>
-            </div>
+            {(() => {
+              const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+              const cards = [
+                {
+                  bg: "#FEE2E2", color: "#DC2626", icon: AlertTriangle, label: "Vencidas",
+                  main: `${plural(summary.overdueSales ?? summary.overdueCount, "promissória", "promissórias")} · ${currency(summary.overdueAmount)}`,
+                  sub: plural(summary.overdueCount, "parcela atrasada", "parcelas atrasadas"),
+                },
+                {
+                  bg: "#FEF3C7", color: "#D97706", icon: Clock, label: "A vencer",
+                  main: `${plural(summary.pendingSales ?? summary.pendingCount, "promissória", "promissórias")} · ${currency(summary.pendingAmount)}`,
+                  sub: plural(summary.pendingCount, "parcela a vencer", "parcelas a vencer"),
+                },
+                {
+                  bg: "#EAF3DE", color: "#27500A", icon: Check, label: "Pagas",
+                  main: `${currency(summary.paidAmount)} recebidos`,
+                  sub: `${plural(summary.paidCount, "parcela paga", "parcelas pagas")} · ${plural(summary.settledSales ?? 0, "promissória quitada", "promissórias quitadas")}`,
+                },
+              ];
+              return cards.map((c) => (
+                <div key={c.label} className="p-4 rounded-xl" style={{ background: c.bg }}>
+                  <div className="flex items-center gap-2 mb-1"><c.icon size={16} style={{ color: c.color }} /><span style={{ fontSize: 12, color: c.color }}>{c.label}</span></div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: c.color }}>{c.main}</div>
+                  <div style={{ fontSize: 12, color: c.color, opacity: 0.85, marginTop: 2 }}>{c.sub}</div>
+                </div>
+              ));
+            })()}
           </div>
         )}
 

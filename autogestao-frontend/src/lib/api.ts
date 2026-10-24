@@ -301,7 +301,11 @@ export function deleteTransaction(id: string) { return request<{ success: boolea
 export interface PromissoryCustomer { id: string; name: string; phone: string | null; }
 export interface PromissoryVehicle { id: string; brand: string; model: string; year: number; }
 export interface PromissoryNote { id: string; dealershipId: string; saleId: string; customerId: string; installmentNumber: number; totalInstallments: number; amount: number; dueDate: string; paid: boolean; paidAt: string | null; customer: PromissoryCustomer; sale: { vehicle: PromissoryVehicle }; }
-export interface PromissoryListSummary { overdueCount: number; overdueAmount: number; pendingCount: number; pendingAmount: number; paidCount: number; paidAmount: number; }
+export interface PromissoryListSummary {
+  overdueCount: number; overdueAmount: number; pendingCount: number; pendingAmount: number; paidCount: number; paidAmount: number;
+  /** Contagem por promissória (venda), não por parcela */
+  overdueSales?: number; pendingSales?: number; settledSales?: number;
+}
 export interface PromissoryListResponse { items: PromissoryNote[]; total: number; page: number; pageSize: number; summary: PromissoryListSummary; }
 export interface CreatePromissoryInput { saleId: string; customerId: string; totalInstallments: number; totalAmount: number; firstDueDate: string; }
 
