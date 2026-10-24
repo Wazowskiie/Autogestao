@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Megaphone, Plus, Copy, Check, Download, Sparkles, Pencil, Trash2, X, ImageOff, Loader2, Wand2, Eye, RefreshCw, Archive, CarFront, FileText, Search, ExternalLink, Link2, Send, CheckCircle2 } from "lucide-react";
+import { Megaphone, Plus, Copy, Check, Download, Sparkles, Pencil, Trash2, X, ImageOff, Loader2, Wand2, Eye, RefreshCw, Archive, CarFront, FileText, Search, ExternalLink, Send, CheckCircle2 } from "lucide-react";
 import { request } from "../../lib/api";
 import { getVehicle, type VehicleFull } from "../../lib/vehicle-details-api";
 import { getSettings } from "../../lib/settings-api";
@@ -357,6 +357,22 @@ export function Ads() {
                       <span className="px-2 py-0.5 rounded-full" style={{ fontSize: 11, fontWeight: 600, background: "#F3F4F6", color: "#4B5563" }}>{statusLabel}</span>
                       <span style={{ fontSize: 12, color: "#9CA3AF" }}>{photos.length} {photos.length === 1 ? "foto" : "fotos"}</span>
                     </div>
+                    {ad.status === "published" && (archived || sold) && (
+                      <div className="rounded-lg px-3 py-2 mt-2" style={{ background: "#FEF3C7", color: "#92400E", fontSize: 12 }}>
+                        <strong>Publicação externa precisa ser retirada</strong>
+                        <div>O veículo está indisponível. Retire o anúncio na plataforma e depois clique em Registrar retirada.</div>
+                      </div>
+                    )}
+                    {ad.status === "published" && ad.publishedAt && (
+                      <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
+                        Publicado manualmente em {new Date(ad.publishedAt).toLocaleString("pt-BR")}
+                      </div>
+                    )}
+                    {ad.status === "removed" && ad.removedAt && (
+                      <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
+                        Retirada registrada em {new Date(ad.removedAt).toLocaleString("pt-BR")}
+                      </div>
+                    )}
                     {(archived || sold) && (
                       <div className="rounded-lg px-3 py-2 mt-2" style={{ background: archived ? "#F3F4F6" : "#FEE2E2", color: archived ? "#374151" : "#991B1B", fontSize: 12 }}>
                         <strong>{archived ? "Histórico preservado — veículo excluído" : "Veículo vendido ou indisponível"}</strong>
@@ -405,8 +421,27 @@ export function Ads() {
                   </div>
                   <div className="flex flex-col gap-1.5" style={{ flex: "0 0 auto" }}>
                     <ActionButton icon={Eye} label="Pré-visualizar" onClick={() => setPreview(ad)} />
-                    <ActionButton icon={Pencil} label="Editar" onClick={() => setEditing(ad)} />
-                    <ActionButton icon={Trash2} label="Excluir" danger onClick={() => remove(ad)} />
+                    {ad.status === "draft" && shareable && checklist.ready && (
+                      <ActionButton icon={Send} label="Registrar publicação" onClick={() => setPublishing(ad)} />
+                    )}
+                    {ad.status === "published" && (
+                      <>
+                        {ad.externalUrl && (
+                          <a href={ad.externalUrl} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+                            style={{ fontSize: 12, fontWeight: 500, border: "0.5px solid rgba(0,0,0,0.12)", color: BLUE, whiteSpace: "nowrap" }}>
+                            <ExternalLink size={13} /> Ver publicação
+                          </a>
+                        )}
+                        <ActionButton icon={CheckCircle2} label="Registrar retirada" onClick={() => markRemoved(ad)} />
+                      </>
+                    )}
+                    {ad.status === "draft" && shareable && (
+                      <>
+                        <ActionButton icon={Pencil} label="Editar" onClick={() => setEditing(ad)} />
+                        <ActionButton icon={Trash2} label="Excluir" danger onClick={() => remove(ad)} />
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -415,6 +450,10 @@ export function Ads() {
         </div>
       </div>
 
+      {publishing && (
+        <PublishModal ad={publishing} busy={busy} onClose={() => setPublishing(null)}
+          onPublish={(url) => markPublished(publishing, url)} />
+      )}
       {preview && <PreviewModal ad={preview} store={store} onClose={() => setPreview(null)} />}
       {editing && (
         <EditModal ad={editing} vehicleId={vehicleOf(editing)} store={store} canUseAi={plan.has("assistant")}
@@ -579,8 +618,8 @@ function PreviewModal({ ad, store, onClose }: { ad: Ad; store: Store | null; onC
           <h3 style={{ fontSize: 18, fontWeight: 650, marginTop: 16 }}>{ad.title}</h3>
           <p style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.6, color: "#374151", marginTop: 10 }}>{ad.description || "Sem descrição cadastrada."}</p>
           <div className="flex gap-2 flex-wrap mt-4">
-            <CopyButton label="Copiar título" text={ad.title} />
-            <CopyButton label="Copiar descrição" text={ad.description} disabled={!ad.description?.trim()} />
+            <CopyButton label="Copiar título" text={ad.title} disabled={!canShare(ad) || !publicationChecklist(ad).ready} />
+            <CopyButton label="Copiar descrição" text={ad.description} disabled={!ad.description?.trim() || !canShare(ad) || !publicationChecklist(ad).ready} />
           </div>
         </div>
       </div>
