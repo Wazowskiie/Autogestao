@@ -398,15 +398,37 @@ export class SalesService {
 
     const tradeInIds = sale.tradeIns.map((t) => t.id);
 
-    await this.prisma.$transaction([
-      this.prisma.promissoryNote.deleteMany({ where: { saleId: id } }),
-      this.prisma.financialTransaction.deleteMany({ where: { saleId: id } }),
-      // Os veículos que entraram na troca saem do estoque junto com a venda
-      this.prisma.vehicle.deleteMany({ where: { id: { in: tradeInIds } } }),
-      // Reativa o veículo vendido no estoque
-      this.prisma.vehicle.update({ where: { id: sale.vehicleId }, data: { status: 'available' } }),
-      this.prisma.sale.delete({ where: { id } }),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      // Preserva os anúncios dos veículos recebidos na troca antes de excluí-los.
+      // A relação vehicleId será anulada pelo banco (onDelete: SetNull).
+      if (tradeInIds.length > 0) {
+        const ads = await tx.adListing.findMany({
+          where: { dealershipId, vehicleId: { in: tradeInIds } },
+          include: { vehicle: true },
+        });
+        for (const ad of ads) {
+          const v = ad.vehicle;
+          await tx.adListing.update({
+            where: { id: ad.id },
+            data: {
+              status: 'archived',
+              archivedAt: new Date(),
+              vehicleSnapshot: v ? {
+                vehicleId: v.id, brand: v.brand, model: v.model,
+                version: v.version, year: v.year, km: v.km,
+              } : (ad.vehicleSnapshot ?? undefined),
+            },
+          });
+        }
+      }
+      await tx.promissoryNote.deleteMany({ where: { saleId: id } });
+      await tx.financialTransaction.deleteMany({ where: { saleId: id } });
+      if (tradeInIds.length > 0) {
+        await tx.vehicle.deleteMany({ where: { dealershipId, id: { in: tradeInIds } } });
+      }
+      await tx.vehicle.update({ where: { id: sale.vehicleId }, data: { status: 'available' } });
+      await tx.sale.delete({ where: { id } });
+    });
 
     return { success: true };
   }

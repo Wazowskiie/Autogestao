@@ -711,7 +711,9 @@ model SalePayment {
 model AdListing {
   id           String   @id @default(uuid())
   dealershipId String   @map("dealership_id")
-  vehicleId    String   @map("vehicle_id")
+  vehicleId    String?  @map("vehicle_id")
+  vehicleSnapshot Json? @map("vehicle_snapshot")
+  archivedAt   DateTime? @map("archived_at")
   channel      String
   title        String
   description  String   @default("")
@@ -722,7 +724,7 @@ model AdListing {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   dealership Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
-  vehicle    Vehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicle    Vehicle?   @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
 
   @@unique([dealershipId, vehicleId, channel])
   @@index([dealershipId, createdAt])

@@ -38,10 +38,10 @@ export class AdsService {
       const savedPhotos = Array.isArray(ad.photos)
         ? ad.photos.filter((item): item is string => typeof item === 'string')
         : [];
-      const currentPhotos = ad.vehicle.photos.map((photo) => photo.url);
-      const priceChanged = ad.price.toString() !== ad.vehicle.price.toString();
+      const currentPhotos = ad.vehicle?.photos.map((photo) => photo.url) ?? savedPhotos;
+      const priceChanged = ad.vehicle ? ad.price.toString() !== ad.vehicle.price.toString() : false;
       const photosChanged = JSON.stringify(savedPhotos) !== JSON.stringify(currentPhotos);
-      const unavailable = ad.vehicle.status !== 'available';
+      const unavailable = !ad.vehicle || ad.vehicle.status !== 'available' || ad.status === 'archived';
       return {
         ...ad,
         inventorySync: {
@@ -78,13 +78,14 @@ export class AdsService {
         price: vehicle.price,
         photos: vehicle.photos.map((photo) => photo.url),
         status: 'draft',
+        vehicleSnapshot: { brand: vehicle.brand, model: vehicle.model, version: vehicle.version, year: vehicle.year, km: vehicle.km, vehicleId: vehicle.id },
       },
     });
   }
 
   async update(dealershipId: string, id: string, dto: UpdateAdDto) {
     const ad = await this.get(dealershipId, id);
-    if (ad.status !== 'draft') throw new BadRequestException('Somente rascunhos podem ser editados.');
+    if (ad.status !== 'draft' || !ad.vehicleId) throw new BadRequestException('Somente rascunhos vinculados ao estoque podem ser editados.');
     return this.prisma.adListing.update({
       where: { id },
       data: {
@@ -97,8 +98,8 @@ export class AdsService {
   /** Atualiza apenas o preço e as fotos do rascunho. Não modifica título nem descrição. */
   async syncInventory(dealershipId: string, id: string) {
     const ad = await this.get(dealershipId, id);
-    if (ad.status !== 'draft') {
-      throw new BadRequestException('Somente rascunhos podem ser sincronizados.');
+    if (ad.status !== 'draft' || !ad.vehicleId) {
+      throw new BadRequestException('Somente rascunhos vinculados ao estoque podem ser sincronizados.');
     }
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: ad.vehicleId, dealershipId },
