@@ -715,6 +715,11 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
   const [manualRate, setManualRate] = useState("");
   const [firstDueDate, setFirstDueDate] = useState(todayISO());
   const [useCustomRate, setUseCustomRate] = useState(false);
+  // Entrada digitada direto no quadro das promissórias (o resto vira promissória)
+  const [entryText, setEntryText] = useState("");
+  const [entryFocused, setEntryFocused] = useState(false);
+  const [entryMethod, setEntryMethod] = useState<sapi.SalePaymentMethod>("cash");
+  const [entryKey, setEntryKey] = useState<number | null>(null); // linha de pagamento criada para a entrada
   const [customRate, setCustomRate] = useState("");
 
   const [saving, setSaving] = useState(false);
@@ -841,6 +846,40 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
     }));
   }
   const removePayment = (key: number) => setPayments(prev => prev.filter(p => p.key !== key));
+
+  // ---------- Entrada x promissórias ----------
+  // A pessoa digita quanto o cliente dá de entrada; o que falta do valor do veículo vai para a promissória.
+  // A parte da entrada que ainda não foi lançada (troca, PIX...) vira uma linha na forma escolhida (padrão: dinheiro).
+  function applyEntry(entry: number, method: sapi.SalePaymentMethod = entryMethod) {
+    if (!promissoryLine || !Number.isFinite(priceNum) || priceNum <= 0) return;
+    const e = Math.min(Math.max(0, round2(entry)), priceNum);
+    // calcula fora do setState (sem efeitos colaterais dentro do updater)
+    const prev = payments;
+    const linked = prev.find(p => p.key === entryKey && p.method !== "promissory");
+    const launchedElsewhere = round2(tradeInTotal + prev
+      .filter(p => p.method !== "promissory" && p.key !== linked?.key)
+      .reduce((sum, p) => sum + num(p.amount), 0));
+    const gap = round2(e - launchedElsewhere);
+    let next = prev.map(p => (p.method === "promissory" ? { ...p, amount: toMoneyText(round2(priceNum - e)) } : p));
+    if (gap > 0) {
+      if (linked) {
+        next = next.map(p => (p.key === linked.key ? { ...p, amount: toMoneyText(gap), method } : p));
+      } else {
+        const key = formKey++;
+        setEntryKey(key);
+        // a entrada aparece antes da linha das promissórias
+        const line: PaymentForm = { key, method, amount: toMoneyText(gap), installments: "1", feePercent: isCard(method) ? lastFee(method) : "" };
+        const idx = next.findIndex(p => p.method === "promissory");
+        next = [...next.slice(0, idx), line, ...next.slice(idx)];
+      }
+    } else if (linked) {
+      next = next.filter(p => p.key !== linked.key);
+      setEntryKey(null);
+    }
+    setPayments(next);
+  }
+  const entryLine = payments.find(p => p.key === entryKey && p.method !== "promissory") ?? null;
+  const entryMissing = round2(downPayment - downPaymentLaunched);
 
   // ---------- Troca ----------
   function updateTradeIn(key: number, patch: Partial<TradeInForm>) {
@@ -1236,7 +1275,7 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
                         </select>
                       </div>
                       <div style={{ flex: 1 }}>
-                        <label style={smallLabel}>Valor</label>
+                        <label style={smallLabel}>{p.method === "promissory" ? "Valor parcelado" : p.key === entryKey ? "Valor (entrada)" : "Valor"}</label>
                         <input value={p.amount} inputMode="decimal" placeholder="0,00" onChange={(e) => updatePayment(p.key, { amount: e.target.value })}
                           className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
                       </div>
@@ -1285,25 +1324,55 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
                   {/* Entrada e porcentagem dela sobre o valor do veículo */}
                   {Number.isFinite(priceNum) && priceNum > 0 && (
                     <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { label: "Valor do veículo", value: currency(priceNum), strong: false },
-                        { label: "Entrada", value: currency(downPayment), strong: false },
-                        { label: "Entrada (%)", value: pctText(downPaymentPct), strong: true },
-                      ].map((c) => (
-                        <div key={c.label} className="rounded-lg px-3 py-2" style={{ background: c.strong ? "#EBF2FA" : "#F9FAFB", border: c.strong ? "1px solid #185FA5" : "0.5px solid rgba(0,0,0,0.06)" }}>
-                          <div style={{ fontSize: 11, color: "#6B7280" }}>{c.label}</div>
-                          <div style={{ fontSize: c.strong ? 16 : 13, fontWeight: 700, color: c.strong ? "#185FA5" : "#0F1923" }}>{c.value}</div>
-                        </div>
-                      ))}
+                      <div className="rounded-lg px-3 py-2" style={{ background: "#F9FAFB", border: "0.5px solid rgba(0,0,0,0.06)" }}>
+                        <div style={{ fontSize: 11, color: "#6B7280" }}>Valor do veículo</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#0F1923" }}>{currency(priceNum)}</div>
+                      </div>
+                      <label className="rounded-lg px-3 py-2" style={{ background: "#fff", border: "1px solid #185FA5", cursor: "text" }}>
+                        <div style={{ fontSize: 11, color: "#185FA5", fontWeight: 600 }}>Entrada do cliente (R$)</div>
+                        <input inputMode="decimal" placeholder="0,00"
+                          value={entryFocused ? entryText : (downPayment > 0 ? toMoneyText(downPayment) : "")}
+                          onFocus={() => { setEntryFocused(true); setEntryText(downPayment > 0 ? toMoneyText(downPayment) : ""); }}
+                          onBlur={() => setEntryFocused(false)}
+                          onChange={(e) => { setEntryText(e.target.value); applyEntry(num(e.target.value)); }}
+                          style={{ width: "100%", fontSize: 13, fontWeight: 700, color: "#0F1923", border: "none", outline: "none", padding: 0, background: "transparent" }} />
+                      </label>
+                      <div className="rounded-lg px-3 py-2" style={{ background: "#EBF2FA", border: "1px solid #185FA5" }}>
+                        <div style={{ fontSize: 11, color: "#6B7280" }}>Entrada (%)</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: "#185FA5" }}>{pctText(downPaymentPct)}</div>
+                      </div>
                     </div>
                   )}
                   {Number.isFinite(priceNum) && financedAmount > priceNum && (
                     <p style={{ fontSize: 11, color: "#DC2626" }}>O valor em promissórias passou do valor do veículo. Confira.</p>
                   )}
-                  {downPayment > 0 && downPaymentLaunched + 0.009 < downPayment && (
-                    <p style={{ fontSize: 11, color: "#B45309" }}>
-                      Falta dizer como a entrada foi paga: {currency(round2(downPayment - downPaymentLaunched))}. Adicione PIX, dinheiro, troca... acima.
-                    </p>
+                  <p style={{ fontSize: 11, color: "#6B7280", marginTop: -6 }}>
+                    Digite a entrada do cliente: o que falta para o valor do veículo vai automaticamente para as promissórias.
+                  </p>
+                  {(entryLine || (downPayment > 0 && entryMissing >= 0.01)) && (
+                    <div className="flex items-center gap-2 flex-wrap rounded-lg px-3 py-2"
+                      style={{ background: entryMissing >= 0.01 ? "#FFFBEB" : "#F9FAFB", border: `0.5px solid ${entryMissing >= 0.01 ? "#FCD34D" : "rgba(0,0,0,0.06)"}`, fontSize: 12 }}>
+                      <span style={{ color: entryMissing >= 0.01 ? "#92400E" : "#374151" }}>
+                        {entryMissing >= 0.01 ? `Entrada de ${currency(entryMissing)} ainda sem forma de pagamento.` : "Entrada paga em"}
+                      </span>
+                      <select value={entryLine?.method ?? entryMethod}
+                        onChange={(e) => {
+                          const m = e.target.value as sapi.SalePaymentMethod;
+                          setEntryMethod(m);
+                          if (entryLine) updatePayment(entryLine.key, { method: m });
+                        }}
+                        className="rounded-lg px-2 py-1" style={{ ...selectStyle, width: "auto" }}>
+                        {SALE_PAYMENT_OPTIONS.filter(o => o.value !== "promissory" && o.value !== "financing" && o.value !== "consortium").map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                      {entryMissing >= 0.01 && (
+                        <button type="button" onClick={() => applyEntry(downPayment)}
+                          className="px-3 py-1 rounded-lg" style={{ background: "#185FA5", color: "#fff", fontWeight: 600 }}>
+                          Lançar entrada
+                        </button>
+                      )}
+                    </div>
                   )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
