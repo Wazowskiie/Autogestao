@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Download, Printer, TrendingUp, Wallet, CheckCircle2, Percent, MessageCircle } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { AlertTriangle, Download, Printer, TrendingUp, Wallet, CheckCircle2, Percent, MessageCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { request } from "../../lib/api";
 
 // ---------- Tipos do relatório ----------
@@ -55,6 +55,7 @@ export function PromissoryReport() {
   const [data, setData] = useState<PromissoryReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [openMonth, setOpenMonth] = useState<string | null>(null); // mês aberto na tabela
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -114,7 +115,10 @@ export function PromissoryReport() {
           {/* Mês a mês */}
           <div style={card}>
             <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 8 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600 }}>Mês a mês (pelo vencimento)</h3>
+              <div>
+                <h3 style={{ fontSize: 15, fontWeight: 600 }}>Mês a mês (pelo vencimento)</h3>
+                <p style={{ fontSize: 12, color: "#6B7280" }}>Soma das parcelas de todos os clientes. Clique num mês para ver de quem é cada parcela.</p>
+              </div>
               <div className="flex gap-3" style={{ fontSize: 11, color: "#6B7280" }}>
                 <Legend color="#16A34A" label="Pago" /><Legend color="#F59E0B" label="A vencer" /><Legend color="#DC2626" label="Atrasado" />
               </div>
@@ -123,9 +127,21 @@ export function PromissoryReport() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead><tr><th style={th}>Mês</th><th style={th}>Parcelas</th><th style={th}>Vence</th><th style={th}>Pago</th><th style={th}>A vencer</th><th style={th}>Atrasado</th><th style={{ ...th, width: "28%" }}></th></tr></thead>
                 <tbody>
-                  {data.months.map((m) => (
-                    <tr key={m.month}>
-                      <td style={{ ...td, fontWeight: 600 }}>{monthLabel(m.month)}</td>
+                  {data.months.map((m) => {
+                    const isOpen = openMonth === m.month;
+                    const rows = isOpen ? data.installments
+                      .filter((i) => i.dueDate.slice(0, 7) === m.month)
+                      .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.customer.localeCompare(b.customer)) : [];
+                    return (
+                    <Fragment key={m.month}>
+                    <tr onClick={() => m.count > 0 && setOpenMonth(isOpen ? null : m.month)}
+                      style={{ cursor: m.count > 0 ? "pointer" : "default", background: isOpen ? "#F8FBFF" : undefined }}>
+                      <td style={{ ...td, fontWeight: 600 }}>
+                        <span className="inline-flex items-center gap-1">
+                          {m.count > 0 ? (isOpen ? <ChevronDown size={14} style={{ color: "#185FA5" }} /> : <ChevronRight size={14} style={{ color: "#9CA3AF" }} />) : <span style={{ width: 14 }} />}
+                          {monthLabel(m.month)}
+                        </span>
+                      </td>
                       <td style={td}>{m.count}</td>
                       <td style={{ ...td, fontWeight: 600 }}>{brl(m.due)}</td>
                       <td style={{ ...td, color: "#15803D" }}>{brl(m.paid)}</td>
@@ -141,7 +157,52 @@ export function PromissoryReport() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={7} style={{ padding: "4px 10px 14px 34px", background: "#F8FBFF" }}>
+                          <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 10, overflow: "hidden" }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                              <thead><tr style={{ background: "#F9FAFB" }}>
+                                <th style={th}>Cliente</th><th style={th}>Veículo</th><th style={th}>Parcela</th><th style={th}>Vencimento</th><th style={th}>Valor</th><th style={th}>Situação</th><th style={th}></th>
+                              </tr></thead>
+                              <tbody>
+                                {rows.map((i, idx) => {
+                                  const st = i.status === "paga" ? { bg: "#DCFCE7", color: "#166534", label: i.paidAt ? `Paga em ${new Date(i.paidAt).toLocaleDateString("pt-BR")}` : "Paga" }
+                                    : i.status === "atrasada" ? { bg: "#FEE2E2", color: "#991B1B", label: "Atrasada" }
+                                    : { bg: "#FEF3C7", color: "#92400E", label: "A vencer" };
+                                  const wa = (i.phone ?? "").replace(/\D/g, "");
+                                  return (
+                                    <tr key={idx}>
+                                      <td style={td}><b>{i.customer}</b>{i.phone && <div style={{ fontSize: 12, color: "#6B7280" }}>{phoneBR(i.phone)}</div>}</td>
+                                      <td style={{ ...td, color: "#4B5563" }}>{i.vehicle}</td>
+                                      <td style={td}>{i.number}/{i.total}</td>
+                                      <td style={td}>{dateBR(i.dueDate)}</td>
+                                      <td style={{ ...td, fontWeight: 600 }}>{brl(i.amount)}</td>
+                                      <td style={td}><span className="px-2 py-0.5 rounded" style={{ fontSize: 12, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: "nowrap" }}>{st.label}</span></td>
+                                      <td style={td}>
+                                        {i.status !== "paga" && wa.length >= 10 && (
+                                          <a href={`https://wa.me/55${wa}?text=${encodeURIComponent(i.status === "atrasada"
+                                              ? `Olá, ${i.customer.split(" ")[0]}! Tudo bem? A parcela ${i.number}/${i.total} da sua promissória (${brl(i.amount)}) venceu em ${dateBR(i.dueDate)}. Podemos combinar o pagamento?`
+                                              : `Olá, ${i.customer.split(" ")[0]}! Tudo bem? Passando para lembrar que a parcela ${i.number}/${i.total} da sua promissória (${brl(i.amount)}) vence em ${dateBR(i.dueDate)}.`)}`}
+                                            target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg"
+                                            style={{ fontSize: 12, background: "#DCFCE7", color: "#166534", fontWeight: 600, whiteSpace: "nowrap" }}>
+                                            <MessageCircle size={13} /> {i.status === "atrasada" ? "Cobrar" : "Lembrar"}
+                                          </a>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
