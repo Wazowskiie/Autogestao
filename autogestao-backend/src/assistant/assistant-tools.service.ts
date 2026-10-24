@@ -50,6 +50,12 @@ export interface ProposedAction {
 // ---------------------------------------------------------------------------
 export const READ_TOOLS: LlmTool[] = [
   {
+    name: 'visao_geral',
+    description:
+      'Números gerais da loja inteira: quantos clientes (total, novos no mês, que já compraram), veículos por situação e tipo, vendas do mês e do total, leads em aberto por etapa, promissórias, peças e usuários. Use para perguntas como "quantos clientes eu tenho?", "quantas motos tenho no estoque?" ou "como está a loja?".',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
     name: 'buscar_veiculos',
     description:
       'Procura veículos no estoque da loja. Use para perguntas sobre o estoque, veículos parados, disponíveis, vendidos ou para achar o id de um veículo antes de outra ação. Retorna nome, ano, placa, km, preço, status, dias em estoque e o id.',
@@ -116,8 +122,17 @@ export const READ_TOOLS: LlmTool[] = [
   },
   {
     name: 'buscar_clientes',
-    description: 'Procura clientes por nome, telefone ou e-mail. Retorna dados de contato e quantas compras a pessoa já fez.',
-    input_schema: { type: 'object', properties: { texto: { type: 'string' } }, required: ['texto'] },
+    description:
+      'Lista ou procura clientes. Sem texto, lista os mais recentes. Com texto, procura por nome, telefone ou e-mail. Sempre devolve o total de clientes encontrados, além dos dados de contato e de quantas compras cada um fez.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        texto: { type: 'string', description: 'Nome, telefone ou e-mail (opcional).' },
+        so_quem_comprou: { type: 'boolean', description: 'Só clientes com pelo menos uma compra.' },
+        sem_compra: { type: 'boolean', description: 'Só clientes que ainda não compraram.' },
+        limite: { type: 'integer', description: 'Quantos mostrar (padrão 15, máximo 30).' },
+      },
+    },
   },
   {
     name: 'buscar_pecas',
@@ -256,7 +271,8 @@ export class AssistantToolsService {
       case 'promissorias': return this.promissory(u, a);
       case 'tarefas_crm': return this.crmTasks(u, a.periodo);
       case 'buscar_leads': return this.searchLeads(u, a);
-      case 'buscar_clientes': return this.searchCustomers(u, str(a.texto, 100));
+      case 'visao_geral': return this.overview(u);
+      case 'buscar_clientes': return this.searchCustomers(u, a);
       case 'buscar_pecas': return this.searchParts(u, a);
       default: throw new BadRequestException(`Ferramenta desconhecida: ${name}`);
     }
@@ -494,23 +510,112 @@ export class AssistantToolsService {
     };
   }
 
-  private async searchCustomers(u: AuthenticatedUser, text: string) {
-    if (!text) throw new BadRequestException('Informe o nome, telefone ou e-mail do cliente.');
+  /** Clientes que o vendedor pode ver (dono/admin veem todos) */
+  private customerScope(u: AuthenticatedUser): Prisma.CustomerWhereInput {
+    return isManager(u)
+      ? { dealershipId: u.dealershipId }
+      : { dealershipId: u.dealershipId, OR: [{ createdById: u.userId }, { leads: { some: { assignedSellerId: u.userId } } }, { sales: { some: { sellerId: u.userId } } }] };
+  }
+
+  private async searchCustomers(u: AuthenticatedUser, a: Args) {
+    const text = str(a.texto, 100);
     const digits = text.replace(/\D/g, '');
-    const where: Prisma.CustomerWhereInput = {
-      dealershipId: u.dealershipId,
-      OR: [
-        { name: { contains: text, mode: 'insensitive' } },
-        { email: { contains: text, mode: 'insensitive' } },
-        ...(digits.length >= 4 ? [{ phone: { contains: digits } }] : []),
-      ],
-      ...(isManager(u)
-        ? {}
-        : { AND: [{ OR: [{ createdById: u.userId }, { leads: { some: { assignedSellerId: u.userId } } }, { sales: { some: { sellerId: u.userId } } }] }] }),
-    };
-    const items = await this.prisma.customer.findMany({ where, take: 10, include: { _count: { select: { sales: true } } } });
+    const and: Prisma.CustomerWhereInput[] = [this.customerScope(u)];
+    if (text) {
+      and.push({
+        OR: [
+          { name: { contains: text, mode: 'insensitive' } },
+          { email: { contains: text, mode: 'insensitive' } },
+          ...(digits.length >= 4 ? [{ phone: { contains: digits } }] : []),
+        ],
+      });
+    }
+    if (a.so_quem_comprou) and.push({ sales: { some: {} } });
+    if (a.sem_compra) and.push({ sales: { none: {} } });
+    const where: Prisma.CustomerWhereInput = { AND: and };
+    const [total, items] = await Promise.all([
+      this.prisma.customer.count({ where }),
+      this.prisma.customer.findMany({ where, take: limitOf(a.limite), orderBy: { createdAt: 'desc' }, include: { _count: { select: { sales: true } } } }),
+    ]);
     return {
-      clientes: items.map((c) => ({ nome: c.name, telefone: c.phone, email: c.email, compras: c._count.sales, observacoes: c.notes })),
+      total,
+      mostrando: items.length,
+      ...(isManager(u) ? {} : { aviso: 'Como vendedor, você vê só os seus clientes.' }),
+      clientes: items.map((c) => ({ nome: c.name, telefone: c.phone, email: c.email, compras: c._count.sales, cadastrado_em: dateBR(c.createdAt), observacoes: c.notes })),
+    };
+  }
+
+  /** Números gerais da loja */
+  private async overview(u: AuthenticatedUser) {
+    const d = u.dealershipId;
+    const manager = isManager(u);
+    const { month, range } = monthRange();
+    const customerWhere = this.customerScope(u);
+    const saleWhere: Prisma.SaleWhereInput = { dealershipId: d, ...(manager ? {} : { sellerId: u.userId }) };
+    const leadWhere: Prisma.LeadWhereInput = { dealershipId: d, archivedAt: null, stage: { notIn: ['won', 'lost'] }, ...(manager ? {} : { assignedSellerId: u.userId }) };
+
+    const [
+      customers, newCustomers, buyers, vehiclesByStatus, stockByType, stockValue,
+      salesMonth, salesTotal, leadsByStage, openNotes, overdueNotes, parts, lowParts, users, sub,
+    ] = await Promise.all([
+      this.prisma.customer.count({ where: customerWhere }),
+      this.prisma.customer.count({ where: { AND: [customerWhere, { createdAt: range }] } }),
+      this.prisma.customer.count({ where: { AND: [customerWhere, { sales: { some: {} } }] } }),
+      this.prisma.vehicle.groupBy({ by: ['status'], where: { dealershipId: d }, _count: { _all: true } }),
+      this.prisma.vehicle.groupBy({ by: ['type'], where: { dealershipId: d, status: { not: 'sold' } }, _count: { _all: true } }),
+      this.prisma.vehicle.aggregate({ where: { dealershipId: d, status: { not: 'sold' } }, _sum: { price: true, cost: true } }),
+      this.prisma.sale.aggregate({ where: { ...saleWhere, soldAt: range }, _count: { _all: true }, _sum: { price: true, profit: true } }),
+      this.prisma.sale.count({ where: saleWhere }),
+      this.prisma.lead.groupBy({ by: ['stage'], where: leadWhere, _count: { _all: true } }),
+      manager ? this.prisma.promissoryNote.findMany({ where: { dealershipId: d, paid: false }, select: { saleId: true, amount: true } }) : Promise.resolve([]),
+      manager ? this.prisma.promissoryNote.aggregate({ where: { dealershipId: d, paid: false, dueDate: { lt: todayRangeBR().start } }, _count: { _all: true }, _sum: { amount: true } }) : Promise.resolve(null),
+      this.prisma.part.count({ where: { dealershipId: d } }),
+      this.prisma.part.count({ where: { dealershipId: d, stockQty: { lte: 2 } } }),
+      this.prisma.user.groupBy({ by: ['role'], where: { dealershipId: d, active: true }, _count: { _all: true } }),
+      this.prisma.subscription.findUnique({ where: { dealershipId: d }, select: { status: true, plan: { select: { name: true } } } }),
+    ]);
+
+    const count = <T extends { _count: { _all: number } }>(rows: T[], key: keyof T, value: string) => rows.find((r) => r[key] === value)?._count._all ?? 0;
+    return {
+      mes_de_referencia: month,
+      clientes: {
+        total: customers,
+        novos_no_mes: newCustomers,
+        ja_compraram: buyers,
+        ainda_nao_compraram: customers - buyers,
+        ...(manager ? {} : { aviso: 'Contagem só dos seus clientes (vendedor).' }),
+      },
+      veiculos: {
+        disponiveis: count(vehiclesByStatus, 'status', 'available'),
+        reservados: count(vehiclesByStatus, 'status', 'reserved'),
+        vendidos: count(vehiclesByStatus, 'status', 'sold'),
+        em_estoque_por_tipo: Object.fromEntries(stockByType.map((r) => [TYPE_LABEL[r.type] ?? r.type, r._count._all])),
+        valor_do_estoque_preco_de_venda: brl(stockValue._sum.price),
+        ...(manager ? { custo_do_estoque: brl(stockValue._sum.cost) } : {}),
+      },
+      vendas: {
+        no_mes: salesMonth._count._all,
+        faturamento_no_mes: brl(salesMonth._sum.price),
+        ...(manager ? { lucro_no_mes: brl(salesMonth._sum.profit) } : {}),
+        total_desde_o_inicio: salesTotal,
+      },
+      leads_em_aberto: Object.fromEntries(leadsByStage.map((r) => [STAGE_LABEL[r.stage] ?? r.stage, r._count._all])),
+      ...(manager
+        ? {
+            promissorias: {
+              em_aberto: new Set((openNotes as { saleId: string }[]).map((x) => x.saleId)).size,
+              parcelas_em_aberto: openNotes.length,
+              a_receber: brl((openNotes as { amount: unknown }[]).reduce((s, x) => s + n(x.amount), 0)),
+              parcelas_atrasadas: overdueNotes?._count._all ?? 0,
+              valor_atrasado: brl(overdueNotes?._sum.amount),
+            },
+          }
+        : {}),
+      pecas: { itens_cadastrados: parts, com_estoque_baixo_ate_2: lowParts },
+      usuarios_ativos: {
+        dono: count(users, 'role', 'owner'), administradores: count(users, 'role', 'admin'), vendedores: count(users, 'role', 'seller'),
+      },
+      plano: sub ? `${sub.plan.name} (${sub.status === 'trialing' ? 'teste grátis' : sub.status === 'active' ? 'ativo' : sub.status})` : null,
     };
   }
 

@@ -119,3 +119,20 @@ test('Despesa no veículo entra nos lançamentos e no financeiro; resumo de vend
   const vendas = await tools.runRead(actor(owner), 'resumo_vendas', {});
   assert.equal(vendas.quantidade, 0);
 });
+
+test('Visão geral conta clientes e veículos; vendedor vê só os dele', async () => {
+  await prisma.customer.createMany({ data: [
+    { dealershipId: shop.id, name: 'Cliente A' }, { dealershipId: shop.id, name: 'Cliente B' },
+    { dealershipId: shop.id, name: 'Cliente do João', createdById: seller.id },
+  ] });
+  const total = await prisma.customer.count({ where: { dealershipId: shop.id } });
+  const o = await tools.runRead(actor(owner), 'visao_geral', {});
+  assert.equal(o.clientes.total, total); assert.ok(o.veiculos.disponiveis >= 1); assert.ok(o.promissorias);
+  const s = await tools.runRead(actor(seller), 'visao_geral', {});
+  assert.ok(s.clientes.total >= 1 && s.clientes.total < o.clientes.total); assert.equal(s.promissorias, undefined); assert.equal(s.veiculos.custo_do_estoque, undefined);
+  // buscar_clientes sem texto lista e devolve o total
+  const list = await tools.runRead(actor(owner), 'buscar_clientes', {});
+  assert.equal(list.total, total); assert.ok(list.clientes.length > 0);
+  const found = await tools.runRead(actor(owner), 'buscar_clientes', { texto: 'cliente a' });
+  assert.equal(found.total, 1);
+});
