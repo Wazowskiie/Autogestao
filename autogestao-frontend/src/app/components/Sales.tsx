@@ -814,24 +814,24 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
   let totalPromissory = 0;
   let installmentValue = 0;
   let lastInstallmentValue = 0;
+  let calculatedPromissory = 0; // total antes de arredondar as parcelas
   if (financedAmount > 0 && installmentsNum > 0 && rate !== null) {
-    // Total = valor em promissórias + juros. Ex.: 10.000 a 65% = 16.500
-    // (mesma conta do backend: parcelas em reais inteiros, a última ajusta a diferença)
-    totalPromissory = Math.round(financedAmount * (1 + rate / 100));
-    installmentValue = installmentsNum > 1 ? Math.ceil(totalPromissory / installmentsNum) : totalPromissory;
-    lastInstallmentValue = Math.round((totalPromissory - installmentValue * (installmentsNum - 1)) * 100) / 100;
-    if (installmentsNum > 1 && lastInstallmentValue <= 0) {
-      installmentValue = Math.round((totalPromissory / installmentsNum) * 100) / 100;
-      lastInstallmentValue = Math.round((totalPromissory - installmentValue * (installmentsNum - 1)) * 100) / 100;
-    }
+    // Total = valor em promissórias + juros. Ex.: 10.000 a 75% = 17.500
+    calculatedPromissory = Math.round(financedAmount * (1 + rate / 100));
+    // Parcelas iguais, arredondadas para cima em múltiplos de R$ 10 (699 -> 700), igual ao backend
+    const raw = Math.round((calculatedPromissory / installmentsNum) * 100) / 100;
+    installmentValue = Math.ceil(raw / 10) * 10;
+    lastInstallmentValue = installmentValue;
+    totalPromissory = installmentValue * installmentsNum;
   }
+  const roundingAmount = round2(totalPromissory - calculatedPromissory);
   // Juros ao mês como na tabela da loja: taxa da faixa ÷ maior nº de parcelas da faixa
   // (40% em 4x a 6x = 6,66% a.m.). Taxa personalizada/manual: taxa ÷ nº de parcelas.
   const truncPct = (v: number) => `${(Math.floor(v * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
   const monthlyOf = (r: { rate: number | string; maxInstallments: number }) => Number(r.rate) / r.maxInstallments;
   const monthlyRate = rate === null || installmentsNum <= 0 ? null
     : !ownerOverrideActive && activeRate ? monthlyOf(activeRate) : rate / installmentsNum;
-  const interestAmount = totalPromissory > 0 ? round2(totalPromissory - financedAmount) : 0;
+  const interestAmount = calculatedPromissory > 0 ? round2(calculatedPromissory - financedAmount) : 0;
   const lastInstallmentDiffers = Math.abs(lastInstallmentValue - installmentValue) >= 0.01;
 
   // ---------- Formas de pagamento ----------
@@ -1485,6 +1485,9 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
                       <div className="flex justify-between"><span style={{ color: "#6B7280" }}>Valor em promissórias</span><span>{currency(financedAmount)}</span></div>
                       <div className="flex justify-between"><span style={{ color: "#6B7280" }}>Taxa ({installmentsNum}x){ownerOverrideActive ? " · personalizada" : ""}</span><span>{rate}%{monthlyRate !== null ? ` · ${truncPct(monthlyRate)} ao mês` : ""}</span></div>
                       <div className="flex justify-between"><span style={{ color: "#6B7280" }}>Juros</span><span>+ {currency(interestAmount)}</span></div>
+                      {roundingAmount >= 0.01 && (
+                        <div className="flex justify-between"><span style={{ color: "#6B7280" }}>Arredondamento das parcelas</span><span>+ {currency(roundingAmount)}</span></div>
+                      )}
                       <div className="flex justify-between pt-1" style={{ borderTop: "0.5px solid rgba(24,95,165,0.15)" }}><span style={{ color: "#185FA5", fontWeight: 600 }}>Total das promissórias</span><span style={{ color: "#185FA5", fontWeight: 700 }}>{currency(totalPromissory)}</span></div>
                       {lastInstallmentDiffers ? (
                         <div className="flex justify-between"><span style={{ color: "#6B7280" }}>{installmentsNum - 1}x de {currency(installmentValue)} + última</span><span>{currency(lastInstallmentValue)}</span></div>

@@ -1,7 +1,9 @@
 import { openSaleDocument } from "../../lib/sale-documents";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Check, AlertTriangle, Clock, Trash2, X, Calendar, Receipt, ChevronDown, ChevronRight, Printer } from "lucide-react";
+import { Plus, Check, AlertTriangle, Clock, Trash2, X, Calendar, Receipt, ChevronDown, ChevronRight, Printer, BarChart3, List } from "lucide-react";
 import * as api from "../../lib/api";
+import { useAuth } from "../../lib/auth-context";
+import { PromissoryReport } from "./PromissoryReport";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -22,16 +24,12 @@ function formatDate(dueDate: string) {
   return new Date(dueDate).toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
-// Mesma regra do backend: parcelas em reais inteiros, a última ajusta a diferença
+// Mesma regra do backend: parcelas iguais, arredondadas para cima em múltiplos de R$ 10 (699 -> 700)
 function splitInstallments(total: number, installments: number) {
-  if (installments <= 1) return { value: total, last: total };
-  const value = Math.ceil(total / installments);
-  const last = Math.round((total - value * (installments - 1)) * 100) / 100;
-  if (last <= 0) {
-    const cents = Math.round((total / installments) * 100) / 100;
-    return { value: cents, last: Math.round((total - cents * (installments - 1)) * 100) / 100 };
-  }
-  return { value, last };
+  const n = Math.max(1, Math.floor(installments));
+  const raw = Math.round((total / n) * 100) / 100;
+  const value = raw <= 0 ? 0 : Math.ceil(raw / 10) * 10;
+  return { value, last: value };
 }
 
 // ---------- Agrupamento: uma linha por venda ----------
@@ -70,6 +68,9 @@ export function PromissoryNotes() {
   const [filter, setFilter] = useState<"all" | "pending" | "paid" | "overdue">("all");
   const [showModal, setShowModal] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const auth = useAuth();
+  const canSeeReport = auth.user?.role === "owner" || auth.user?.role === "admin";
+  const [view, setView] = useState<"list" | "report">("list");
 
   const groups = useMemo(() => groupBySale(notes), [notes]);
 
@@ -127,6 +128,28 @@ export function PromissoryNotes() {
     }
   };
 
+  const viewToggle = canSeeReport ? (
+    <div className="flex rounded-lg p-0.5" style={{ background: "#F4F6F9" }}>
+      {([["list", "Parcelas", List], ["report", "Relatório", BarChart3]] as const).map(([v, label, Icon]) => (
+        <button key={v} onClick={() => setView(v)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md"
+          style={{ fontSize: 13, fontWeight: view === v ? 600 : 400, background: view === v ? "#fff" : "transparent", color: view === v ? "#185FA5" : "#6B7280", boxShadow: view === v ? "0 1px 2px rgba(0,0,0,0.08)" : "none" }}>
+          <Icon size={14} /> {label}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  if (view === "report") {
+    return (
+      <div className="size-full flex flex-col overflow-hidden" style={{ background: "var(--background)" }}>
+        <div className="px-6 py-4 flex-shrink-0 flex items-center justify-between gap-3 flex-wrap" style={{ background: "#fff", borderBottom: "1px solid var(--border)" }}>
+          <div className="flex items-center gap-3"><h2>Promissórias</h2>{viewToggle}</div>
+        </div>
+        <div className="flex-1 overflow-auto px-6 py-5"><PromissoryReport /></div>
+      </div>
+    );
+  }
+
   return (
     <div className="size-full flex flex-col overflow-hidden" style={{ background: "var(--background)" }}>
       {/* Header */}
@@ -135,6 +158,7 @@ export function PromissoryNotes() {
           <div className="flex items-center gap-3">
             <h2>Promissórias</h2>
             <span className="px-2 py-0.5 rounded-full" style={{ background: "#EBF2FA", color: "#185FA5", fontSize: 12, fontWeight: 500 }}>{groups.length}</span>
+            {viewToggle}
           </div>
           <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg flex items-center gap-2" style={{ background: "var(--primary)", color: "#fff", fontSize: 13 }}>
             <Plus size={16} /> Gerar promissórias

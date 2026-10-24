@@ -15,6 +15,13 @@ export class PromissoryNotesController {
     return this.service.findAll(user.dealershipId, query);
   }
 
+  /** Relatório: ?from=AAAA-MM-DD&to=AAAA-MM-DD (pelo vencimento das parcelas) */
+  @Roles('owner', 'admin')
+  @Get('report')
+  report(@CurrentUser() user: AuthenticatedUser, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.service.report(user.dealershipId, from, to);
+  }
+
   @Roles('owner', 'admin', 'seller')
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePromissoryNoteDto) {

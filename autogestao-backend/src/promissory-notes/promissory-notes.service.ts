@@ -143,6 +143,129 @@ export class PromissoryNotesService {
     };
   }
 
+  /**
+   * Relatório das promissórias de um período (pelo vencimento das parcelas):
+   * quanto vence, quanto já entrou, o que está atrasado, mês a mês, e quem está devendo.
+   */
+  async report(dealershipId: string, fromStr?: string, toStr?: string) {
+    const parse = (v: string | undefined, fallback: Date) => {
+      if (!v) return fallback;
+      const [y, m, d] = v.slice(0, 10).split('-').map(Number);
+      if (!y || !m || !d) throw new BadRequestException('Data inválida no relatório');
+      return new Date(Date.UTC(y, m - 1, d));
+    };
+    const today = startOfTodayBrazil();
+    const from = parse(fromStr, new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)));
+    const to = parse(toStr, new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 6, 0)));
+    if (to < from) throw new BadRequestException('A data final precisa ser depois da inicial');
+    const toEnd = new Date(to.getTime() + 86_400_000 - 1); // fim do dia
+    // pagamentos são gravados no horário real: o dia de Brasília começa às 03:00 UTC
+    const paidFrom = new Date(from.getTime() + 3 * 3_600_000);
+    const paidTo = new Date(toEnd.getTime() + 3 * 3_600_000);
+
+    const notes = await this.prisma.promissoryNote.findMany({
+      where: { dealershipId },
+      select: {
+        id: true, saleId: true, amount: true, dueDate: true, paid: true, paidAt: true,
+        installmentNumber: true, totalInstallments: true,
+        customer: { select: { id: true, name: true, phone: true } },
+        sale: { select: { contractNumber: true, vehicle: { select: { brand: true, model: true, year: true, plate: true } } } },
+      },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const amt = (n: { amount: unknown }) => Number(n.amount);
+    const isOverdue = (n: { paid: boolean; dueDate: Date }) => !n.paid && n.dueDate < today;
+    const inPeriod = notes.filter((n) => n.dueDate >= from && n.dueDate <= toEnd);
+
+    // Mês a mês (pelo vencimento)
+    const months = new Map<string, { month: string; count: number; due: number; paid: number; open: number; overdue: number }>();
+    for (let d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1)); d <= toEnd; d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1))) {
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      months.set(key, { month: key, count: 0, due: 0, paid: 0, open: 0, overdue: 0 });
+    }
+    for (const n of inPeriod) {
+      const key = `${n.dueDate.getUTCFullYear()}-${String(n.dueDate.getUTCMonth() + 1).padStart(2, '0')}`;
+      const m = months.get(key);
+      if (!m) continue;
+      m.count += 1;
+      m.due += amt(n);
+      if (n.paid) m.paid += amt(n);
+      else if (isOverdue(n)) m.overdue += amt(n);
+      else m.open += amt(n);
+    }
+
+    // Quem está devendo (todas as parcelas atrasadas, de qualquer data)
+    const debtors = new Map<string, {
+      customerId: string; name: string; phone: string | null; overdueCount: number; overdueAmount: number;
+      oldestDueDate: Date; daysLate: number; sales: Set<string>; vehicles: Set<string>;
+    }>();
+    for (const n of notes.filter(isOverdue)) {
+      const v = n.sale.vehicle;
+      const key = n.customer.id;
+      const days = Math.floor((today.getTime() - Date.UTC(n.dueDate.getUTCFullYear(), n.dueDate.getUTCMonth(), n.dueDate.getUTCDate())) / 86_400_000);
+      const d = debtors.get(key) ?? {
+        customerId: key, name: n.customer.name, phone: n.customer.phone, overdueCount: 0, overdueAmount: 0,
+        oldestDueDate: n.dueDate, daysLate: 0, sales: new Set<string>(), vehicles: new Set<string>(),
+      };
+      d.overdueCount += 1;
+      d.overdueAmount += amt(n);
+      if (n.dueDate < d.oldestDueDate) d.oldestDueDate = n.dueDate;
+      d.daysLate = Math.max(d.daysLate, days);
+      d.sales.add(n.saleId);
+      d.vehicles.add(`${v.brand} ${v.model} ${v.year}${v.plate ? ` (${v.plate})` : ''}`);
+      debtors.set(key, d);
+    }
+
+    // Carteira: tudo que ainda falta receber
+    const open = notes.filter((n) => !n.paid);
+    const overdueAll = notes.filter(isOverdue);
+    // Inadimplência: do que já venceu até hoje, quanto não foi pago
+    const dueUntilToday = notes.filter((n) => n.dueDate < today);
+    const dueUntilTodayAmount = dueUntilToday.reduce((sum, n) => sum + amt(n), 0);
+    const overdueAmount = overdueAll.reduce((sum, n) => sum + amt(n), 0);
+
+    const receivedInPeriod = notes.filter((n) => n.paid && n.paidAt && n.paidAt >= paidFrom && n.paidAt <= paidTo);
+
+    return {
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10),
+      period: {
+        dueCount: inPeriod.length,
+        dueAmount: r2(inPeriod.reduce((sum, n) => sum + amt(n), 0)),
+        paidOfDueAmount: r2(inPeriod.filter((n) => n.paid).reduce((sum, n) => sum + amt(n), 0)),
+        openAmount: r2(inPeriod.filter((n) => !n.paid && !isOverdue(n)).reduce((sum, n) => sum + amt(n), 0)),
+        overdueAmount: r2(inPeriod.filter(isOverdue).reduce((sum, n) => sum + amt(n), 0)),
+        receivedCount: receivedInPeriod.length,
+        receivedAmount: r2(receivedInPeriod.reduce((sum, n) => sum + amt(n), 0)),
+      },
+      portfolio: {
+        activePromissories: new Set(open.map((n) => n.saleId)).size,
+        openCount: open.length,
+        openAmount: r2(open.reduce((sum, n) => sum + amt(n), 0)),
+        overdueCount: overdueAll.length,
+        overdueAmount: r2(overdueAmount),
+        delinquencyRate: dueUntilTodayAmount > 0 ? r2((overdueAmount / dueUntilTodayAmount) * 100) : 0,
+      },
+      months: [...months.values()].map((m) => ({ ...m, due: r2(m.due), paid: r2(m.paid), open: r2(m.open), overdue: r2(m.overdue) })),
+      debtors: [...debtors.values()]
+        .sort((a, b) => b.daysLate - a.daysLate || b.overdueAmount - a.overdueAmount)
+        .map((d) => ({
+          customerId: d.customerId, name: d.name, phone: d.phone, overdueCount: d.overdueCount,
+          overdueAmount: r2(d.overdueAmount), oldestDueDate: d.oldestDueDate, daysLate: d.daysLate,
+          promissories: d.sales.size, vehicles: [...d.vehicles],
+        })),
+      // Parcelas do período, para exportar em planilha
+      installments: inPeriod.map((n) => ({
+        customer: n.customer.name, phone: n.customer.phone,
+        vehicle: `${n.sale.vehicle.brand} ${n.sale.vehicle.model} ${n.sale.vehicle.year}`,
+        contract: n.sale.contractNumber, number: n.installmentNumber, total: n.totalInstallments,
+        dueDate: n.dueDate, amount: amt(n), status: n.paid ? 'paga' : isOverdue(n) ? 'atrasada' : 'a vencer', paidAt: n.paidAt,
+      })),
+    };
+  }
+
   async pay(dealershipId: string, id: string) {
     const note = await this.prisma.promissoryNote.findFirst({
       where: { id, dealershipId },
