@@ -714,6 +714,11 @@ model AdListing {
   vehicleId    String?  @map("vehicle_id")
   vehicleSnapshot Json? @map("vehicle_snapshot")
   archivedAt   DateTime? @map("archived_at")
+  publishedAt  DateTime? @map("published_at")
+  publishedById String? @map("published_by_id")
+  externalUrl  String? @map("external_url")
+  removedAt    DateTime? @map("removed_at")
+  removedById  String? @map("removed_by_id")
   channel      String
   title        String
   description  String   @default("")

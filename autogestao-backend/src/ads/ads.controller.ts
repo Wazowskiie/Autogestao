@@ -4,6 +4,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 import { AdsService } from './ads.service';
 import { CreateAdDto, UpdateAdDto } from './ads.dto';
+import { PublishAdDto } from './publish-ad.dto';
 @Controller('ads')
 export class AdsController {
   constructor(private readonly ads: AdsService) {}
@@ -17,6 +18,16 @@ export class AdsController {
   @Roles('owner', 'admin', 'seller')
   @Post('listings/:id/sync-inventory')
   syncInventory(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) { return this.ads.syncInventory(user.dealershipId, id); }
+  @Roles('owner', 'admin', 'seller')
+  @Post('listings/:id/mark-published')
+  markPublished(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: PublishAdDto) {
+    return this.ads.markPublished(user.dealershipId, id, user.userId, dto);
+  }
+  @Roles('owner', 'admin', 'seller')
+  @Post('listings/:id/mark-removed')
+  markRemoved(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.ads.markRemoved(user.dealershipId, id, user.userId);
+  }
   @Roles('owner', 'admin')
   @Delete('listings/:id') remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) { return this.ads.remove(user.dealershipId, id); }
 }

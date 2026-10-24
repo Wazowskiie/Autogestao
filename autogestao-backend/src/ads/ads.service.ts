@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAdDto, UpdateAdDto } from './ads.dto';
+import { PublishAdDto } from './publish-ad.dto';
 
 @Injectable()
 export class AdsService {
@@ -49,6 +50,7 @@ export class AdsService {
           photosChanged,
           unavailable,
           needsAttention: priceChanged || photosChanged || unavailable,
+          requiresExternalRemoval: ad.status === 'published' && unavailable,
         },
       };
     });
@@ -116,6 +118,37 @@ export class AdsService {
         photos: vehicle.photos.map((photo) => photo.url),
       },
     });
+  }
+
+  /** Registra uma publicação feita manualmente fora do AutoGestão. */
+  async markPublished(dealershipId: string, id: string, userId: string, dto: PublishAdDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const ad = await tx.adListing.findFirst({ where: { id, dealershipId }, include: { vehicle: { select: { status: true } } } });
+      if (!ad) throw new NotFoundException('Anúncio não encontrado.');
+      if (ad.status !== 'draft' || !ad.vehicle || ad.vehicle.status !== 'available') {
+        throw new BadRequestException('Somente rascunhos com veículo disponível podem ser marcados como publicados.');
+      }
+      const urls = Array.isArray(ad.photos) ? ad.photos.filter((p) => typeof p === 'string') : [];
+      if (!ad.title.trim() || !ad.description.trim() || Number(ad.price) <= 0 || !urls.length) {
+        throw new BadRequestException('Preencha título, descrição, preço e fotos antes de registrar a publicação.');
+      }
+      const updated = await tx.adListing.updateMany({
+        where: { id, dealershipId, status: 'draft', vehicle: { status: 'available' } },
+        data: { status: 'published', externalUrl: dto.externalUrl, publishedAt: new Date(), publishedById: userId, removedAt: null, removedById: null },
+      });
+      if (!updated.count) throw new BadRequestException('O anúncio mudou de estado. Atualize a página e tente novamente.');
+      return tx.adListing.findUniqueOrThrow({ where: { id } });
+    });
+  }
+
+  /** Registra a retirada manual na plataforma externa; não remove nada na OLX/Instagram. */
+  async markRemoved(dealershipId: string, id: string, userId: string) {
+    const updated = await this.prisma.adListing.updateMany({
+      where: { id, dealershipId, status: 'published' },
+      data: { status: 'removed', removedAt: new Date(), removedById: userId },
+    });
+    if (!updated.count) throw new BadRequestException('Somente anúncios publicados podem ser marcados como retirados.');
+    return this.prisma.adListing.findFirst({ where: { id, dealershipId } });
   }
 
   async remove(dealershipId: string, id: string) {
