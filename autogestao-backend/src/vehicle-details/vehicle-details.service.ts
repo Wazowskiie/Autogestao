@@ -431,12 +431,19 @@ export class VehicleDetailsService {
         financialTransactionId = null;
       }
 
+      // Débitos em lista: guarda cada um e usa a soma como valor de débitos
+      const debts = dto.debts?.map((d) => ({ date: d.date ? d.date.slice(0, 10) : null, description: d.description.trim(), amount: Math.round(d.amount * 100) / 100 }));
+      const debtsValue = debts ? Math.round(debts.reduce((s, d) => s + d.amount, 0) * 100) / 100 : dto.debtsValue;
+
       const data = {
         entryDate, ownershipType,
+        intermediary: dto.intermediary !== undefined ? dto.intermediary.trim() || null : undefined,
+        entryChannel: dto.entryChannel,
+        ...(debts ? { debts } : {}),
         supplierName: dto.supplierName, supplierDocument: dto.supplierDocument,
         supplierPhone: dto.supplierPhone,
         documentOwnerName: dto.documentOwnerName, documentOwnerDocument: dto.documentOwnerDocument,
-        purchaseValue, payoffValue: dto.payoffValue, debtsValue: dto.debtsValue,
+        purchaseValue, payoffValue: dto.payoffValue, debtsValue,
         notes: dto.notes, financialTransactionId,
       };
       await tx.vehicleAcquisition.upsert({

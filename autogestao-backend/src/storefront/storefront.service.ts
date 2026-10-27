@@ -4,10 +4,18 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const PUBLIC_VEHICLE_SELECT = {
   id: true, brand: true, model: true, version: true, year: true, manufactureYear: true,
-  km: true, color: true, price: true, status: true, type: true, description: true,
+  km: true, color: true, price: true, status: true, type: true,
+  // descrição pública = a da aba Web; vehicle.description é observação interna e não vai para o site
+  web: { select: { description: true } },
   optionals: true, fuel: true, transmission: true, doors: true,
   createdAt: true, updatedAt: true, photos: { orderBy: { order: 'asc' as const } },
 } as const;
+
+/** Formato público: description vem da aba Web */
+function toPublic<T extends { web?: { description: string | null } | null }>(v: T) {
+  const { web, ...rest } = v;
+  return { ...rest, description: web?.description ?? null };
+}
 
 @Injectable()
 export class StorefrontService {
@@ -78,7 +86,7 @@ export class StorefrontService {
     ]);
 
     // Remove o custo (preço de compra) da resposta pública — informação privada da revenda
-    return { items, total, page, pageSize };
+    return { items: items.map(toPublic), total, page, pageSize };
   }
 
   async getVehicle(slug: string, vehicleId: string) {
@@ -91,6 +99,6 @@ export class StorefrontService {
     });
     if (!vehicle) throw new NotFoundException('Veículo não encontrado');
 
-    return vehicle;
+    return toPublic(vehicle);
   }
 }

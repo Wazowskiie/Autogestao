@@ -1,0 +1,40 @@
+ENTRADA COMPLETA NO CADASTRO DO VEÍCULO
+=======================================
+
+O que mudou
+- Cadastro do veículo ganhou o bloco "Entrada do veículo": Fornecedor (buscar ou "Novo +"),
+  Doc. em nome de (ou "Mesmo do fornecedor"), Intermediário, Canal da entrada
+  (CLIENTE, CLIENTE FINAL, CONSIGNADOS, CORRETOR, REPASSE) e Data de entrada.
+- Bloco "Valores": Valor de entrada, Valor da quitação, Valor de débitos (botão "Débitos"
+  abre a lista com data, descrição e valor), Valor líquido (automático) e Valor para venda.
+- Duas observações: "Observação de entrada" e "Observações internas".
+- A aba "Entrada" do veículo mostra e edita tudo isso.
+- Correção de privacidade: as "Observações internas" apareciam no site da loja e nos textos
+  de anúncio. Agora não aparecem mais. A descrição do site é a da aba "Web" do veículo.
+- Correção: data de entrada aparecia 1 dia antes (fuso horário).
+
+1) COPIE OS ARQUIVOS
+Copie as pastas autogestao-backend e autogestao-frontend deste zip por cima das suas
+(substituindo os arquivos).
+
+2) schema.prisma  (autogestao-backend/prisma/schema.prisma)
+Dentro de "model VehicleAcquisition {", logo abaixo da linha do debtsValue, adicione:
+
+  debts                  Json?
+  intermediary           String?
+  entryChannel           String?  @map("entry_channel")
+
+3) NO SEU PC (pasta autogestao-backend)
+  npx prisma migrate deploy
+  npx prisma generate
+  (NUNCA use "migrate dev" nem confirme pedidos de reset/apagar dados.)
+
+4) NO VPS
+  cd /var/www/Autogestao
+  cp -r autogestao-backend/storage ~/storage-backup      (backup das fotos antes do pull)
+  git pull
+  cp -rn ~/storage-backup/. autogestao-backend/storage/
+  cd autogestao-backend && npm install && npx prisma migrate deploy && npx prisma generate && npm run build
+  cd ../autogestao-frontend && npm install && npm run build
+  pm2 restart all
+  Depois recarregue a página com Ctrl+Shift+R.

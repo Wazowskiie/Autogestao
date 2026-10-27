@@ -131,3 +131,25 @@ test('Situação do veículo: licenciamento, multas, Renajud, recall e devoluç�
   await vs.update(shop.id, v.id, { price: 12500 }); // editar outra coisa não apaga a situação
   assert.deepEqual((await prisma.vehicle.findUnique({ where: { id: v.id } })).docStatus, { fines: { status: 'ok' } });
 });
+
+test('Entrada completa: canal, intermediário, débitos em lista e observação interna fora do site', async () => {
+  const { StorefrontService } = require('../dist/src/storefront/storefront.service');
+  const v = await prisma.vehicle.create({ data: { dealershipId: shop.id, brand: 'Yamaha', model: 'Lander 250', year: 2022, price: 19000, cost: 0, description: 'Cliente pediu sigilo: moto veio de inventário' } });
+  await details.upsertAcquisition(shop.id, v.id, {
+    supplierName: 'José Fornecedor', documentOwnerName: 'Maria Dona', intermediary: 'Carlos Corretor', entryChannel: 'corretor',
+    purchaseValue: 15000, payoffValue: 2000,
+    debts: [{ date: '2026-10-20', description: 'IPVA 2026', amount: 480.5 }, { description: 'Multa', amount: 195.23 }],
+    notes: 'Entrou com pneu traseiro gasto',
+  });
+  const a = await prisma.vehicleAcquisition.findUnique({ where: { vehicleId: v.id } });
+  assert.equal(a.entryChannel, 'corretor'); assert.equal(a.intermediary, 'Carlos Corretor');
+  assert.equal(Number(a.debtsValue), 675.73); assert.equal(a.debts.length, 2); assert.equal(a.debts[0].date, '2026-10-20');
+  assert.equal(Number((await prisma.vehicle.findUnique({ where: { id: v.id } })).cost), 15000); // valor de entrada = custo
+  // a observação interna (description) não aparece no site; a descrição da aba Web sim
+  const sf = new StorefrontService(prisma);
+  let pub = (await sf.listVehicles(shop.slug, {})).items.find((x) => x.id === v.id);
+  assert.equal(pub.description, null); assert.equal(pub.web, undefined);
+  await prisma.vehicleWeb.create({ data: { dealershipId: shop.id, vehicleId: v.id, description: 'Lander revisada, pronta para trilha' } });
+  pub = await sf.getVehicle(shop.slug, v.id);
+  assert.equal(pub.description, 'Lander revisada, pronta para trilha');
+});

@@ -1,6 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
-  IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, IsUrl, MaxLength, Min, MinLength,
+  ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, IsUrl, MaxLength, Min, MinLength, ValidateNested,
 } from 'class-validator';
 
 // Campos que chegam vazios ("") viram undefined, para não salvar texto em branco
@@ -80,6 +80,15 @@ export class UpdateExpenseDto {
 }
 
 // ---------- Entrada ----------
+// Canais de entrada do veículo (de onde ele veio)
+export const ENTRY_CHANNELS = ['cliente', 'cliente_final', 'consignados', 'corretor', 'repasse'] as const;
+
+export class AcquisitionDebtDto {
+  @IsOptional() @emptyToUndefined() @IsDateString({}, { message: 'Data do débito inválida' }) date?: string;
+  @IsString() @MinLength(1, { message: 'Descreva o débito' }) @MaxLength(150) description: string;
+  @IsNumber({}, { message: 'Valor do débito inválido' }) @Min(0) @Type(() => Number) amount: number;
+}
+
 export class UpsertAcquisitionDto {
   @IsOptional() @emptyToUndefined() @IsDateString({}, { message: 'Data de entrada inválida' }) entryDate?: string;
   @IsOptional() @IsIn(['own', 'consigned']) ownershipType?: 'own' | 'consigned';
@@ -92,6 +101,10 @@ export class UpsertAcquisitionDto {
   @IsOptional() @IsNumber({}, { message: 'Valor de quitação inválido' }) @Min(0) @Type(() => Number) payoffValue?: number;
   @IsOptional() @IsNumber({}, { message: 'Valor de débitos inválido' }) @Min(0) @Type(() => Number) debtsValue?: number;
   @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsString() @MaxLength(150) intermediary?: string;
+  @IsOptional() @emptyToUndefined() @IsIn(ENTRY_CHANNELS, { message: 'Canal da entrada inválido' }) entryChannel?: (typeof ENTRY_CHANNELS)[number];
+  // Débitos um a um; quando vem, o valor de débitos passa a ser a soma deles
+  @IsOptional() @IsArray() @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => AcquisitionDebtDto) debts?: AcquisitionDebtDto[];
 }
 
 // ---------- Pendências ----------

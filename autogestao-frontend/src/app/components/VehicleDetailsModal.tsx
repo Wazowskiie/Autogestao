@@ -35,9 +35,11 @@ const inputStyle: CSSProperties = {
 // ---------- Utilitários ----------
 const money = (v: number | string | null | undefined) =>
   Number(v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const dateBR = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
+// Datas "puras" (sem hora: 2026-10-27 ou ...T00:00:00.000Z) são mostradas como estão, sem o fuso puxar para o dia anterior
+const isDateOnly = (iso: string) => /^\d{4}-\d{2}-\d{2}(T00:00:00(\.000)?Z)?$/.test(iso);
+const dateBR = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR", isDateOnly(iso) ? { timeZone: "UTC" } : undefined) : "—");
 const toInputDate = (iso?: string | null) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 const yesNo = (v?: boolean | null) => (v === true ? "Sim" : v === false ? "Não" : "");
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : "Algo deu errado. Tente novamente.");
 const fileSize = (b?: number | null) =>
@@ -1033,7 +1035,10 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
     supplierName: a?.supplierName ?? "", supplierDocument: a?.supplierDocument ?? "", supplierPhone: a?.supplierPhone ?? "",
     documentOwnerName: a?.documentOwnerName ?? "", documentOwnerDocument: a?.documentOwnerDocument ?? "",
     purchaseValue: moneyInput(a ? a.purchaseValue : v.cost), payoffValue: moneyInput(a?.payoffValue), debtsValue: moneyInput(a?.debtsValue),
-    notes: a?.notes ?? "",
+    notes: a?.notes ?? "", intermediary: a?.intermediary ?? "",
+    entryChannel: (a?.entryChannel ?? (a?.ownershipType === "consigned" ? "consignados" : "")) as dv.EntryChannel | "",
+    debts: (a?.debts?.length ? a.debts.map((d) => ({ date: d.date ?? "", description: d.description, amount: moneyInput(d.amount) }))
+      : a && Number(a.debtsValue) ? [{ date: "", description: "Débitos", amount: moneyInput(a.debtsValue) }] : []) as { date: string; description: string; amount: string }[],
   }), [v.createdAt, v.cost]);
   const [f, setF] = useState(() => blank(null));
 
@@ -1043,13 +1048,28 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
   if (error && !data) return <Alert>{error}</Alert>;
 
   const n = (s: string) => (s.trim() ? parseBRL(s) : 0);
-  const net = (n(f.purchaseValue) || 0) - (n(f.payoffValue) || 0) - (n(f.debtsValue) || 0);
+  const debtsSum = f.debts.reduce((s2, d) => s2 + (n(d.amount) || 0), 0);
+  const net = (n(f.purchaseValue) || 0) - (n(f.payoffValue) || 0) - debtsSum;
+  const setDebt = (i: number, patch: Partial<{ date: string; description: string; amount: string }>) =>
+    setF({ ...f, debts: f.debts.map((d, j) => (j === i ? { ...d, ...patch } : d)) });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
   const save = () => action.run("save", async () => {
-    const values = { purchaseValue: n(f.purchaseValue), payoffValue: n(f.payoffValue), debtsValue: n(f.debtsValue) };
+    const values = { purchaseValue: n(f.purchaseValue), payoffValue: n(f.payoffValue) };
     if (Object.values(values).some((x) => Number.isNaN(x))) throw new Error("Algum valor está inválido. Ex: 30.000,00");
-    setData(await dv.saveAcquisition(v.id, { ...f, ...values }));
+    const debts = f.debts.filter((d) => d.description.trim() || d.amount.trim()).map((d) => {
+      if (!d.description.trim()) throw new Error("Preencha a descrição de todos os débitos.");
+      const amount = n(d.amount);
+      if (Number.isNaN(amount) || amount < 0) throw new Error(`Valor inválido no débito "${d.description}".`);
+      return { date: d.date || null, description: d.description.trim(), amount };
+    });
+    const { debtsValue: _old, entryChannel, ...rest } = f;
+    void _old;
+    setData(await dv.saveAcquisition(v.id, {
+      ...rest, ...values, debts,
+      entryChannel: entryChannel || undefined,
+      ownershipType: entryChannel ? (entryChannel === "consignados" ? "consigned" : "own") : f.ownershipType,
+    }));
     setEditing(false);
     onChanged();
   });
@@ -1061,7 +1081,8 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
         <SectionTitle action={<Btn variant="outline" onClick={() => setEditing(true)}><Pencil size={15} /> Editar entrada</Btn>}>Dados do fornecedor</SectionTitle>
         <div style={{ marginTop: -12 }}>
-          <InfoRows rows={[["Data de entrada", dateBR(a.entryDate)], ["Nome", a.supplierName], ["CPF/CNPJ", formatDoc(a.supplierDocument)], ["Telefone", a.supplierPhone]]} />
+          <InfoRows rows={[["Data de entrada", dateBR(a.entryDate)], ["Nome", a.supplierName], ["CPF/CNPJ", formatDoc(a.supplierDocument)], ["Telefone", a.supplierPhone],
+            ["Intermediário", a.intermediary ?? ""], ["Canal da entrada", dv.entryChannelLabel(a.entryChannel)]]} />
         </div>
         <div><Label>Documento em nome de</Label><InfoRows rows={[["Nome", a.documentOwnerName], ["CPF/CNPJ", formatDoc(a.documentOwnerDocument)]]} /></div>
         <div><Label>Organização</Label><InfoRows rows={[["Chave reserva", yesNo(v.hasSpareKey)], ["Manual", yesNo(v.hasManual)]]} /></div>
@@ -1069,9 +1090,10 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
           <Label>Dados da compra</Label>
           <InfoRows rows={[
             ["Tipo do veículo", a.ownershipType === "consigned" ? "Consignado" : "Próprio"],
-            ["Valor de compra", money(a.purchaseValue)],
+            ["Valor de entrada", money(a.purchaseValue)],
             ["Valor de quitação", money(a.payoffValue)],
             ["Valor de débitos", money(a.debtsValue)],
+            ...(a.debts?.length ? a.debts.map((d) => [`  · ${d.description}${d.date ? ` (${dateBR(d.date)})` : ""}`, money(d.amount)] as [string, string]) : []),
             ["Valor líquido (pago ao fornecedor)", money(netValue)],
             ["Valor de venda", money(v.price)],
             ["Observação da entrada", a.notes ? <span style={{ whiteSpace: "pre-wrap" }}>{a.notes}</span> : ""],
@@ -1092,6 +1114,13 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
           <Field label="Nome do fornecedor"><input value={f.supplierName} onChange={set("supplierName")} style={inputStyle} /></Field>
           <Field label="CPF/CNPJ"><input value={f.supplierDocument} onChange={set("supplierDocument")} style={inputStyle} /></Field>
           <Field label="Telefone"><input value={f.supplierPhone} onChange={set("supplierPhone")} style={inputStyle} /></Field>
+          <Field label="Intermediário"><input value={f.intermediary} onChange={set("intermediary")} style={inputStyle} /></Field>
+          <Field label="Canal da entrada">
+            <select value={f.entryChannel} onChange={(e) => setF({ ...f, entryChannel: e.target.value as dv.EntryChannel | "" })} style={inputStyle}>
+              <option value="">Selecione</option>
+              {dv.ENTRY_CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          </Field>
         </Grid>
       </div>
       <div>
@@ -1104,19 +1133,31 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
       <div>
         <Label>Dados da compra</Label>
         <Grid cols={3}>
-          <Field label="Tipo do veículo">
-            <select value={f.ownershipType} onChange={(e) => setF({ ...f, ownershipType: e.target.value as "own" | "consigned" })} style={inputStyle}>
-              <option value="own">Próprio (a loja comprou)</option><option value="consigned">Consignado</option>
-            </select>
-          </Field>
-          <Field label="Valor de compra"><input value={f.purchaseValue} onChange={set("purchaseValue")} placeholder="Ex: 30.000,00" style={inputStyle} /></Field>
+          <Field label="Valor de entrada"><input value={f.purchaseValue} onChange={set("purchaseValue")} placeholder="Ex: 30.000,00" style={inputStyle} /></Field>
           <Field label="Valor de quitação (financiamento)"><input value={f.payoffValue} onChange={set("payoffValue")} placeholder="0,00" style={inputStyle} /></Field>
-          <Field label="Valor de débitos (multas, IPVA...)"><input value={f.debtsValue} onChange={set("debtsValue")} placeholder="0,00" style={inputStyle} /></Field>
+          <Field label="Valor de débitos (soma da lista)"><input value={money(debtsSum)} readOnly style={{ ...inputStyle, background: C.stripe }} /></Field>
           <Field label="Valor líquido (pago ao fornecedor)"><input value={Number.isNaN(net) ? "—" : money(net)} readOnly style={{ ...inputStyle, background: C.stripe }} /></Field>
-          <Field label="Observação da entrada" span><textarea rows={3} value={f.notes} onChange={set("notes")} style={{ ...inputStyle, resize: "vertical" }} /></Field>
         </Grid>
+        <div style={{ marginTop: 14 }}>
+          <Label>Débitos</Label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {f.debts.map((d, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "140px 1fr 130px 32px", gap: 8, alignItems: "center" }}>
+                <input type="date" value={d.date} onChange={(e) => setDebt(i, { date: e.target.value })} style={inputStyle} />
+                <input placeholder="Descrição (IPVA, multa...)" value={d.description} onChange={(e) => setDebt(i, { description: e.target.value })} style={inputStyle} />
+                <input placeholder="0,00" value={d.amount} onChange={(e) => setDebt(i, { amount: e.target.value })} style={inputStyle} />
+                <button type="button" title="Remover" onClick={() => setF({ ...f, debts: f.debts.filter((_, j) => j !== i) })}
+                  style={{ border: "none", background: "none", color: "#DC2626", cursor: "pointer" }}><Trash2 size={16} /></button>
+              </div>
+            ))}
+            <div><Btn variant="outline" onClick={() => setF({ ...f, debts: [...f.debts, { date: today(), description: "", amount: "" }] })}><Plus size={14} /> Adicionar débito</Btn></div>
+          </div>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <Field label="Observação da entrada"><textarea rows={3} value={f.notes} onChange={set("notes")} style={{ ...inputStyle, resize: "vertical" }} /></Field>
+        </div>
         <p style={{ fontSize: 12, color: C.light, margin: "10px 0 0" }}>
-          {f.ownershipType === "own"
+          {f.entryChannel ? f.entryChannel !== "consignados" : f.ownershipType === "own"
             ? "Ao salvar, o valor de compra vira o custo do veículo e entra no Financeiro como \"Compra\"."
             : "Veículo consignado não gera lançamento de compra no Financeiro."}
         </p>

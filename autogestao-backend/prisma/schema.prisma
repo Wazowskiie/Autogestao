@@ -644,6 +644,9 @@ model VehicleAcquisition {
   purchaseValue          Decimal  @default(0) @map("purchase_value") @db.Decimal(12, 2)
   payoffValue            Decimal  @default(0) @map("payoff_value") @db.Decimal(12, 2)
   debtsValue             Decimal  @default(0) @map("debts_value") @db.Decimal(12, 2)
+  debts                  Json?
+  intermediary           String?
+  entryChannel           String?  @map("entry_channel")
   notes                  String?
   financialTransactionId String?  @unique @map("financial_transaction_id")
   createdAt              DateTime @default(now()) @map("created_at")

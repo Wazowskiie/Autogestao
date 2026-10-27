@@ -78,12 +78,24 @@ export interface Acquisition {
   supplierName: string | null; supplierDocument: string | null; supplierPhone: string | null;
   documentOwnerName: string | null; documentOwnerDocument: string | null;
   purchaseValue: Money; payoffValue: Money; debtsValue: Money; notes: string | null;
+  intermediary?: string | null; entryChannel?: EntryChannel | null; debts?: AcquisitionDebt[] | null;
 }
+export type EntryChannel = "cliente" | "cliente_final" | "consignados" | "corretor" | "repasse";
+export const ENTRY_CHANNELS: { value: EntryChannel; label: string }[] = [
+  { value: "cliente", label: "CLIENTE" },
+  { value: "cliente_final", label: "CLIENTE FINAL" },
+  { value: "consignados", label: "CONSIGNADOS" },
+  { value: "corretor", label: "CORRETOR" },
+  { value: "repasse", label: "REPASSE" },
+];
+export const entryChannelLabel = (c?: string | null) => ENTRY_CHANNELS.find((x) => x.value === c)?.label ?? "";
+export interface AcquisitionDebt { date?: string | null; description: string; amount: number }
 export interface AcquisitionInput {
   entryDate?: string; ownershipType?: "own" | "consigned";
   supplierName?: string; supplierDocument?: string; supplierPhone?: string;
   documentOwnerName?: string; documentOwnerDocument?: string;
   purchaseValue?: number; payoffValue?: number; debtsValue?: number; notes?: string;
+  intermediary?: string; entryChannel?: EntryChannel; debts?: AcquisitionDebt[];
 }
 
 export interface Pendency { id: string; description: string; done: boolean; doneAt: string | null; createdAt: string }

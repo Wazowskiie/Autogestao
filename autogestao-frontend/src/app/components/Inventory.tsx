@@ -1,9 +1,10 @@
 import { DOC_ITEMS, docProblems, type DocItem, type DocItemStatus, type DocKey, type DocStatus } from "../../lib/vehicle-doc-status";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Search, Car, Bike, Truck, Package, Edit2, Trash2, Globe, X, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plus, Search, Car, Bike, Truck, Package, Edit2, Trash2, Globe, X, Loader2, CheckCircle2, AlertTriangle, Receipt } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { VehicleDetailsModal, type VehicleDetails } from "./VehicleDetailsModal";
 import * as api from "../../lib/api";
+import * as dv from "../../lib/vehicle-details-api";
 
 // ---------- Configuração por tipo de veículo ----------
 const TYPE_OPTIONS = [
@@ -403,6 +404,176 @@ type LookupState =
   | { status: "done"; result: api.PlateLookupResult }
   | { status: "error"; message: string };
 
+// ---------- Fornecedor / Doc. em nome de ----------
+type Person = { name: string; document: string; phone: string };
+const emptyPerson: Person = { name: "", document: "", phone: "" };
+
+function formatDocument(d: string) {
+  const x = digitsOnly(d);
+  if (x.length === 11) return x.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  if (x.length === 14) return x.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  return d;
+}
+
+function PersonPicker({ label, value, onChange, required }: { label: string; value: Person; onChange: (p: Person) => void; required?: boolean }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<api.Customer[]>([]);
+  const [open, setOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState<Person>(emptyPerson);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const q = query.trim();
+    if (q.length < 2) { setResults([]); return; }
+    let alive = true;
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try { const r = await api.listCustomers({ search: q, pageSize: 8 }); if (alive) setResults(r.items); }
+      catch { if (alive) setResults([]); }
+      finally { if (alive) setSearching(false); }
+    }, 300);
+    return () => { alive = false; clearTimeout(t); };
+  }, [query, open]);
+
+  const pick = (c: api.Customer) => { onChange({ name: c.name, document: c.document ?? "", phone: c.phone ?? "" }); setOpen(false); setQuery(""); };
+
+  const saveNew = async () => {
+    setErr(null);
+    if (!draft.name.trim()) { setErr("Informe o nome."); return; }
+    setBusy(true);
+    try {
+      const c = await api.createCustomer({ name: draft.name.trim(), document: digitsOnly(draft.document) || undefined, phone: draft.phone.trim() || undefined, tags: ["fornecedor"] });
+      pick(c);
+      setCreating(false);
+      setDraft(emptyPerson);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Não foi possível cadastrar.");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+        <label style={{ fontSize: 13, color: "#374151" }}>{label}{required ? " *" : ""}</label>
+        <button type="button" onClick={() => { setCreating((v) => !v); setErr(null); setDraft({ ...emptyPerson, name: query }); }}
+          style={{ fontSize: 12, color: "#185FA5", fontWeight: 500 }}>{creating ? "Cancelar" : "Novo +"}</button>
+      </div>
+
+      {creating ? (
+        <div className="rounded-lg p-3 space-y-2" style={{ border: "1px dashed #185FA5", background: "#F5F9FD" }}>
+          <input placeholder="Nome completo / Razão social" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+          <div className="grid grid-cols-2 gap-2">
+            <input placeholder="CPF/CNPJ" value={draft.document} onChange={(e) => setDraft({ ...draft, document: e.target.value })} className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+            <input placeholder="Telefone" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+          </div>
+          {err && <p style={{ fontSize: 12, color: "#DC2626" }}>{err}</p>}
+          <div className="flex justify-end">
+            <button type="button" onClick={saveNew} disabled={busy} className="px-4 py-1.5 rounded-lg" style={{ background: "#185FA5", color: "#fff", fontSize: 12, fontWeight: 500, opacity: busy ? 0.7 : 1 }}>
+              {busy ? "Salvando..." : "Cadastrar e usar"}
+            </button>
+          </div>
+        </div>
+      ) : value.name ? (
+        <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#F3F4F6" }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 500, color: "#111827" }} className="truncate">{value.name}</p>
+            {(value.document || value.phone) && <p style={{ fontSize: 11, color: "#6B7280" }}>{[value.document && formatDocument(value.document), value.phone].filter(Boolean).join(" · ")}</p>}
+          </div>
+          <button type="button" onClick={() => onChange(emptyPerson)} title="Trocar" style={{ color: "#6B7280" }}><X size={15} /></button>
+        </div>
+      ) : (
+        <div className="relative">
+          <Search size={14} style={{ position: "absolute", left: 10, top: 12, color: "#9CA3AF" }} />
+          <input placeholder="Buscar por nome, CPF ou telefone" value={query}
+            onChange={(e) => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            className="w-full rounded-lg pl-8 pr-3 py-2.5" style={inputStyle} />
+          {open && query.trim().length >= 2 && (
+            <div className="absolute left-0 right-0 mt-1 rounded-lg overflow-hidden" style={{ background: "#fff", border: "0.5px solid rgba(0,0,0,0.12)", boxShadow: "0 8px 24px rgba(0,0,0,0.1)", zIndex: 5 }}>
+              {searching && <p className="px-3 py-2" style={{ fontSize: 12, color: "#9CA3AF" }}>Buscando...</p>}
+              {!searching && results.length === 0 && (
+                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCreating(true); setDraft({ ...emptyPerson, name: query }); }}
+                  className="w-full text-left px-3 py-2" style={{ fontSize: 12, color: "#185FA5" }}>Ninguém encontrado. Cadastrar "{query.trim()}"</button>
+              )}
+              {results.map((c) => (
+                <button key={c.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(c)}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50" style={{ borderBottom: "0.5px solid rgba(0,0,0,0.05)" }}>
+                  <p style={{ fontSize: 13, color: "#111827" }}>{c.name}</p>
+                  <p style={{ fontSize: 11, color: "#9CA3AF" }}>{[c.document && formatDocument(c.document), c.phone].filter(Boolean).join(" · ") || "Sem documento"}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Débitos (lista) ----------
+type DebtRow = { date: string; description: string; amount: string };
+
+function localToday() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+
+function DebtsModal({ initial, onClose, onSave }: { initial: DebtRow[]; onClose: () => void; onSave: (rows: DebtRow[]) => void }) {
+  const today = localToday();
+  const [rows, setRows] = useState<DebtRow[]>(initial.length ? initial : [{ date: today, description: "", amount: "" }]);
+  const [err, setErr] = useState<string | null>(null);
+  const total = rows.reduce((s, r) => { const v = r.amount.trim() ? parseBRL(r.amount) : 0; return s + (Number.isNaN(v) ? 0 : v); }, 0);
+  const update = (i: number, patch: Partial<DebtRow>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
+  const confirm = () => {
+    const filled = rows.filter((r) => r.description.trim() || r.amount.trim());
+    for (const r of filled) {
+      if (!r.description.trim()) { setErr("Preencha a descrição de todos os débitos."); return; }
+      const v = parseBRL(r.amount);
+      if (!r.amount.trim() || Number.isNaN(v) || v < 0) { setErr(`Valor inválido em "${r.description}". Ex: 350,00`); return; }
+    }
+    onSave(filled);
+  };
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)", zIndex: 60 }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="w-full" style={{ background: "#fff", borderRadius: 14, maxWidth: 560, margin: 16 }}>
+        <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: "0.5px solid rgba(0,0,0,0.08)" }}>
+          <h4 style={{ fontSize: 15, fontWeight: 600 }}>Débitos</h4>
+          <button onClick={onClose} style={{ color: "#6B7280" }}><X size={18} /></button>
+        </div>
+        <div className="px-5 py-4 space-y-2" style={{ maxHeight: "60vh", overflowY: "auto" }}>
+          <div className="grid gap-2" style={{ gridTemplateColumns: "130px 1fr 120px 32px", fontSize: 11, color: "#9CA3AF", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <span>Data</span><span>Descrição</span><span>Valor</span><span />
+          </div>
+          {rows.map((r, i) => (
+            <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: "130px 1fr 120px 32px" }}>
+              <input type="date" value={r.date} onChange={(e) => update(i, { date: e.target.value })} className="rounded-lg px-2 py-2" style={inputStyle} />
+              <input placeholder="Ex: IPVA 2026, multa..." value={r.description} onChange={(e) => update(i, { description: e.target.value })} className="rounded-lg px-3 py-2" style={inputStyle} />
+              <input placeholder="0,00" inputMode="decimal" value={r.amount} onChange={(e) => update(i, { amount: e.target.value })} className="rounded-lg px-3 py-2" style={inputStyle} />
+              <button type="button" onClick={() => setRows(rows.filter((_, j) => j !== i))} title="Remover" style={{ color: "#DC2626" }}><Trash2 size={16} /></button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setRows([...rows, { date: today, description: "", amount: "" }])}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg" style={{ fontSize: 12, color: "#185FA5", border: "1px dashed #185FA5" }}>
+            <Plus size={14} /> Adicionar débito
+          </button>
+          {err && <p style={{ fontSize: 12, color: "#DC2626" }}>{err}</p>}
+        </div>
+        <div className="flex items-center justify-between px-5 py-3.5" style={{ borderTop: "0.5px solid rgba(0,0,0,0.08)" }}>
+          <span style={{ fontSize: 13, color: "#374151" }}>Total: <strong>{currency(total)}</strong></span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg" style={{ border: "0.5px solid rgba(0,0,0,0.1)", fontSize: 13 }}>Cancelar</button>
+            <button onClick={confirm} className="px-4 py-2 rounded-lg" style={{ background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500 }}>Confirmar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle | null; onClose: () => void; onSaved: () => void }) {
   // Tipo
   const [type, setType] = useState<api.VehicleType>(initial?.type ?? "car");
@@ -441,6 +612,44 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
   // Preços
   const [cost, setCost] = useState(initial ? String(initial.cost) : "");
   const [price, setPrice] = useState(initial ? String(initial.price) : "");
+
+  // Entrada (fornecedor, canal, valores)
+  const [supplier, setSupplier] = useState<Person>(emptyPerson);
+  const [sameOwner, setSameOwner] = useState(true);
+  const [docOwner, setDocOwner] = useState<Person>(emptyPerson);
+  const [intermediary, setIntermediary] = useState("");
+  const [entryChannel, setEntryChannel] = useState<dv.EntryChannel | "">("");
+  const [entryDate, setEntryDate] = useState(() => (initial ? initial.createdAt.slice(0, 10) : localToday()));
+  const [payoff, setPayoff] = useState("");
+  const [debts, setDebts] = useState<DebtRow[]>([]);
+  const [debtsOpen, setDebtsOpen] = useState(false);
+  const [entryNotes, setEntryNotes] = useState("");
+  const [loadingEntry, setLoadingEntry] = useState(!!initial);
+  const [savedId, setSavedId] = useState<string | null>(initial?.id ?? null);
+
+  // Ao editar, carrega os dados de entrada já salvos
+  useEffect(() => {
+    if (!initial) return;
+    let alive = true;
+    dv.getAcquisition(initial.id).then((a) => {
+      if (!alive || !a) return;
+      const sup = { name: a.supplierName ?? "", document: a.supplierDocument ?? "", phone: a.supplierPhone ?? "" };
+      const own = { name: a.documentOwnerName ?? "", document: a.documentOwnerDocument ?? "", phone: "" };
+      setSupplier(sup);
+      const same = !own.name || (own.name === sup.name && digitsOnly(own.document) === digitsOnly(sup.document));
+      setSameOwner(same);
+      setDocOwner(same ? emptyPerson : own);
+      setIntermediary(a.intermediary ?? "");
+      setEntryChannel(a.entryChannel ?? (a.ownershipType === "consigned" ? "consignados" : ""));
+      setEntryDate(a.entryDate.slice(0, 10));
+      setPayoff(Number(a.payoffValue) ? String(a.payoffValue).replace(".", ",") : "");
+      setDebts(a.debts?.length
+        ? a.debts.map((d) => ({ date: d.date ?? "", description: d.description, amount: String(d.amount).replace(".", ",") }))
+        : Number(a.debtsValue) ? [{ date: "", description: "Débitos", amount: String(a.debtsValue).replace(".", ",") }] : []);
+      setEntryNotes(a.notes ?? "");
+    }).catch(() => { /* sem dados de entrada ainda */ }).finally(() => alive && setLoadingEntry(false));
+    return () => { alive = false; };
+  }, [initial]);
 
   // Extras
   const [description, setDescription] = useState(initial?.description ?? "");
@@ -520,6 +729,9 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
   const costNum = parseBRL(cost);
   const priceNum = parseBRL(price);
   const liveMargin = costNum > 0 && priceNum > 0 ? ((priceNum - costNum) / costNum) * 100 : null;
+  const payoffNum = payoff.trim() ? parseBRL(payoff) : 0;
+  const debtsTotal = debts.reduce((s, d) => s + (parseBRL(d.amount) || 0), 0);
+  const netValue = (Number.isNaN(costNum) ? 0 : costNum) - (Number.isNaN(payoffNum) ? 0 : payoffNum) - debtsTotal;
 
   const toggleOptional = (o: string) =>
     setSelectedOptionals((prev) => prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o]);
@@ -536,7 +748,7 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
       return;
     }
     if (!brand.trim() || !model.trim() || !year || !cost.trim() || !price.trim()) {
-      setError(`Preencha pelo menos marca, modelo, ${isOther ? "ano" : "ano modelo"}, custo e preço de venda.`);
+      setError(`Preencha pelo menos marca, modelo, ${isOther ? "ano" : "ano modelo"}, valor de entrada e valor para venda.`);
       return;
     }
     if (!yearNum || yearNum < 1950 || yearNum > maxYear) {
@@ -551,12 +763,28 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
       setError("O Renavam deve ter 11 números (ou 9, nos documentos mais antigos).");
       return;
     }
+    if (!initial && !supplier.name.trim()) {
+      setError("Informe o fornecedor (de quem a loja recebeu o veículo).");
+      return;
+    }
+    if (!initial && !entryChannel) {
+      setError("Escolha o canal da entrada.");
+      return;
+    }
+    if (!sameOwner && supplier.name && !docOwner.name.trim()) {
+      setError("Informe em nome de quem está o documento (ou marque \"Mesmo do fornecedor\").");
+      return;
+    }
+    if (Number.isNaN(payoffNum) || payoffNum < 0) {
+      setError("Valor da quitação inválido. Ex: 5.000,00");
+      return;
+    }
     if (Number.isNaN(costNum) || costNum < 0) {
-      setError("Preço de custo inválido. Use só números, ex: 25000 ou 25.000,00.");
+      setError("Valor de entrada inválido. Use só números, ex: 25000 ou 25.000,00.");
       return;
     }
     if (Number.isNaN(priceNum) || priceNum < 0) {
-      setError("Preço de venda inválido. Use só números, ex: 30000 ou 30.000,00.");
+      setError("Valor para venda inválido. Use só números, ex: 30000 ou 30.000,00.");
       return;
     }
 
@@ -591,8 +819,32 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
         description: description.trim() || null,
         optionals: selectedOptionals.filter((o) => optionalsList.includes(o)),
       };
-      if (initial) await api.updateVehicle(initial.id, payload);
-      else await api.createVehicle(payload);
+      // Se o veículo já foi criado numa tentativa anterior, só atualiza (não duplica)
+      let vehicleId = savedId;
+      if (vehicleId) await api.updateVehicle(vehicleId, payload);
+      else vehicleId = (await api.createVehicle(payload)).id;
+      setSavedId(vehicleId);
+
+      const hasEntry = supplier.name.trim() || entryChannel || intermediary.trim() || entryNotes.trim() || payoffNum > 0 || debts.length > 0;
+      if (hasEntry && !loadingEntry) {
+        const owner = sameOwner ? supplier : docOwner;
+        try {
+          await dv.saveAcquisition(vehicleId, {
+            entryDate,
+            ownershipType: entryChannel === "consignados" ? "consigned" : "own",
+            entryChannel: entryChannel || undefined,
+            intermediary: intermediary.trim(),
+            supplierName: supplier.name.trim(), supplierDocument: digitsOnly(supplier.document), supplierPhone: supplier.phone.trim(),
+            documentOwnerName: owner.name.trim(), documentOwnerDocument: digitsOnly(owner.document),
+            purchaseValue: costNum, payoffValue: payoffNum,
+            debts: debts.map((d) => ({ date: d.date || null, description: d.description.trim(), amount: parseBRL(d.amount) })),
+            notes: entryNotes.trim(),
+          });
+        } catch (err) {
+          setError(`O veículo foi salvo, mas os dados de entrada não: ${err instanceof Error ? err.message : "erro desconhecido"}. Corrija e clique em salvar de novo.`);
+          return;
+        }
+      }
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível salvar o veículo");
@@ -873,14 +1125,73 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
             </div>
           </div>
 
-          {/* Preços */}
+          {/* Entrada: de quem veio o veículo */}
           <div>
-            <p style={sectionTitleStyle}>Precificação</p>
+            <p style={sectionTitleStyle}>Entrada do veículo</p>
+            {loadingEntry ? (
+              <p style={{ fontSize: 13, color: "#9CA3AF" }} className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Carregando dados de entrada...</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <PersonPicker label="Fornecedor" required={!initial} value={supplier} onChange={setSupplier} />
+                  <div>
+                    {sameOwner ? (
+                      <div>
+                        <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Doc. em nome de{!initial ? " *" : ""}</label>
+                        <div className="rounded-lg px-3 py-2.5" style={{ ...inputStyle, background: "#F3F4F6", fontSize: 13, color: supplier.name ? "#111827" : "#9CA3AF" }}>
+                          {supplier.name || "Mesmo do fornecedor"}
+                        </div>
+                      </div>
+                    ) : (
+                      <PersonPicker label="Doc. em nome de" required={!initial} value={docOwner} onChange={setDocOwner} />
+                    )}
+                    <label className="flex items-center gap-2 mt-1.5" style={{ fontSize: 12, color: "#6B7280", cursor: "pointer" }}>
+                      <input type="checkbox" checked={sameOwner} onChange={(e) => setSameOwner(e.target.checked)} /> Mesmo do fornecedor
+                    </label>
+                  </div>
+                  <Field label="Intermediário">
+                    <input placeholder="Quem intermediou (opcional)" value={intermediary} onChange={(e) => setIntermediary(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+                  </Field>
+                  <Field label={`Canal da entrada${!initial ? " *" : ""}`}>
+                    <select value={entryChannel} onChange={(e) => setEntryChannel(e.target.value as dv.EntryChannel | "")} className="w-full rounded-lg px-3 py-2.5" style={selectStyle}>
+                      <option value="">Selecione</option>
+                      {dv.ENTRY_CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Data de entrada">
+                    <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+                  </Field>
+                </div>
+                {entryChannel === "consignados" && (
+                  <p style={{ fontSize: 12, color: "#6B7280" }}>Consignado: o veículo não entra como compra no Financeiro.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Valores */}
+          <div>
+            <p style={sectionTitleStyle}>Valores</p>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Preço de custo (privado) *">
+              <Field label="Valor de entrada (privado) *">
                 <input placeholder="Ex: 25.000,00" value={cost} inputMode="decimal" onChange={(e) => setCost(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, background: "#FEF3C7" }} />
               </Field>
-              <Field label="Preço de venda *">
+              <Field label="Valor da quitação">
+                <input placeholder="0,00" value={payoff} inputMode="decimal" onChange={(e) => setPayoff(e.target.value)} disabled={loadingEntry} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+              </Field>
+              <Field label="Valor de débitos">
+                <div className="flex gap-2">
+                  <input readOnly value={currency(debtsTotal)} className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, background: "#F3F4F6" }} />
+                  <button type="button" onClick={() => setDebtsOpen(true)} disabled={loadingEntry} className="flex items-center gap-1 px-3 rounded-lg shrink-0"
+                    style={{ border: "1px solid #185FA5", color: "#185FA5", fontSize: 12, fontWeight: 500 }}>
+                    <Receipt size={14} /> Débitos{debts.length ? ` (${debts.length})` : ""}
+                  </button>
+                </div>
+              </Field>
+              <Field label="Valor líquido">
+                <input readOnly value={currency(netValue)} title="Entrada − quitação − débitos" className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, background: "#F3F4F6", color: netValue < 0 ? "#DC2626" : "#111827" }} />
+              </Field>
+              <Field label="Valor para venda *">
                 <input placeholder="Ex: 30.000,00" value={price} inputMode="decimal" onChange={(e) => setPrice(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
               </Field>
             </div>
@@ -892,10 +1203,15 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
           </div>
 
           {/* Observações */}
-          <div>
-            <p style={sectionTitleStyle}>Observações internas</p>
-            <textarea placeholder="Notas sobre o veículo (visíveis apenas para você)" rows={3} value={description} onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, resize: "vertical" }} />
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Observação de entrada">
+              <textarea placeholder="Como o veículo chegou, combinados com o fornecedor..." rows={4} value={entryNotes} onChange={(e) => setEntryNotes(e.target.value)} disabled={loadingEntry}
+                className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, resize: "vertical" }} />
+            </Field>
+            <Field label="Observações internas">
+              <textarea placeholder="Notas da loja (não aparecem no site)" rows={4} value={description} onChange={(e) => setDescription(e.target.value)}
+                className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, resize: "vertical" }} />
+            </Field>
           </div>
         </div>
 
@@ -907,6 +1223,7 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
           </button>
         </div>
       </div>
+      {debtsOpen && <DebtsModal initial={debts} onClose={() => setDebtsOpen(false)} onSave={(rows) => { setDebts(rows); setDebtsOpen(false); }} />}
     </div>
   );
 }
