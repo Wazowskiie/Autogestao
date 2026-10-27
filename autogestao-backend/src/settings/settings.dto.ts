@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, IsObject } from 'class-validator';
 
 const trim = () => Transform(({ value }) => (typeof value === 'string' ? value.trim() : value));
 
@@ -11,6 +11,8 @@ export class UpdateDealershipDto {
   @IsOptional() @trim() @IsString() @MaxLength(80) city?: string;
   @IsOptional() @trim() @IsString() @MaxLength(2) state?: string;
   @IsOptional() @IsString() @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'Cor inválida' }) primaryColor?: string;
+  // WhatsApp e redes sociais (link ou @). Ver social-links.ts
+  @IsOptional() @IsObject() socialLinks?: Record<string, string | null>;
   // Endereço do site: chronosauto.com.br/loja/<slug>
   @IsOptional() @trim() @IsString() @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/, { message: 'Use só letras minúsculas, números e hífen (ex: chronos-auto)' }) @MinLength(3, { message: 'Endereço do site muito curto' }) @MaxLength(40) slug?: string;
   // Endereço (aparece no contrato e nas promissórias; é o mesmo da nota fiscal)

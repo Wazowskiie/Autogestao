@@ -8,7 +8,9 @@ export interface StoreInfo {
   logoUrl: string | null; coverUrl: string | null; primaryColor: string | null;
   street: string | null; number: string | null; district: string | null; zip: string | null;
   minDownPaymentPercent: number | null;
+  socialLinks?: SocialLinks;
 }
+export interface SocialLinks { whatsapp?: string | null; instagram?: string | null; facebook?: string | null; tiktok?: string | null; youtube?: string | null; website?: string | null }
 
 export interface FiscalInfo {
   configured: boolean;
@@ -43,7 +45,7 @@ export interface FiscalInput {
 
 export const getSettings = () => request<SettingsData>("/settings");
 
-export const updateStore = (data: Partial<Omit<StoreInfo, "logoUrl" | "coverUrl">>) =>
+export const updateStore = (data: Partial<Omit<StoreInfo, "logoUrl" | "coverUrl" | "socialLinks">> & { socialLinks?: Record<string, string | null> }) =>
   request<SettingsData>("/settings/dealership", { method: "PATCH", body: data });
 
 export function uploadStoreImage(kind: "logo" | "cover", file: File) {

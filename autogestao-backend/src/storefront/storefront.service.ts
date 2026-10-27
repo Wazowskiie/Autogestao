@@ -1,3 +1,4 @@
+import { socialUrls, SocialLinks } from '../settings/social-links';
 import { createPublicLead } from '../crm/crm-helpers';
 import { PublicLeadDto } from '../crm/crm-extras.dto';
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
@@ -48,6 +49,9 @@ export class StorefrontService {
       logoUrl: dealership.logoUrl,
       coverUrl: dealership.coverUrl,
       primaryColor: dealership.primaryColor,
+      // WhatsApp e redes sociais já como links
+      social: socialUrls(dealership.socialLinks as SocialLinks | null),
+      whatsapp: (dealership.socialLinks as SocialLinks | null)?.whatsapp ?? null,
       vehicleCount,
       // O site só mostra o chat se o plano da loja tiver "Atendimentos"
       chatEnabled: this.plans ? await this.plans.has(dealership.id, 'chat') : true,

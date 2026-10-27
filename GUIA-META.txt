@@ -1,0 +1,74 @@
+PASSO A PASSO: CONECTAR O WHATSAPP DA LOJA NA META
+==================================================
+Faça no computador. Leva uns 30-40 minutos (sem contar a verificação da empresa, que é da Meta).
+
+ANTES DE COMEÇAR
+- Escolha o número. O número ligado na API oficial normalmente deixa de funcionar no app
+  do WhatsApp do celular. O mais seguro é usar um número que não esteja no WhatsApp
+  (ou um chip novo). Se a Meta oferecer na tela a opção de usar o número do
+  "WhatsApp Business app" junto com a API, dá para manter o app, mas confira o aviso dela.
+- Tenha em mãos: CNPJ, um e-mail da empresa e o site (chronosauto.com.br).
+- A Meta pede um link de "Política de privacidade" para publicar o app. Pode ser uma página
+  simples no seu site. Se precisar, eu faço essa página pra você.
+
+PARTE 1 - CONTA DE EMPRESA
+1. Entre em business.facebook.com e crie (ou use) o Portfólio empresarial da Chronos.
+2. Configurações da empresa → Central de segurança → Verificação da empresa: envie os dados.
+   Sem a verificação dá para testar, mas com limite de conversas por dia.
+
+PARTE 2 - APP DA META
+3. Entre em developers.facebook.com → Meus apps → Criar app.
+4. Escolha o caso de uso de WhatsApp ("Conectar-se com clientes pelo WhatsApp")
+   e ligue ao portfólio da Chronos.
+5. No menu do app: WhatsApp → Configuração da API (API Setup).
+   - Clique em "Adicionar número de telefone" e cadastre o número da loja
+     (nome de exibição: Chronos Auto). Confirme pelo código SMS/ligação.
+   - Na mesma tela, anote:
+     a) Identificação do número de telefone (Phone number ID)
+     b) Identificação da conta do WhatsApp Business (WABA ID)
+
+PARTE 3 - TOKEN PERMANENTE (o temporário vence em 24h, não use)
+6. business.facebook.com → Configurações da empresa → Usuários → Usuários do sistema → Adicionar.
+   Nome: AutoGestao. Função: Administrador.
+7. Clique no usuário → Atribuir ativos → selecione o app (controle total) e a conta do
+   WhatsApp (controle total).
+8. Clique em "Gerar novo token" → escolha o app → expiração "Nunca" →
+   marque as permissões whatsapp_business_messaging e whatsapp_business_management.
+   Copie o token (começa com EAA...). Guarde: ele não aparece de novo.
+
+PARTE 4 - CHAVE SECRETA DO APP
+9. developers.facebook.com → seu app → Configurações do app → Básico →
+   "Chave secreta do app" → Mostrar. Copie.
+
+PARTE 5 - NO AUTOGESTÃO
+10. Configurações → Integrações → WhatsApp oficial (Meta):
+    cole o Phone number ID, o WABA ID, o token e a chave secreta → "Salvar e testar".
+    Tem que ficar "Conectado" com o nome e o número da loja.
+11. Na mesma tela aparecem a "URL de retorno" e o "Token de verificação". Deixe aberto.
+
+PARTE 6 - WEBHOOK (é o que traz as mensagens)
+12. developers.facebook.com → seu app → WhatsApp → Configuração → Webhook → Editar.
+    - URL de retorno: cole a do AutoGestão (https://chronosauto.com.br/api/v1/whatsapp/webhook)
+    - Token de verificação: cole o do AutoGestão
+    - Verificar e salvar.
+13. Ainda em Webhook → "Gerenciar" (campos do webhook) → assine o campo "messages".
+
+PARTE 7 - PUBLICAR O APP
+14. No topo do app, troque de "Desenvolvimento" para "Publicado/Ativo" (Live).
+    Em desenvolvimento, a Meta só entrega mensagens de números de teste.
+    Aqui ela pede a política de privacidade (passo "Antes de começar").
+15. WhatsApp Manager → Configurações de pagamento: cadastre um cartão. Responder quem
+    chamou costuma ser grátis; mensagens que a loja começa são cobradas pela Meta.
+
+TESTE
+16. De outro celular, mande "oi" para o número da loja.
+    Em alguns segundos aparece um lead novo no CRM (origem WhatsApp) com a mensagem.
+    Abra o lead → aba WhatsApp → responda. A resposta chega no celular.
+
+SE DER ERRO
+- "Token expirado ou inválido": gere o token pelo usuário do sistema (Parte 3) com
+  expiração "Nunca" e salve de novo.
+- Webhook não verifica: confira se a URL é https e se o token foi colado sem espaço.
+- Mensagens não chegam: confira se o campo "messages" está assinado (passo 13) e se o app
+  está publicado (passo 14). Em Integrações aparece a hora do último aviso da Meta.
+- Qualquer outra coisa: me manda um print.

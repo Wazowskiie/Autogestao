@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Copy, MessageCircle } from 'lucide-react';
 import * as crm from '../../../lib/crm-api';
 import { useAuth } from '../../../lib/auth-context';
+import { getSettings } from '../../../lib/settings-api';
 import { CATEGORY_LABELS, TemplateContext, renderTemplate, waLink } from './common';
 
 export function WhatsAppSender({ phone, context, leadId, category, onClose, onSent }: {
@@ -11,7 +12,9 @@ export function WhatsAppSender({ phone, context, leadId, category, onClose, onSe
 }) {
   const auth = useAuth();
   // Só sobrescreve o padrão (loja, vendedor logado) com o que veio preenchido
+  const [social, setSocial] = useState<{ instagram?: string | null; whatsapp?: string | null }>({});
   const ctx: TemplateContext = { store: auth.dealership?.name, slug: auth.dealership?.slug, seller: auth.user?.name,
+    instagram: social.instagram, storeWhatsapp: social.whatsapp,
     ...Object.fromEntries(Object.entries(context).filter(([, v]) => v != null && v !== '')) };
   const [templates, setTemplates] = useState<crm.Template[]>([]);
   const [selected, setSelected] = useState<string>('');
@@ -19,10 +22,12 @@ export function WhatsAppSender({ phone, context, leadId, category, onClose, onSe
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    crm.getTemplates().then((t) => {
+    Promise.all([crm.getTemplates(), getSettings().then((d) => d.dealership.socialLinks ?? {}).catch(() => ({}))]).then(([t, links]) => {
+      const so = links as { instagram?: string | null; whatsapp?: string | null };
+      setSocial(so);
       setTemplates(t);
       const first = t.find((x) => x.category === category) ?? t[0];
-      if (first) { setSelected(first.id); setText(renderTemplate(first.body, ctx)); }
+      if (first) { setSelected(first.id); setText(renderTemplate(first.body, { ...ctx, instagram: so.instagram, storeWhatsapp: so.whatsapp })); }
     }).catch((e) => setError(e.message));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

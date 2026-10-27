@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Search, Car, Bike, Truck, Phone, MapPin, X, Gauge, Calendar } from "lucide-react";
+import { Search, Car, Bike, Truck, Phone, MapPin, X, Gauge, Calendar, Instagram, Facebook, Youtube, Music2, Globe } from "lucide-react";
 import * as api from "../../lib/api";
 import { CustomerChat } from './CustomerChat';
 
@@ -8,6 +8,33 @@ function currency(v: number) {
 }
 
 const TYPE_LABELS: Record<string, string> = { car: "Carros", moto: "Motos", truck: "Utilitários" };
+
+// Número que atende no WhatsApp: o cadastrado em "WhatsApp e redes sociais" ou o telefone da loja
+const storeWhatsapp = (d: api.StorefrontDealership | null) => {
+  const n = (d?.whatsapp || d?.phone || "").replace(/\D/g, "");
+  return n ? `55${n.replace(/^55(?=\d{10,11}$)/, "")}` : null;
+};
+
+function SocialIcons({ dealership, light }: { dealership: api.StorefrontDealership | null; light?: boolean }) {
+  const s = dealership?.social;
+  if (!s) return null;
+  const items = [
+    { url: s.instagram, icon: Instagram, label: "Instagram" }, { url: s.facebook, icon: Facebook, label: "Facebook" },
+    { url: s.tiktok, icon: Music2, label: "TikTok" }, { url: s.youtube, icon: Youtube, label: "YouTube" }, { url: s.website, icon: Globe, label: "Site" },
+  ].filter((i) => i.url);
+  if (!items.length) return null;
+  return (
+    <div className="flex items-center gap-2">
+      {items.map(({ url, icon: Icon, label }) => (
+        <a key={label} href={url!} target="_blank" rel="noreferrer" title={label} aria-label={label}
+          className="flex items-center justify-center rounded-full"
+          style={{ width: 34, height: 34, background: light ? "rgba(255,255,255,0.18)" : "#F4F6F9", color: light ? "#fff" : "#374151" }}>
+          <Icon size={16} />
+        </a>
+      ))}
+    </div>
+  );
+}
 
 export function PublicStorefront({ slug, onNavigate }: { slug: string; onNavigate?: (page: string) => void }) {
   const [dealership, setDealership] = useState<api.StorefrontDealership | null>(null);
@@ -92,6 +119,7 @@ export function PublicStorefront({ slug, onNavigate }: { slug: string; onNavigat
               <span style={{ fontSize: 13 }}>{[dealership?.city, dealership?.state].filter(Boolean).join(" - ")}</span>
             </div>
           )}
+          <div className="mt-3"><SocialIcons dealership={dealership} light /></div>
         </div>
       </div>
 
@@ -112,8 +140,8 @@ export function PublicStorefront({ slug, onNavigate }: { slug: string; onNavigat
               </button>
             ))}
           </div>
-          {dealership?.phone && (
-            <a href={`https://wa.me/55${dealership.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
+          {storeWhatsapp(dealership) && (
+            <a href={`https://wa.me/${storeWhatsapp(dealership)}`} target="_blank" rel="noreferrer"
               className="flex items-center gap-2 px-4 py-2 rounded-lg ml-auto" style={{ background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 500 }}>
               <Phone size={14} /> WhatsApp
             </a>
@@ -155,6 +183,19 @@ export function PublicStorefront({ slug, onNavigate }: { slug: string; onNavigat
           })}
         </div>
       </div>
+
+      {/* Rodapé */}
+      <footer className="px-6 pt-8" style={{ background: "#fff", borderTop: "1px solid rgba(0,0,0,0.08)", paddingBottom: 96 }}>
+        <div className="flex items-center justify-between gap-4 flex-wrap" style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 700, color: "#0F1923" }}>{dealership?.name}</p>
+            <p style={{ fontSize: 12, color: "#6B7280" }}>
+              {[dealership?.city && dealership?.state ? `${dealership.city} - ${dealership.state}` : dealership?.city, storeWhatsapp(dealership) ? `WhatsApp ${(dealership?.whatsapp || dealership?.phone || "").replace(/\D/g, "").replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3")}` : null].filter(Boolean).join(" · ")}
+            </p>
+          </div>
+          <SocialIcons dealership={dealership} />
+        </div>
+      </footer>
 
       {selected && (
         <VehicleDetailModal vehicle={selected} dealership={dealership} primaryColor={primaryColor} slug={slug} onClose={() => setSelected(null)} />
@@ -261,8 +302,8 @@ function VehicleDetailModal({ vehicle, dealership, primaryColor, slug, onClose }
           )}
 
           <div className="flex gap-3 mt-6">
-            {dealership?.phone && (
-              <a href={`https://wa.me/55${dealership.phone.replace(/\D/g, "")}?text=${waMessage}`} target="_blank" rel="noreferrer"
+            {storeWhatsapp(dealership) && (
+              <a href={`https://wa.me/${storeWhatsapp(dealership)}?text=${waMessage}`} target="_blank" rel="noreferrer"
                 className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg" style={{ background: "#25D366", color: "#fff", fontSize: 14, fontWeight: 500 }}>
                 <Phone size={16} /> Falar no WhatsApp
               </a>

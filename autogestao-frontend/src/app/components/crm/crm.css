@@ -28,3 +28,15 @@
 .crm-task:has(.crm-followup-main){align-items:center}
 .crm-task:has(.crm-followup-main) .crm-task-actions{flex-shrink:0;flex-wrap:nowrap}
 .crm-agenda>.crm-section-heading{flex-wrap:wrap;justify-content:space-between;margin-bottom:10px}
+.crm-wa-chat{display:flex;flex-direction:column;gap:10px;min-height:360px}
+.crm-wa-thread{display:flex;flex-direction:column;gap:6px;background:#efeae2;border-radius:12px;padding:12px;max-height:420px;min-height:240px;overflow-y:auto}
+.crm-wa-bubble{max-width:78%;padding:7px 10px 4px;border-radius:10px;font-size:13px;line-height:1.4;box-shadow:0 1px 1px #0000000f;white-space:pre-wrap;overflow-wrap:anywhere}
+.crm-wa-bubble.in{align-self:flex-start;background:#fff;border-top-left-radius:2px}
+.crm-wa-bubble.out{align-self:flex-end;background:#d9fdd3;border-top-right-radius:2px}
+.crm-wa-bubble small{display:flex;align-items:center;justify-content:flex-end;gap:3px;font-size:10px;color:#667781;margin-top:2px}
+.crm-wa-bubble .crm-wa-error{color:#b91c1c;justify-content:flex-start}
+.crm-wa-composer{display:flex;flex-direction:column;gap:6px}
+.crm-wa-window{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:#15803d;flex-wrap:wrap}.crm-wa-window select{font-size:12px;border:1px solid #d5dfeb;border-radius:7px;padding:5px 8px;background:#fff;max-width:220px}
+.crm-wa-input{display:flex;gap:8px;align-items:flex-end}.crm-wa-input textarea{flex:1;font:inherit;font-size:13px;border:1px solid #d5dfeb;border-radius:10px;padding:9px 11px;resize:none;outline:none}.crm-wa-input button{height:42px;width:46px;border-radius:10px !important}
+.crm-wa-closed{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff7e6;border-radius:10px;padding:10px 12px;font-size:12px;color:#8a4b06;flex-wrap:wrap}
+.crm-wa-new{display:inline-flex;align-items:center;font-size:11px;font-weight:700;color:#15803d;background:#dcfce7;border-radius:6px;padding:2px 7px;margin:2px 0 4px}

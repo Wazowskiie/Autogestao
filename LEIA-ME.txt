@@ -1,60 +1,47 @@
-CRM COMPLETO
-============
+WHATSAPP OFICIAL + REDES SOCIAIS
+================================
 
 O que entrou
-1. Lead entra sozinho: formulário "Tenho interesse" na página de cada veículo do site
-   (informações, simular financiamento ou agendar visita, com a troca do cliente).
-   E o botão "Lead rápido" para lançar quem chamou no WhatsApp, Instagram, Facebook...
-2. Lead e venda ligados: botões "Fechar venda" e "Reservar" dentro do lead, com cliente,
-   veículo e troca já preenchidos. Venda registrada leva o lead para "Ganhos";
-   venda cancelada leva para "Perdidos". Reserva move o lead para "Negociação".
-3. Lista de desejos: aba "Desejos" no lead. Quando entra no estoque um veículo que combina
-   (inclusive moto que entrou na troca ou que baixou de preço), o vendedor recebe uma tarefa
-   e o veículo aparece na aba Desejos do CRM.
-4. Mensagens prontas no WhatsApp: botão "WhatsApp" no lead, 8 mensagens prontas (editáveis em
-   "Mensagens"), com nome do cliente, veículo, preço e link do veículo no seu site.
-   A mensagem entra no histórico e conta como contato.
-5. Troca do cliente: aba "Troca" no lead (busca pela placa e FIPE). Vai junto para a venda.
-6. Pós-venda: aba "Pós-venda" com aniversários, revisão de 1 ano e "hora de trocar" (2 anos).
-   Botão WhatsApp e "Criar oportunidade". Prazos ajustáveis em "Configurar".
-7. Alerta de lead esquecido (aviso laranja + filtro "Sem contato") e rodízio de leads entre
-   vendedores (ligar em "Configurar").
-8. Relatório: leads, conversão, tempo de resposta e vendas por origem e por vendedor,
-   e os motivos de perda. Exporta CSV.
-Extras
-- Vendas: aviso "Financiamentos" com as fichas em análise, aprovadas e recusadas.
-- Link do site corrigido (canto de cima): agora mostra o endereço real /loja/seu-endereço.
-- Configurações → Loja: o dono pode mudar o endereço do site (ex: chronos-auto).
-  Atenção: o link antigo para de funcionar quando mudar.
+1. Configurações → Loja → "WhatsApp e redes sociais": WhatsApp da loja, Instagram,
+   Facebook, TikTok, YouTube e outro site (pode colar o link ou só o @).
+   - Aparecem como ícones no topo e no rodapé do seu site.
+   - Os botões "WhatsApp" do site passam a usar esse número.
+   - Mensagens prontas do CRM ganham {instagram} e {whatsapp_loja}.
+2. Configurações → Integrações → "WhatsApp oficial (Meta)": conexão com a API oficial.
+   - Cada mensagem que chegar vira lead no CRM (origem WhatsApp), entra no rodízio
+     e cria a tarefa "Responder (WhatsApp)".
+   - No lead, aba "WhatsApp": a conversa e a caixa para responder pelo sistema.
+   - O card do lead mostra "X mensagens novas no WhatsApp".
+   - Regra da Meta: só dá para responder pelo sistema até 24h depois da última
+     mensagem do cliente. Depois disso, o sistema oferece o WhatsApp normal.
 
-1) COPIE OS ARQUIVOS
-Copie as pastas deste zip por cima das suas.
-Os arquivos App.tsx, Login.tsx, Settings.tsx, PublicStorefront.tsx e schema.prisma vão inteiros.
-O schema.prisma deste zip já tem a parte dos Anúncios. Se você mexeu em algum desses arquivos
-por conta própria nos últimos dias, me avise antes de substituir.
+1) COPIE OS ARQUIVOS por cima dos seus.
+   Vão inteiros: schema.prisma, main.ts, app.module.ts (já com os Anúncios),
+   Settings.tsx e PublicStorefront.tsx.
 
-2) NO SEU PC, DENTRO DA PASTA autogestao-backend
-  cd autogestao-backend
-  npx prisma migrate deploy
-  npx prisma generate
-  npm run build
-  (Se aparecer "Need to install the following packages", responda n: pasta errada.)
+2) NO SEU PC, dentro de autogestao-backend
+   npx prisma migrate deploy
+   npx prisma generate
+   npm run build
 
-3) COMMIT E PUSH
+3) COMMIT E PUSH. Mensagem sugerida:
+   WhatsApp oficial (Meta) no CRM e redes sociais da loja
 
 4) NO VPS
-  cd /var/www/Autogestao
-  cp -r autogestao-backend/storage ~/storage-backup
-  git pull origin main
-  cp -rn ~/storage-backup/. autogestao-backend/storage/
-  cd autogestao-backend
-  npm install
-  npx prisma migrate deploy
-  npx prisma generate
-  npm run build
-  cd ../autogestao-frontend
-  npm install
-  npm run build
-  pm2 restart all
-  Depois Ctrl+Shift+R no navegador.
-  Só rode o "pm2 restart all" se os dois "npm run build" terminarem sem erro.
+   cd /var/www/Autogestao
+   cp -r autogestao-backend/storage ~/storage-backup
+   git pull origin main
+   cp -rn ~/storage-backup/. autogestao-backend/storage/
+   cd autogestao-backend
+   grep -E "PUBLIC_API_URL|TOKEN_ENCRYPTION_KEY" .env | cut -d= -f1
+     (tem que aparecer as duas palavras. Se faltar alguma, me avise antes de seguir)
+   npm install
+   npx prisma migrate deploy
+   npx prisma generate
+   npm run build
+   cd ../autogestao-frontend
+   npm install
+   npm run build
+   pm2 restart all     (só se os dois builds terminarem sem erro)
+
+Depois siga o GUIA-META.txt para conectar o número.

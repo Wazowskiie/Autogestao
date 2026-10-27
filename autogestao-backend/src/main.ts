@@ -8,7 +8,10 @@ import { AppModule } from './app.module';
 import { PortugueseExceptionFilter } from './common/filters/portuguese-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // rawBody: o webhook do WhatsApp confere a assinatura da Meta no corpo original
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  // Avisos da Meta podem ter até 3 MB
+  app.useBodyParser('json', { limit: '5mb' });
 
   // Fotos dos veículos (pasta storage/public), abertas direto pelo link
   app.useStaticAssets(join(process.cwd(), 'storage', 'public'), {

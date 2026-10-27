@@ -12,6 +12,8 @@ const LEAD_INCLUDE = {
   vehicle: { select: { id: true, brand: true, model: true, year: true, price: true, status: true, photos: { take: 1 } } },
   assignedSeller: { select: { id: true, name: true, active: true } },
   tasks: { where: { status: 'open' }, orderBy: { dueAt: 'asc' as const }, take: 1, select: { id: true, title: true, dueAt: true, priority: true } },
+  // Mensagens do WhatsApp que ninguém leu ainda
+  _count: { select: { whatsappMessages: { where: { direction: 'in', readAt: null } } } },
 } as const;
 const TASK_INCLUDE = {
   lead: { select: { id: true, stage: true, archivedAt: true, customer: { select: { name: true } } } },

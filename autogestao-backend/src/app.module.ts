@@ -17,6 +17,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { PromissoryNotesModule } from './promissory-notes/promissory-notes.module';
 import { SalesModule } from './sales/sales.module';
 import { ReservationsModule } from './reservations/reservations.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { AdsModule } from './ads/ads.module';
 import { SellersModule } from './sellers/sellers.module';
 import { StorefrontModule } from './storefront/storefront.module';
@@ -48,6 +49,7 @@ import { PlansModule } from './plans/plans.module';
     LeadsModule,
     SalesModule,
     ReservationsModule,
+    WhatsappModule,
     AdsModule,
     SellersModule,
     FinancialModule,

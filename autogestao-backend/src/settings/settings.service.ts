@@ -1,3 +1,5 @@
+import { Prisma } from '../generated/prisma/client';
+import { normalizeSocialLinks, SocialLinks } from './social-links';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
@@ -41,6 +43,7 @@ export class SettingsService {
         logoUrl: d.logoUrl, coverUrl: d.coverUrl, primaryColor: d.primaryColor,
         street: d.focusNfeLogradouro, number: d.focusNfeNumero, district: d.focusNfeBairro, zip: d.focusNfeCep,
         minDownPaymentPercent: d.minDownPaymentPercent != null ? Number(d.minDownPaymentPercent) : null,
+        socialLinks: (d.socialLinks ?? {}) as SocialLinks,
       },
       // O token da NF-e nunca sai do servidor: só dizemos se ele existe
       fiscal: isManager(u)
@@ -84,10 +87,16 @@ export class SettingsService {
       const other = await this.prisma.dealership.findFirst({ where: { slug: dto.slug, NOT: { id: u.dealershipId } }, select: { id: true } });
       if (other) throw new BadRequestException('Esse endereço já está em uso por outra loja.');
     }
+    let socialLinks: SocialLinks | undefined;
+    if (dto.socialLinks) {
+      const cur = await this.prisma.dealership.findUnique({ where: { id: u.dealershipId }, select: { socialLinks: true } });
+      socialLinks = { ...((cur?.socialLinks ?? {}) as SocialLinks), ...normalizeSocialLinks(dto.socialLinks) };
+    }
     await this.prisma.dealership.update({
       where: { id: u.dealershipId },
       data: {
         name: dto.name,
+        ...(socialLinks ? { socialLinks: socialLinks as unknown as Prisma.InputJsonValue } : {}),
         ...(dto.slug ? { slug: dto.slug } : {}),
         cnpj,
         phone: dto.phone !== undefined ? digits(dto.phone) || null : undefined,

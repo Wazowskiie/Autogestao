@@ -11,8 +11,8 @@ export function localInput(v?:string|null){if(!v)return'';const d=new Date(v);d.
 export const iso=(value:string)=>value?new Date(value).toISOString():null;
 
 // ---------- Mensagens prontas ----------
-export interface TemplateContext { name?:string|null; vehicleLabel?:string|null; vehicle?:{id:string;brand:string;model:string;year:number;price?:number|string}|null; store?:string|null; slug?:string|null; seller?:string|null; }
-export const TEMPLATE_VARS:[string,string][]=[['{primeiro_nome}','Primeiro nome do cliente'],['{nome}','Nome completo'],['{veiculo}','Veículo (marca, modelo e ano)'],['{preco}','Preço do veículo'],['{link}','Link do veículo no seu site'],['{loja}','Nome da loja'],['{vendedor}','Seu nome']];
+export interface TemplateContext { name?:string|null; vehicleLabel?:string|null; instagram?:string|null; storeWhatsapp?:string|null; vehicle?:{id:string;brand:string;model:string;year:number;price?:number|string}|null; store?:string|null; slug?:string|null; seller?:string|null; }
+export const TEMPLATE_VARS:[string,string][]=[['{primeiro_nome}','Primeiro nome do cliente'],['{nome}','Nome completo'],['{veiculo}','Veículo (marca, modelo e ano)'],['{preco}','Preço do veículo'],['{link}','Link do veículo no seu site'],['{loja}','Nome da loja'],['{vendedor}','Seu nome'],['{instagram}','Instagram da loja'],['{whatsapp_loja}','WhatsApp da loja']];
 export const CATEGORY_LABELS:Record<string,string>={geral:'Geral',primeiro_contato:'Primeiro contato',disponivel:'Veículo disponível',proposta:'Proposta',retorno:'Retomar contato',desejo:'Lista de desejos',aniversario:'Aniversário',revisao:'Revisão',recompra:'Recompra'};
 export function storeLink(slug?:string|null,vehicleId?:string|null){if(!slug)return '';return `${window.location.origin}/loja/${slug}${vehicleId?`?v=${vehicleId}`:''}`;}
 export function renderTemplate(body:string,c:TemplateContext){
@@ -25,6 +25,8 @@ export function renderTemplate(body:string,c:TemplateContext){
     '{link}':storeLink(c.slug,v?.id),
     '{loja}':c.store??'nossa loja',
     '{vendedor}':(c.seller??'').trim().split(/\s+/)[0]||'a equipe',
+    '{instagram}':c.instagram?`@${c.instagram}`:'',
+    '{whatsapp_loja}':c.storeWhatsapp?c.storeWhatsapp.replace(/(\d{2})(\d{4,5})(\d{4})/,'($1) $2-$3'):'',
   };
   return body.replace(/\{[a-z_]+\}/g,m=>map[m]??m).replace(/\n{3,}/g,'\n\n').trim();
 }

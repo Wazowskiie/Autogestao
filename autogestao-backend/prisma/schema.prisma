@@ -61,6 +61,8 @@ model Dealership {
   // Entrada mínima nas vendas com promissória (% do valor do veículo); vazio = sem mínimo
   // Configurações do CRM: rodízio de leads, prazo de resposta e pós-venda
   crmSettings           Json?    @map("crm_settings")
+  // WhatsApp e redes sociais: { whatsapp, instagram, facebook, tiktok, youtube, website }
+  socialLinks           Json?    @map("social_links")
   minDownPaymentPercent Decimal? @db.Decimal(5, 2) @map("min_down_payment_percent")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
@@ -94,6 +96,7 @@ model Dealership {
   crmTasks CrmTask[]
   adListings AdListing[]
   crmTemplates CrmMessageTemplate[]
+  whatsappAccount WhatsappAccount?
 
   @@map("dealerships")
 }
@@ -240,6 +243,7 @@ model Customer {
   promissoryNotes PromissoryNote[]
   reservations    VehicleReservation[]
   followups       CrmFollowup[]
+  whatsappMessages WhatsappMessage[]
   chatConversations ChatConversation[]
 
   @@index([dealershipId])
@@ -273,6 +277,7 @@ model Lead {
   // Primeiro contato feito pela loja (tempo de resposta)
   firstContactAt   DateTime?     @map("first_contact_at")
   wishes           CrmWish[]
+  whatsappMessages WhatsappMessage[]
   sale             Sale? @relation("CrmLeadSale", fields: [saleId], references: [id], onDelete: SetNull)
   activities       CrmActivity[]
   tasks            CrmTask[]
@@ -906,3 +911,56 @@ model CrmFollowup {
   @@index([dealershipId, status, dueDate])
   @@map("crm_followups")
 }
+
+// Conexão com a API oficial do WhatsApp (Meta). Token e chave secreta ficam criptografados.
+model WhatsappAccount {
+  id             String    @id @default(uuid())
+  dealershipId   String    @unique @map("dealership_id")
+  phoneNumberId  String    @unique @map("phone_number_id")
+  wabaId         String?   @map("waba_id")
+  displayPhone   String?   @map("display_phone")
+  verifiedName   String?   @map("verified_name")
+  accessTokenEnc String    @map("access_token_enc")
+  appSecretEnc   String    @map("app_secret_enc")
+  verifyToken    String    @unique @map("verify_token")
+  // pending | connected | error
+  status         String    @default("pending")
+  lastError      String?   @map("last_error")
+  lastWebhookAt  DateTime? @map("last_webhook_at")
+  connectedAt    DateTime? @map("connected_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  dealership Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_accounts")
+}
+
+model WhatsappMessage {
+  id           String    @id @default(uuid())
+  dealershipId String    @map("dealership_id")
+  customerId   String    @map("customer_id")
+  leadId       String?   @map("lead_id")
+  waMessageId  String?   @unique @map("wa_message_id")
+  // Número do cliente no formato do WhatsApp (ex: 5585999998888)
+  waId         String    @map("wa_id")
+  // in (cliente mandou) | out (loja mandou)
+  direction    String
+  type         String    @default("text")
+  body         String?
+  // received | sent | delivered | read | failed
+  status       String    @default("received")
+  error        String?
+  sentById     String?   @map("sent_by_id")
+  readAt       DateTime? @map("read_at")
+  sentAt       DateTime  @default(now()) @map("sent_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  lead     Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([dealershipId, customerId, sentAt])
+  @@index([leadId])
+  @@map("whatsapp_messages")
+}
+

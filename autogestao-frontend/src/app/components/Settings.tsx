@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Store, Percent, FileText, Plug, UserCircle, Users, Upload, Trash2, Plus, Check, X, Pencil,
-  CheckCircle2, AlertCircle, Eye, EyeOff, Image as ImageIcon, Lock,
+  CheckCircle2, AlertCircle, Eye, EyeOff, Image as ImageIcon, Lock, MessageCircle, Instagram, Facebook, Youtube, Music2, Globe,
 } from "lucide-react";
 import * as s from "../../lib/settings-api";
+import * as wa from "../../lib/whatsapp-api";
 import { useAuth } from "../../lib/auth-context";
 import { usePlan } from "../../lib/plan-context";
 
@@ -212,7 +213,7 @@ function StoreTab({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.Sett
           <Field label="Nome da loja"><input style={inputStyle} value={form.name} onChange={set("name")} /></Field>
           <Field label="CNPJ"><input style={inputStyle} value={form.cnpj} placeholder="00.000.000/0000-00"
             onChange={(e) => setForm({ ...form, cnpj: maskCnpj(e.target.value) })} /></Field>
-          <Field label="Telefone / WhatsApp"><input style={inputStyle} value={form.phone} placeholder="(00) 00000-0000"
+          <Field label="Telefone"><input style={inputStyle} value={form.phone} placeholder="(00) 00000-0000"
             onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} /></Field>
           <Field label="CEP"><input style={inputStyle} value={form.zip} placeholder="00000-000" onChange={(e) => setForm({ ...form, zip: maskCep(e.target.value) })} /></Field>
           <Field label="Rua"><input style={inputStyle} value={form.street} onChange={set("street")} /></Field>
@@ -245,6 +246,8 @@ function StoreTab({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.Sett
         </div>
       </div>
 
+      <SocialCard data={data} onSaved={onSaved} />
+
       <div style={card}>
         <SectionTitle title="Logo e capa" subtitle="JPG, PNG ou WEBP de até 10 MB" />
         <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
@@ -253,6 +256,70 @@ function StoreTab({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.Sett
           <ImageSlot label="Capa do site" url={d.coverUrl} busy={uploading === "cover"}
             onPick={(f) => sendImage("cover", f)} onRemove={() => removeImage("cover")} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// WhatsApp e redes sociais: aparecem no site da loja e nas mensagens prontas do CRM
+const SOCIAL_FIELDS: { key: keyof s.SocialLinks; label: string; icon: typeof Globe; placeholder: string; hint: string }[] = [
+  { key: "whatsapp", label: "WhatsApp da loja", icon: MessageCircle, placeholder: "(85) 99999-8888", hint: "Número que atende os clientes. Os botões do site usam este." },
+  { key: "instagram", label: "Instagram", icon: Instagram, placeholder: "@chronosauto ou o link", hint: "" },
+  { key: "facebook", label: "Facebook", icon: Facebook, placeholder: "facebook.com/chronosauto", hint: "" },
+  { key: "tiktok", label: "TikTok", icon: Music2, placeholder: "@chronosauto ou o link", hint: "" },
+  { key: "youtube", label: "YouTube", icon: Youtube, placeholder: "@chronosauto ou o link", hint: "" },
+  { key: "website", label: "Outro site", icon: Globe, placeholder: "www.seusite.com.br", hint: "Se a loja tiver outro site além deste." },
+];
+const socialView = (key: keyof s.SocialLinks, v?: string | null) => {
+  if (!v) return "";
+  if (key === "whatsapp") return maskPhone(v);
+  if (key === "instagram" || key === "tiktok") return `@${v}`;
+  return v;
+};
+const socialLink = (key: keyof s.SocialLinks, v?: string | null) => {
+  if (!v) return null;
+  return { whatsapp: `https://wa.me/55${v}`, instagram: `https://instagram.com/${v}`, facebook: `https://facebook.com/${v}`, tiktok: `https://tiktok.com/@${v}`, youtube: `https://youtube.com/${v}`, website: v }[key];
+};
+
+function SocialCard({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.SettingsData) => void }) {
+  const links = data.dealership.socialLinks ?? {};
+  const [form, setForm] = useState<Record<string, string>>(() => Object.fromEntries(SOCIAL_FIELDS.map((f) => [f.key, socialView(f.key, links[f.key])])));
+  const [saving, setSaving] = useState(false);
+  const n = useNotice();
+  const save = async () => {
+    setSaving(true);
+    try {
+      const d = await s.updateStore({ socialLinks: Object.fromEntries(SOCIAL_FIELDS.map((f) => [f.key, form[f.key]?.trim() || null])) });
+      const saved = d.dealership.socialLinks ?? {};
+      setForm(Object.fromEntries(SOCIAL_FIELDS.map((f) => [f.key, socialView(f.key, saved[f.key])])));
+      onSaved(d);
+      n.show("ok", "WhatsApp e redes sociais salvos. Já aparecem no seu site.");
+    } catch (e) { n.show("error", msg(e)); } finally { setSaving(false); }
+  };
+  return (
+    <div style={card}>
+      {n.el}
+      <SectionTitle title="WhatsApp e redes sociais" subtitle="Aparecem no seu site e podem ir nas mensagens prontas do CRM. Pode colar o link ou só o @." />
+      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+        {SOCIAL_FIELDS.map((f) => {
+          const Icon = f.icon; const link = socialLink(f.key, links[f.key]);
+          return (
+            <Field key={f.key} label={f.label} hint={f.hint || undefined}>
+              <div className="flex items-center gap-2">
+                <span className="flex items-center justify-center" style={{ width: 34, height: 34, borderRadius: 8, background: "#F4F6F9", color: "#374151", flexShrink: 0 }}><Icon size={16} /></span>
+                <input style={inputStyle} value={form[f.key] ?? ""} placeholder={f.placeholder}
+                  onChange={(e) => setForm({ ...form, [f.key]: f.key === "whatsapp" ? maskPhone(e.target.value) : e.target.value })} />
+                {link && <a href={link} target="_blank" rel="noreferrer" title="Abrir" style={{ fontSize: 12, color: BLUE, whiteSpace: "nowrap" }}>Abrir ↗</a>}
+              </div>
+            </Field>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between mt-3 gap-3 flex-wrap">
+        <p style={{ fontSize: 12, color: "#6B7280", maxWidth: 560 }}>
+          Guardar os perfis aqui não traz as mensagens para o CRM sozinho. Para isso, conecte o WhatsApp oficial em <b>Integrações</b>.
+        </p>
+        <button onClick={save} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>{saving ? "Salvando..." : "Salvar redes"}</button>
       </div>
     </div>
   );
@@ -539,6 +606,8 @@ function IntegrationsTab({ data, onNavigate, onGo, has }: {
     return f && !has(f) ? { ...it, ...notInPlan } : it;
   });
   return (
+    <div className="flex flex-col gap-4">
+    <WhatsappCard />
     <div style={card}>
       <SectionTitle title="Integrações" subtitle="O que está ligado no sistema. Chaves secretas ficam só no servidor, nunca aparecem aqui." />
       <div className="flex flex-col">
@@ -553,6 +622,80 @@ function IntegrationsTab({ data, onNavigate, onGo, has }: {
           </div>
         ))}
       </div>
+    </div>
+    </div>
+  );
+}
+
+// WhatsApp oficial (Meta): cada mensagem que chega vira lead no CRM
+function WhatsappCard() {
+  const [a, setA] = useState<wa.WhatsappAccount | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [phoneNumberId, setPhoneNumberId] = useState(""), [wabaId, setWabaId] = useState(""), [token, setToken] = useState(""), [secret, setSecret] = useState("");
+  const [busy, setBusy] = useState(false), [copied, setCopied] = useState("");
+  const n = useNotice();
+  const load = () => wa.getWhatsappAccount().then((x) => { setA(x); setPhoneNumberId(x.phoneNumberId ?? ""); setWabaId(x.wabaId ?? ""); if (!x.configured) setEditing(true); }).catch((e) => n.show("error", msg(e)));
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const copy = async (label: string, v?: string) => { if (!v) return; try { await navigator.clipboard.writeText(v); setCopied(label); setTimeout(() => setCopied(""), 1500); } catch { n.show("error", "Não foi possível copiar."); } };
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await wa.saveWhatsappAccount({ phoneNumberId: phoneNumberId.trim(), wabaId: wabaId.trim() || undefined, accessToken: token.trim() || undefined, appSecret: secret.trim() || undefined });
+      setA(r); setToken(""); setSecret("");
+      if (r.status === "connected") { setEditing(false); n.show("ok", "WhatsApp conectado! Agora cadastre o webhook no painel da Meta (passo abaixo)."); }
+      else n.show("error", r.lastError ?? "Não foi possível conectar. Confira os dados.");
+    } catch (e) { n.show("error", msg(e)); } finally { setBusy(false); }
+  };
+  const test = async () => { setBusy(true); try { const r = await wa.testWhatsappAccount(); setA(r); n.show(r.status === "connected" ? "ok" : "error", r.status === "connected" ? "Conexão com a Meta funcionando." : r.lastError ?? "Falhou."); } catch (e) { n.show("error", msg(e)); } finally { setBusy(false); } };
+  const remove = async () => { if (!confirm("Desconectar o WhatsApp oficial? As mensagens já recebidas continuam no CRM.")) return; try { await wa.removeWhatsappAccount(); setToken(""); setSecret(""); await load(); } catch (e) { n.show("error", msg(e)); } };
+  const status = !a?.configured ? ["Não conectado", "#9CA3AF"] : a.status === "connected" ? ["Conectado", "#10B981"] : a.status === "error" ? ["Com erro", "#DC2626"] : ["Aguardando teste", "#F59E0B"];
+  return (
+    <div style={card}>
+      {n.el}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <SectionTitle title="WhatsApp oficial (Meta)" subtitle="Cada mensagem que chegar no WhatsApp da loja vira lead no CRM, e o vendedor responde de dentro do sistema." />
+        <span className="flex items-center gap-2" style={{ fontSize: 13, fontWeight: 600, color: status[1] }}><span style={{ width: 9, height: 9, borderRadius: 99, background: status[1] }} />{status[0]}</span>
+      </div>
+      {a?.configured && a.status === "connected" && (
+        <div className="rounded-lg px-3 py-2 mb-3" style={{ background: "#ECFDF5", fontSize: 13, color: "#065F46" }}>
+          <b>{a.verifiedName ?? "Número conectado"}</b>{a.displayPhone ? ` · ${a.displayPhone}` : ""}
+          {a.lastWebhookAt ? ` · último aviso da Meta em ${new Date(a.lastWebhookAt).toLocaleString("pt-BR")}` : " · a Meta ainda não mandou nenhum aviso (cadastre o webhook)"}
+        </div>
+      )}
+      {a?.lastError && a.status !== "connected" && <div className="rounded-lg px-3 py-2 mb-3" style={{ background: "#FEF2F2", fontSize: 13, color: "#991B1B" }}>{a.lastError}</div>}
+      {editing ? (
+        <>
+          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+            <Field label="Identificação do número (Phone number ID)" hint="Painel da Meta → WhatsApp → Configuração da API"><input style={inputStyle} value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value.replace(/\D/g, ""))} placeholder="Só números" /></Field>
+            <Field label="Identificação da conta (WABA ID)" hint="Opcional"><input style={inputStyle} value={wabaId} onChange={(e) => setWabaId(e.target.value.replace(/\D/g, ""))} placeholder="Só números" /></Field>
+            <Field label="Token de acesso permanente" hint={a?.configured ? "Em branco = mantém o atual" : "Do usuário do sistema (não use o token temporário de 24h)"}><input style={inputStyle} type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder={a?.configured ? "••••••••" : "EAA..."} /></Field>
+            <Field label="Chave secreta do app (App Secret)" hint={a?.configured ? "Em branco = mantém a atual" : "Configurações do app → Básico"}><input style={inputStyle} type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={a?.configured ? "••••••••" : ""} /></Field>
+          </div>
+          <div className="flex justify-end gap-2 mt-3">
+            {a?.configured && <button onClick={() => setEditing(false)} style={ghostBtn}>Cancelar</button>}
+            <button onClick={save} disabled={busy || !phoneNumberId} style={{ ...primaryBtn, opacity: busy || !phoneNumberId ? 0.6 : 1 }}>{busy ? "Conectando..." : "Salvar e testar"}</button>
+          </div>
+        </>
+      ) : (
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={test} disabled={busy} style={ghostBtn}>{busy ? "Testando..." : "Testar conexão"}</button>
+          <button onClick={() => setEditing(true)} style={ghostBtn}>Alterar dados</button>
+          <button onClick={remove} style={{ ...ghostBtn, color: "#B91C1C" }}>Desconectar</button>
+        </div>
+      )}
+      {a?.configured && a.verifyToken && (
+        <div className="rounded-lg p-3 mt-4" style={{ background: "#F9FAFB", border: "1px solid rgba(0,0,0,0.06)" }}>
+          <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Cadastre no painel da Meta (WhatsApp → Configuração → Webhook)</p>
+          {[["URL de retorno (Callback URL)", a.webhookUrl], ["Token de verificação (Verify token)", a.verifyToken]].map(([l, v]) => (
+            <div key={l} className="flex items-center gap-2 mt-2 flex-wrap">
+              <span style={{ fontSize: 12, color: "#6B7280", minWidth: 210 }}>{l}</span>
+              <code style={{ fontSize: 12, background: "#fff", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, padding: "4px 8px", flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{v}</code>
+              <button onClick={() => copy(l!, v)} style={ghostBtn}>{copied === l ? "Copiado!" : "Copiar"}</button>
+            </div>
+          ))}
+          <p style={{ fontSize: 12, color: "#6B7280", marginTop: 8 }}>Depois de salvar, clique em <b>Gerenciar</b> e marque o campo <b>messages</b>. Sem isso a Meta não manda as mensagens.</p>
+        </div>
+      )}
     </div>
   );
 }

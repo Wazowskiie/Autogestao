@@ -7,6 +7,7 @@ export interface CrmLead extends Lead {
   sale?: {id:string;contractNumber:string|null;price:number;soldAt:string}|null;
   chatConversations?: {id:string;mode:string;updatedAt:string}[];
   tradeIn?: TradeIn|null; firstContactAt?: string|null; createdAt: string;
+  _count?: { whatsappMessages: number };
 }
 export interface TradeIn {type?:string;plate?:string;brand?:string;model?:string;year?:number;km?:number;color?:string;expectedValue?:number;evaluatedValue?:number;notes?:string;}
 export interface CrmFilters { search?:string;stage?:string;source?:string;temperature?:string;assignedSellerId?:string;unassigned?:boolean;overdue?:boolean;archived?:boolean;unattended?:boolean;from?:string;to?:string; }
