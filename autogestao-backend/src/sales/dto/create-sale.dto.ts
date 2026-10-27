@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString,
+  ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID,
   Max, MaxLength, Min, MinLength, ValidateNested,
 } from 'class-validator';
 import { VehicleType } from '../../generated/prisma/client';
@@ -171,4 +171,8 @@ export class CreateSaleDto {
 
   @IsOptional() @IsString() @MaxLength(300)
   warrantyCoverage?: string;
+
+  // Lead do CRM que virou esta venda (se não vier, o sistema procura o lead aberto do cliente)
+  @IsOptional() @IsUUID()
+  leadId?: string;
 }

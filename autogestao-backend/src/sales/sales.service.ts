@@ -4,6 +4,7 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { QuerySaleDto } from './dto/query-sale.dto';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 import { Prisma } from '../generated/prisma/client';
+import { scanWishesForVehicle } from '../crm/crm-helpers';
 import { CancelSaleDto, ChecklistKey, SaleExpenseDto, UpdateChecklistDto, UpdateCommissionDto, UpdateFinancingDto, UpdateSaleExpenseDto, UpdateWarrantyDto } from './dto/sale-extras.dto';
 
 const SALE_INCLUDE = {
@@ -387,6 +388,25 @@ export class SalesService {
         await tx.sale.update({ where: { id: created.id }, data: { commissionTransactionId: t.id } });
       }
 
+      // CRM: o lead deste cliente vai para "Ganhos" ligado à venda
+      const lead = dto.leadId
+        ? await tx.lead.findFirst({ where: { id: dto.leadId, dealershipId } })
+        : await tx.lead.findFirst({
+            where: { dealershipId, customerId: dto.customerId, archivedAt: null, saleId: null, stage: { in: ['new', 'contacted', 'negotiating'] }, OR: [{ vehicleId: dto.vehicleId }, { vehicleId: null }] },
+            orderBy: { updatedAt: 'desc' },
+          });
+      if (dto.leadId && (!lead || lead.customerId !== dto.customerId)) throw new BadRequestException('Este lead não é do cliente da venda.');
+      if (lead && !lead.saleId) {
+        await tx.lead.update({
+          where: { id: lead.id },
+          data: { saleId: created.id, vehicleId: dto.vehicleId, stage: 'won', closedAt: new Date(), lostReason: null, nextActionDate: null, nextActionNote: null },
+        });
+        await tx.crmTask.updateMany({ where: { leadId: lead.id, status: 'open' }, data: { status: 'canceled' } });
+        await tx.crmActivity.create({
+          data: { dealershipId, leadId: lead.id, userId, kind: 'sale', content: `Venda ${contractNumber} registrada: lead marcado como ganho`, metadata: { saleId: created.id } },
+        });
+      }
+
       // A reserva vira venda
       if (reservation) {
         await tx.vehicleReservation.update({
@@ -442,6 +462,10 @@ export class SalesService {
 
       return created;
     });
+
+    // Veículos da troca entraram no estoque: podem ser o que algum cliente procura
+    const trades = await this.prisma.vehicle.findMany({ where: { tradeInSaleId: sale.id }, select: { id: true } });
+    for (const t of trades) await scanWishesForVehicle(this.prisma, t.id).catch(() => 0);
 
     return this.prisma.sale.findUnique({ where: { id: sale.id }, include: SALE_INCLUDE });
   }
@@ -627,6 +651,35 @@ export class SalesService {
     return this.findOne(dealershipId, saleId);
   }
 
+  /** Financiamentos que ainda não foram pagos pelo banco */
+  async financingPending(dealershipId: string, actor?: AuthenticatedUser) {
+    const items = await this.prisma.salePayment.findMany({
+      where: {
+        dealershipId, method: { in: ['financing', 'consortium'] },
+        OR: [{ financingStatus: null }, { financingStatus: { in: ['analysis', 'approved', 'rejected'] } }],
+        sale: { status: 'active', ...(actor?.role === 'seller' ? { sellerId: actor.userId } : {}) },
+      },
+      orderBy: { createdAt: 'asc' },
+      include: { sale: { select: { id: true, contractNumber: true, soldAt: true, customer: { select: { name: true, phone: true } }, vehicle: { select: { brand: true, model: true, year: true } }, seller: { select: { name: true } } } } },
+    });
+    const now = Date.now();
+    const list = items.map((p) => ({
+      paymentId: p.id, saleId: p.sale.id, contractNumber: p.sale.contractNumber, soldAt: p.sale.soldAt,
+      customer: p.sale.customer.name, phone: p.sale.customer.phone, seller: p.sale.seller.name,
+      vehicle: `${p.sale.vehicle.brand} ${p.sale.vehicle.model} ${p.sale.vehicle.year}`,
+      method: p.method, bank: p.bank, status: (p.financingStatus ?? 'analysis') as string,
+      amount: Number(p.amount), returnAmount: Number(p.returnAmount),
+      days: Math.floor((now - p.sale.soldAt.getTime()) / DAY),
+    }));
+    return {
+      items: list,
+      analysis: list.filter((i) => i.status === 'analysis').length,
+      approved: list.filter((i) => i.status === 'approved').length,
+      rejected: list.filter((i) => i.status === 'rejected').length,
+      waitingAmount: Math.round(list.filter((i) => i.status !== 'rejected').reduce((t, i) => t + i.amount, 0) * 100) / 100,
+    };
+  }
+
   /** Vendas com transferência ainda não concluída (prazo de 30 dias) */
   async afterSales(dealershipId: string, actor?: AuthenticatedUser) {
     const since = new Date(Date.now() - 180 * DAY);
@@ -716,6 +769,12 @@ export class SalesService {
       });
       if (sale.vehicle.status === 'sold') {
         await tx.vehicle.update({ where: { id: sale.vehicleId }, data: { status: 'available' } });
+      }
+      // CRM: o lead que tinha virado esta venda passa para "Perdidos"
+      const lead = await tx.lead.findFirst({ where: { saleId: id, dealershipId } });
+      if (lead) {
+        await tx.lead.update({ where: { id: lead.id }, data: { saleId: null, stage: 'lost', lostReason: `Venda cancelada: ${dto.reason.trim()}`.slice(0, 500), closedAt: canceledAt } });
+        await tx.crmActivity.create({ data: { dealershipId, leadId: lead.id, kind: 'sale_canceled', content: `Venda ${sale.contractNumber ?? ''} cancelada: ${dto.reason.trim()}` } });
       }
     });
 

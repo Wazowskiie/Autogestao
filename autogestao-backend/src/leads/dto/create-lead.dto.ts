@@ -4,7 +4,7 @@ import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
 export enum LeadSource {
   whatsapp = 'whatsapp', instagram = 'instagram', site = 'site',
   indicacao = 'indicacao', olx = 'olx', webmotors = 'webmotors',
-  presencial = 'presencial', outro = 'outro',
+  presencial = 'presencial', facebook = 'facebook', pos_venda = 'pos_venda', outro = 'outro',
 }
 
 export enum LeadTemperature {

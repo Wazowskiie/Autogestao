@@ -78,10 +78,17 @@ export class SettingsService {
       const other = await this.prisma.dealership.findFirst({ where: { cnpj, NOT: { id: u.dealershipId } }, select: { id: true } });
       if (other) throw new BadRequestException('Este CNPJ já está em uso por outra loja.');
     }
+    if (dto.slug) {
+      if (u.role !== 'owner') throw new BadRequestException('Só o dono pode mudar o endereço do site.');
+      if (['admin', 'api', 'loja', 'login', 'app', 'www', 'files'].includes(dto.slug)) throw new BadRequestException('Esse endereço é reservado. Escolha outro.');
+      const other = await this.prisma.dealership.findFirst({ where: { slug: dto.slug, NOT: { id: u.dealershipId } }, select: { id: true } });
+      if (other) throw new BadRequestException('Esse endereço já está em uso por outra loja.');
+    }
     await this.prisma.dealership.update({
       where: { id: u.dealershipId },
       data: {
         name: dto.name,
+        ...(dto.slug ? { slug: dto.slug } : {}),
         cnpj,
         phone: dto.phone !== undefined ? digits(dto.phone) || null : undefined,
         city: dto.city !== undefined ? dto.city || null : undefined,

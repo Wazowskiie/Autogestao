@@ -1,3 +1,4 @@
+import { scanWishesForVehicle } from '../crm/crm-helpers';
 import {
   BadRequestException,
   ForbiddenException,
@@ -29,7 +30,7 @@ export class VehiclesService {
 
     // ANTES: só alguns campos eram salvos (placa, cor, combustível etc. se perdiam).
     // AGORA: salva tudo que veio do formulário.
-    return this.prisma.vehicle.create({
+    const created = await this.prisma.vehicle.create({
       data: {
         dealershipId,
         createdById: userId,
@@ -69,6 +70,9 @@ export class VehiclesService {
         optionals: dto.optionals ?? [],
       },
     });
+    // Lista de desejos do CRM: avisa quem procurava um veículo assim
+    await scanWishesForVehicle(this.prisma, created.id).catch(() => 0);
+    return created;
   }
 
   async findAll(dealershipId: string, query: QueryVehicleDto) {
@@ -134,7 +138,10 @@ export class VehiclesService {
     // Se deixou de ser "Outros", limpa o subtipo
     if (dto.type && dto.type !== 'other') data.category = null;
 
-    return this.prisma.vehicle.update({ where: { id }, data });
+    const updated = await this.prisma.vehicle.update({ where: { id }, data });
+    // Preço baixou ou voltou a ficar disponível: pode combinar com algum desejo
+    await scanWishesForVehicle(this.prisma, id).catch(() => 0);
+    return updated;
   }
 
   async remove(dealershipId: string, id: string) {

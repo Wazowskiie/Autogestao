@@ -11,6 +11,7 @@ export class CrmQueryDto {
   @IsOptional() @Transform(booleanQuery) @IsBoolean() unassigned?: boolean;
   @IsOptional() @Transform(booleanQuery) @IsBoolean() archived?: boolean;
   @IsOptional() @Transform(booleanQuery) @IsBoolean() overdue?: boolean;
+  @IsOptional() @Transform(booleanQuery) @IsBoolean() unattended?: boolean;
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page: number = 1;

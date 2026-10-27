@@ -77,7 +77,8 @@ export default function App() {
 
   // Slug real da loja logada — usado no link/preview do site público.
   const storeSlug = auth.dealership?.slug ?? "";
-  const storeUrl = storeSlug ? `${storeSlug}.autogestao.com.br` : "—";
+  // Endereço real do site público: <domínio>/loja/<slug>
+  const storeUrl = storeSlug ? `${window.location.host}/loja/${storeSlug}` : "—";
 
   // Fullscreen pages (no shell)
   if (page === "login") return <Login onNavigate={navigate} />;
@@ -231,9 +232,9 @@ export default function App() {
 
           <div className="flex items-center gap-2" style={{ fontSize: 12, color: "#9CA3AF" }}>
             <Globe size={13} />
-            <button onClick={() => navigate("storefront")} style={{ color: "#185FA5", fontWeight: 500, fontSize: 12 }}>
+            <a href={storeSlug ? `/loja/${storeSlug}` : undefined} target="_blank" rel="noreferrer" style={{ color: "#185FA5", fontWeight: 500, fontSize: 12 }}>
               {storeUrl} ↗
-            </button>
+            </a>
           </div>
         </div>
 

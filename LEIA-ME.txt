@@ -1,35 +1,46 @@
-VENDAS COMPLETAS
-================
+CRM COMPLETO
+============
 
 O que entrou
-1. Despesas da venda: transferência, vistoria, brinde... entram no Financeiro e saem do lucro.
-2. Financiamento: banco, situação da ficha (em análise, aprovada, recusada, paga) e retorno do banco.
-   Quando marcar "Paga pelo banco", o valor e o retorno ficam como recebidos no Financeiro.
-3. Pós-venda: ATPV-e, comunicação de venda, transferência (prazo de 30 dias), chave reserva,
-   manual e documentos. Aviso no topo de Vendas com as transferências pendentes e atrasadas.
-4. Garantia por venda (dias + o que cobre) e 3 documentos novos: Termo de garantia,
-   Termo de entrega e Recibo.
-5. Cancelar venda (distrato): a venda fica no histórico como cancelada, o veículo volta ao
-   estoque, o que não foi recebido sai do Financeiro e o valor devolvido vira despesa.
-   "Excluir" continua existindo, só para venda lançada errado ou de teste.
-6. Reserva com sinal: botão roxo no Estoque. Na venda, o cliente e o sinal já vêm preenchidos.
-7. Comissão do vendedor em cada venda (% cadastrada no vendedor sobre o preço), com
-   "a pagar / paga". Aparece também na tela de Vendedores.
-O lucro de cada venda agora é o lucro real: preço − custo − taxa de cartão − despesas − comissão + retorno.
-As vendas antigas continuam com o lucro que tinham.
+1. Lead entra sozinho: formulário "Tenho interesse" na página de cada veículo do site
+   (informações, simular financiamento ou agendar visita, com a troca do cliente).
+   E o botão "Lead rápido" para lançar quem chamou no WhatsApp, Instagram, Facebook...
+2. Lead e venda ligados: botões "Fechar venda" e "Reservar" dentro do lead, com cliente,
+   veículo e troca já preenchidos. Venda registrada leva o lead para "Ganhos";
+   venda cancelada leva para "Perdidos". Reserva move o lead para "Negociação".
+3. Lista de desejos: aba "Desejos" no lead. Quando entra no estoque um veículo que combina
+   (inclusive moto que entrou na troca ou que baixou de preço), o vendedor recebe uma tarefa
+   e o veículo aparece na aba Desejos do CRM.
+4. Mensagens prontas no WhatsApp: botão "WhatsApp" no lead, 8 mensagens prontas (editáveis em
+   "Mensagens"), com nome do cliente, veículo, preço e link do veículo no seu site.
+   A mensagem entra no histórico e conta como contato.
+5. Troca do cliente: aba "Troca" no lead (busca pela placa e FIPE). Vai junto para a venda.
+6. Pós-venda: aba "Pós-venda" com aniversários, revisão de 1 ano e "hora de trocar" (2 anos).
+   Botão WhatsApp e "Criar oportunidade". Prazos ajustáveis em "Configurar".
+7. Alerta de lead esquecido (aviso laranja + filtro "Sem contato") e rodízio de leads entre
+   vendedores (ligar em "Configurar").
+8. Relatório: leads, conversão, tempo de resposta e vendas por origem e por vendedor,
+   e os motivos de perda. Exporta CSV.
+Extras
+- Vendas: aviso "Financiamentos" com as fichas em análise, aprovadas e recusadas.
+- Link do site corrigido (canto de cima): agora mostra o endereço real /loja/seu-endereço.
+- Configurações → Loja: o dono pode mudar o endereço do site (ex: chronos-auto).
+  Atenção: o link antigo para de funcionar quando mudar.
 
 1) COPIE OS ARQUIVOS
-Copie as pastas autogestao-backend e autogestao-frontend deste zip por cima das suas.
-Atenção: o schema.prisma vai inteiro (mudou em vários lugares). Se você tiver mexido nele
-por conta própria depois da última vez, me avise antes de substituir.
+Copie as pastas deste zip por cima das suas.
+Os arquivos App.tsx, Login.tsx, Settings.tsx, PublicStorefront.tsx e schema.prisma vão inteiros.
+O schema.prisma deste zip já tem a parte dos Anúncios. Se você mexeu em algum desses arquivos
+por conta própria nos últimos dias, me avise antes de substituir.
 
 2) NO SEU PC, DENTRO DA PASTA autogestao-backend
   cd autogestao-backend
   npx prisma migrate deploy
   npx prisma generate
-  (Se aparecer "Need to install the following packages", responda n: você está na pasta errada.)
+  npm run build
+  (Se aparecer "Need to install the following packages", responda n: pasta errada.)
 
-3) COMMIT E PUSH (pelo VS Code)
+3) COMMIT E PUSH
 
 4) NO VPS
   cd /var/www/Autogestao
@@ -46,3 +57,4 @@ por conta própria depois da última vez, me avise antes de substituir.
   npm run build
   pm2 restart all
   Depois Ctrl+Shift+R no navegador.
+  Só rode o "pm2 restart all" se os dois "npm run build" terminarem sem erro.

@@ -19,6 +19,10 @@ export class CreateReservationDto {
 
   @IsOptional() @IsString() @MaxLength(1000)
   notes?: string;
+
+  // Lead do CRM (registra no histórico e move para "Negociação")
+  @IsOptional() @IsString()
+  leadId?: string;
 }
 
 export class UpdateReservationDto {

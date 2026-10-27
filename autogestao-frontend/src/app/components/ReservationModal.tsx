@@ -22,8 +22,10 @@ const METHODS = [
 const input = { border: "0.5px solid rgba(0,0,0,0.14)", borderRadius: 8, padding: "8px 10px", fontSize: 13, background: "#fff", outline: "none", width: "100%" };
 const lbl = { fontSize: 13, color: "#374151", display: "block", marginBottom: 6 } as const;
 
-export function ReservationModal({ vehicle, canManage, onClose, onChanged }: {
-  vehicle: api.Vehicle; canManage: boolean; onClose: () => void; onChanged: () => void;
+export function ReservationModal({ vehicle, canManage, onClose, onChanged, presetCustomer, leadId }: {
+  vehicle: Pick<api.Vehicle, "id" | "brand" | "model" | "year" | "price"> & { plate?: string | null };
+  canManage: boolean; onClose: () => void; onChanged: () => void;
+  presetCustomer?: api.Customer | null; leadId?: string;
 }) {
   const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState<sapi.Reservation | null>(null);
@@ -33,7 +35,7 @@ export function ReservationModal({ vehicle, canManage, onClose, onChanged }: {
   // Formulário de nova reserva
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<api.Customer[]>([]);
-  const [customer, setCustomer] = useState<api.Customer | null>(null);
+  const [customer, setCustomer] = useState<api.Customer | null>(presetCustomer ?? null);
   const [deposit, setDeposit] = useState("");
   const [method, setMethod] = useState("pix");
   const [expiresAt, setExpiresAt] = useState(localDate(7));
@@ -68,7 +70,7 @@ export function ReservationModal({ vehicle, canManage, onClose, onChanged }: {
     }
     const value = parseBRL(deposit);
     if (Number.isNaN(value) || value < 0) throw new Error("Valor do sinal inválido. Ex: 1.000,00");
-    await sapi.createReservation({ vehicleId: vehicle.id, customerId: c.id, deposit: value, depositMethod: value > 0 ? method : undefined, expiresAt: expiresAt || undefined, notes: notes.trim() || undefined });
+    await sapi.createReservation({ leadId, vehicleId: vehicle.id, customerId: c.id, deposit: value, depositMethod: value > 0 ? method : undefined, expiresAt: expiresAt || undefined, notes: notes.trim() || undefined });
     onChanged();
   });
 

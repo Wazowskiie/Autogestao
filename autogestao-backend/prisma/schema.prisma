@@ -59,6 +59,8 @@ model Dealership {
   coverUrl      String?  @map("cover_url")
   primaryColor  String?  @map("primary_color")
   // Entrada mínima nas vendas com promissória (% do valor do veículo); vazio = sem mínimo
+  // Configurações do CRM: rodízio de leads, prazo de resposta e pós-venda
+  crmSettings           Json?    @map("crm_settings")
   minDownPaymentPercent Decimal? @db.Decimal(5, 2) @map("min_down_payment_percent")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
@@ -91,6 +93,7 @@ model Dealership {
   crmActivities CrmActivity[]
   crmTasks CrmTask[]
   adListings AdListing[]
+  crmTemplates CrmMessageTemplate[]
 
   @@map("dealerships")
 }
@@ -192,6 +195,7 @@ model Vehicle {
   web          VehicleWeb?
   leads        Lead[]
   adListings   AdListing[]
+  wishMatches  CrmWishMatch[]
   sales        Sale[]        @relation("SaleVehicle")
   reservations VehicleReservation[]
   tradeInSale  Sale?         @relation("SaleTradeIns", fields: [tradeInSaleId], references: [id], onDelete: SetNull)
@@ -235,6 +239,7 @@ model Customer {
   sales           Sale[]
   promissoryNotes PromissoryNote[]
   reservations    VehicleReservation[]
+  followups       CrmFollowup[]
   chatConversations ChatConversation[]
 
   @@index([dealershipId])
@@ -263,6 +268,11 @@ model Lead {
   lastContactAt    DateTime? @map("last_contact_at")
   archivedAt       DateTime? @map("archived_at")
   saleId           String? @unique @map("sale_id")
+  // Veículo que o cliente quer dar na troca: { type, plate, brand, model, year, km, expectedValue, evaluatedValue, notes }
+  tradeIn          Json?         @map("trade_in")
+  // Primeiro contato feito pela loja (tempo de resposta)
+  firstContactAt   DateTime?     @map("first_contact_at")
+  wishes           CrmWish[]
   sale             Sale? @relation("CrmLeadSale", fields: [saleId], references: [id], onDelete: SetNull)
   activities       CrmActivity[]
   tasks            CrmTask[]
@@ -809,4 +819,90 @@ model AdListing {
   @@unique([dealershipId, vehicleId, channel])
   @@index([dealershipId, createdAt])
   @@map("ad_listings")
+}
+
+// Mensagens prontas do WhatsApp. Variáveis: {nome} {primeiro_nome} {veiculo} {preco} {link} {loja} {vendedor}
+model CrmMessageTemplate {
+  id           String   @id @default(uuid())
+  dealershipId String   @map("dealership_id")
+  title        String
+  body         String
+  category     String   @default("geral")
+  sort         Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  dealership Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+
+  @@index([dealershipId])
+  @@map("crm_message_templates")
+}
+
+// Lista de desejos: o que o cliente procura e a loja ainda não tem
+model CrmWish {
+  id           String    @id @default(uuid())
+  dealershipId String    @map("dealership_id")
+  leadId       String    @map("lead_id")
+  type         String?
+  brand        String?
+  model        String?
+  yearMin      Int?      @map("year_min")
+  yearMax      Int?      @map("year_max")
+  priceMax     Decimal?  @map("price_max") @db.Decimal(12, 2)
+  kmMax        Int?      @map("km_max")
+  notes        String?
+  // active | fulfilled | canceled
+  status       String    @default("active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  closedAt     DateTime? @map("closed_at")
+
+  lead    Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  matches CrmWishMatch[]
+
+  @@index([dealershipId, status])
+  @@index([leadId])
+  @@map("crm_wishes")
+}
+
+model CrmWishMatch {
+  id           String   @id @default(uuid())
+  dealershipId String   @map("dealership_id")
+  wishId       String   @map("wish_id")
+  vehicleId    String   @map("vehicle_id")
+  dismissed    Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  wish    CrmWish @relation(fields: [wishId], references: [id], onDelete: Cascade)
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([wishId, vehicleId])
+  @@index([dealershipId])
+  @@map("crm_wish_matches")
+}
+
+// Pós-venda: aniversário, revisão e recompra
+model CrmFollowup {
+  id           String    @id @default(uuid())
+  dealershipId String    @map("dealership_id")
+  customerId   String    @map("customer_id")
+  sellerId     String?   @map("seller_id")
+  saleId       String?   @map("sale_id")
+  leadId       String?   @map("lead_id")
+  // birthday | review | upgrade
+  kind         String
+  key          String
+  title        String
+  vehicleLabel String?   @map("vehicle_label")
+  dueDate      DateTime  @map("due_date")
+  // open | done | dismissed
+  status       String    @default("open")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  doneAt       DateTime? @map("done_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([dealershipId, key])
+  @@index([dealershipId, status, dueDate])
+  @@map("crm_followups")
 }

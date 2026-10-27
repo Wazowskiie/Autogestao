@@ -1,3 +1,5 @@
+import { createPublicLead } from '../crm/crm-helpers';
+import { PublicLeadDto } from '../crm/crm-extras.dto';
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PlansService } from '../plans/plans.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,6 +22,12 @@ function toPublic<T extends { web?: { description: string | null } | null }>(v: 
 @Injectable()
 export class StorefrontService {
   constructor(private readonly prisma: PrismaService, @Optional() private readonly plans?: PlansService) {}
+
+  async createLead(slug: string, dto: PublicLeadDto) {
+    const dealership = await this.prisma.dealership.findUnique({ where: { slug }, select: { id: true } });
+    if (!dealership) throw new NotFoundException('Loja não encontrada');
+    return createPublicLead(this.prisma, dealership.id, dto);
+  }
 
   async getDealership(slug: string) {
     const dealership = await this.prisma.dealership.findUnique({ where: { slug } });

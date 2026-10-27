@@ -1,4 +1,6 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { PublicLeadDto } from '../crm/crm-extras.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { StorefrontService } from './storefront.service';
 
@@ -30,6 +32,14 @@ export class StorefrontController {
       page: page ? Number(page) : undefined,
       pageSize: pageSize ? Number(pageSize) : undefined,
     });
+  }
+
+  /** Formulário "Tenho interesse" do site: vira lead no CRM */
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post(':slug/leads')
+  createLead(@Param('slug') slug: string, @Body() dto: PublicLeadDto) {
+    if (dto.website) throw new BadRequestException('Não foi possível enviar.');
+    return this.storefrontService.createLead(slug, dto);
   }
 
   @Get(':slug/vehicles/:vehicleId')

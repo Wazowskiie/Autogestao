@@ -288,7 +288,7 @@ export function Onboarding({ onNavigate }: PageProps) {
                     Endereço do seu site <span style={{ fontSize: 11, color: "#9CA3AF" }}>(pode editar)</span>
                   </label>
                   <div className="flex items-center rounded-lg" style={{ border: "0.5px solid rgba(0,0,0,0.12)", overflow: "hidden" }}>
-                    <span style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 0 10px 12px", whiteSpace: "nowrap" }}>autogestao.com.br/</span>
+                    <span style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 0 10px 12px", whiteSpace: "nowrap" }}>{window.location.host}/loja/</span>
                     <input
                       placeholder="auto-silva"
                       value={slug}

@@ -77,6 +77,16 @@ export class ReservationsService {
         include: INCLUDE,
       });
       await tx.vehicle.update({ where: { id: vehicle.id }, data: { status: 'reserved' } });
+      // CRM: registra no lead e coloca em negociação
+      const lead = dto.leadId
+        ? await tx.lead.findFirst({ where: { id: dto.leadId, dealershipId, customerId: customer.id, archivedAt: null } })
+        : await tx.lead.findFirst({ where: { dealershipId, customerId: customer.id, archivedAt: null, stage: { in: ['new', 'contacted', 'negotiating'] } }, orderBy: { updatedAt: 'desc' } });
+      if (lead && !['won', 'lost'].includes(lead.stage)) {
+        await tx.lead.update({ where: { id: lead.id }, data: { stage: 'negotiating', vehicleId: vehicle.id, ...(lead.firstContactAt ? {} : { firstContactAt: now }) } });
+        await tx.crmActivity.create({
+          data: { dealershipId, leadId: lead.id, userId, kind: 'reservation', content: `Veículo reservado: ${vehicle.brand} ${vehicle.model} ${vehicle.year}${deposit > 0 ? ` com sinal de ${deposit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : ''}` },
+        });
+      }
       return r;
     });
     return reservation;

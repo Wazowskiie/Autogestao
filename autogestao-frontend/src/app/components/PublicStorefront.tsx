@@ -46,6 +46,13 @@ export function PublicStorefront({ slug, onNavigate }: { slug: string; onNavigat
 
   useEffect(() => { fetchVehicles(); }, [fetchVehicles]);
 
+  // Link direto de um veículo (?v=id), usado nas mensagens do WhatsApp
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("v");
+    if (!id) return;
+    api.getStorefrontVehicle(slug, id).then(setSelected).catch(() => {});
+  }, [slug]);
+
   if (error && !dealership) {
     return (
       <div className="size-full flex items-center justify-center" style={{ background: "#F4F6F9" }}>
@@ -150,15 +157,71 @@ export function PublicStorefront({ slug, onNavigate }: { slug: string; onNavigat
       </div>
 
       {selected && (
-        <VehicleDetailModal vehicle={selected} dealership={dealership} primaryColor={primaryColor} onClose={() => setSelected(null)} />
+        <VehicleDetailModal vehicle={selected} dealership={dealership} primaryColor={primaryColor} slug={slug} onClose={() => setSelected(null)} />
       )}
       {dealership && dealership.chatEnabled !== false && <CustomerChat slug={slug} vehicles={vehicles} />}
     </div>
   );
 }
 
-function VehicleDetailModal({ vehicle, dealership, primaryColor, onClose }: {
-  vehicle: api.StorefrontVehicle; dealership: api.StorefrontDealership | null; primaryColor: string; onClose: () => void;
+function phoneMask(v: string) {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
+/** Formulário "Tenho interesse": o pedido cai no CRM da loja */
+function InterestForm({ slug, vehicle, primaryColor }: { slug: string; vehicle: api.StorefrontVehicle; primaryColor: string }) {
+  const [kind, setKind] = useState<"interest" | "financing" | "visit">("interest");
+  const [name, setName] = useState(""), [phone, setPhone] = useState(""), [tradeIn, setTradeIn] = useState(""), [message, setMessage] = useState("");
+  const [website, setWebsite] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "sent">("idle"), [error, setError] = useState("");
+  const input = { width: "100%", border: "1px solid rgba(0,0,0,0.14)", borderRadius: 8, padding: "10px 12px", fontSize: 14, outline: "none" } as const;
+  if (state === "sent") return (
+    <div className="mt-6 rounded-xl p-4 text-center" style={{ background: "#ECFDF5", color: "#065F46", border: "1px solid #A7F3D0" }}>
+      <p style={{ fontWeight: 700, fontSize: 15 }}>Recebemos seu pedido!</p>
+      <p style={{ fontSize: 13, marginTop: 4 }}>Um vendedor vai entrar em contato pelo WhatsApp em breve.</p>
+    </div>
+  );
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault(); setError("");
+    if (name.trim().length < 2) { setError("Informe seu nome."); return; }
+    if (phone.replace(/\D/g, "").length < 10) { setError("Informe seu WhatsApp com DDD."); return; }
+    setState("sending");
+    try {
+      await api.sendStorefrontLead(slug, { name: name.trim(), phone, vehicleId: vehicle.id, kind, tradeIn: tradeIn.trim() || undefined, message: message.trim() || undefined, website: website || undefined });
+      setState("sent");
+    } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível enviar."); setState("idle"); }
+  };
+  return (
+    <form onSubmit={send} className="mt-6 rounded-xl p-4" style={{ background: "#F8FAFC", border: "1px solid rgba(0,0,0,0.08)" }}>
+      <p style={{ fontSize: 15, fontWeight: 700, color: "#0F1923", marginBottom: 10 }}>Tenho interesse</p>
+      <div className="flex gap-2 flex-wrap" style={{ marginBottom: 10 }}>
+        {([["interest", "Quero mais informações"], ["financing", "Simular financiamento"], ["visit", "Agendar visita"]] as const).map(([k, l]) => (
+          <button type="button" key={k} onClick={() => setKind(k)} className="px-3 py-1.5 rounded-full"
+            style={{ fontSize: 12, fontWeight: 600, border: `1px solid ${kind === k ? primaryColor : "rgba(0,0,0,0.12)"}`, background: kind === k ? primaryColor : "#fff", color: kind === k ? "#fff" : "#374151" }}>{l}</button>
+        ))}
+      </div>
+      <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <input style={input} placeholder="Seu nome" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
+        <input style={input} placeholder="WhatsApp com DDD" inputMode="tel" value={phone} onChange={(e) => setPhone(phoneMask(e.target.value))} />
+      </div>
+      <input style={{ ...input, marginTop: 8 }} placeholder="Tem veículo para dar na troca? Qual? (opcional)" value={tradeIn} onChange={(e) => setTradeIn(e.target.value)} maxLength={200} />
+      <textarea style={{ ...input, marginTop: 8, resize: "vertical" }} rows={2} placeholder="Mensagem (opcional)" value={message} onChange={(e) => setMessage(e.target.value)} maxLength={1000} />
+      {/* Campo escondido contra robôs */}
+      <input tabIndex={-1} autoComplete="off" aria-hidden="true" value={website} onChange={(e) => setWebsite(e.target.value)} style={{ position: "absolute", left: -9999, width: 1, height: 1, opacity: 0 }} name="website" />
+      {error && <p style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>{error}</p>}
+      <button disabled={state === "sending"} className="w-full mt-3 py-3 rounded-lg" style={{ background: primaryColor, color: "#fff", fontSize: 14, fontWeight: 600, opacity: state === "sending" ? 0.7 : 1 }}>
+        {state === "sending" ? "Enviando..." : "Quero ser atendido"}
+      </button>
+      <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6, textAlign: "center" }}>Seus dados são usados só para a loja falar com você sobre este veículo.</p>
+    </form>
+  );
+}
+
+function VehicleDetailModal({ vehicle, dealership, primaryColor, slug, onClose }: {
+  vehicle: api.StorefrontVehicle; dealership: api.StorefrontDealership | null; primaryColor: string; slug: string; onClose: () => void;
 }) {
   const Icon = vehicle.type === "moto" ? Bike : vehicle.type === "truck" ? Truck : Car;
   const photo = vehicle.photos?.[0]?.url;
@@ -205,6 +268,7 @@ function VehicleDetailModal({ vehicle, dealership, primaryColor, onClose }: {
               </a>
             )}
           </div>
+          <InterestForm slug={slug} vehicle={vehicle} primaryColor={primaryColor} />
         </div>
       </div>
     </div>

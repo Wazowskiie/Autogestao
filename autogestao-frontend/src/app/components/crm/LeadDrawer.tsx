@@ -1,5 +1,10 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { X, Pencil, Phone, MessageSquare, CalendarCheck, Archive, History, UserRound } from 'lucide-react';
+import { X, Pencil, Phone, MessageSquare, CalendarCheck, Archive, History, UserRound, MessageCircle, BadgeDollarSign, Bookmark, Repeat, Heart } from 'lucide-react';
+import { TradeInTab, WishesTab } from './LeadExtras';
+import { WhatsAppSender } from './WhatsAppSender';
+import { NewSaleModal } from '../Sales';
+import { ReservationModal } from '../ReservationModal';
+import type { Customer, Vehicle } from '../../../lib/api';
 import * as crm from '../../../lib/crm-api';
 import { useAuth } from '../../../lib/auth-context';
 import { STAGES, activityLabels, dateTime, localInput, money, sourceLabels, stageLabels, temperatureLabels } from './common';
@@ -19,6 +24,7 @@ export function LeadDrawer({id,onClose,onChanged,onOpenChat}:{id:string;onClose:
   const [loss,setLoss]=useState(''),[showLoss,setShowLoss]=useState(false);
   const [name,setName]=useState(''),[phone,setPhone]=useState(''),[email,setEmail]=useState('');
   const [sales,setSales]=useState<Awaited<ReturnType<typeof crm.getEligibleSales>>>([]),[saleId,setSaleId]=useState('');
+  const [sending,setSending]=useState(false),[selling,setSelling]=useState(false),[reserving,setReserving]=useState(false);
   const reload=useCallback(async()=>{
     try{const [l,h,t]=await Promise.all([crm.getLead(id),crm.getHistory(id,historyPage),crm.getTasks({leadId:id,page:taskPage})]);setLead(l);setHistory(h);setTasks(t);}catch(e){setError((e as Error).message);}
   },[id,historyPage,taskPage]);
@@ -40,9 +46,14 @@ export function LeadDrawer({id,onClose,onChanged,onOpenChat}:{id:string;onClose:
         {lead.notes&&<p className="crm-notes">{lead.notes}</p>}
         {lead.lostReason&&<p className="crm-loss"><strong>Motivo da perda:</strong> {lead.lostReason}</p>}
       </div>
+      {!lead.archivedAt&&!['won','lost'].includes(lead.stage)&&<div className="crm-drawer-quick">
+        <button className="crm-wa-light" disabled={busy} onClick={()=>setSending(true)}><MessageCircle size={15}/>WhatsApp</button>
+        <button className="primary" disabled={busy} onClick={()=>setSelling(true)}><BadgeDollarSign size={15}/>Fechar venda</button>
+        <button disabled={busy||!lead.vehicle||lead.vehicle.status==='sold'} title={!lead.vehicle?'Escolha o veículo de interesse em "Editar lead"':undefined} onClick={()=>setReserving(true)}><Bookmark size={15}/>{lead.vehicle?.status==='reserved'?'Ver reserva':'Reservar'}</button>
+      </div>}
       <div className="crm-drawer-actions"><button disabled={busy||!!lead.archivedAt} onClick={()=>setEdit(true)}><Pencil size={14}/> Editar lead</button><label>Etapa<select aria-label="Alterar etapa" value={lead.stage} disabled={busy||!!lead.archivedAt||!!lead.sale} onChange={e=>changeStage(e.target.value)}>{STAGES.map(s=><option key={s} value={s}>{stageLabels[s]}</option>)}</select></label>{manager&&<button disabled={busy} onClick={archive}><Archive size={14}/>{lead.archivedAt?'Restaurar':'Arquivar'}</button>}</div>
       {showLoss&&<form className="crm-inline-form" onSubmit={async e=>{e.preventDefault();if(await action(()=>crm.updateLead(id,{stage:'lost',lostReason:loss})))setShowLoss(false);}}><label>Motivo da perda<textarea required minLength={3} maxLength={500} value={loss} onChange={e=>setLoss(e.target.value)} placeholder="Ex.: comprou em outra loja"/></label><div><button type="button" onClick={()=>setShowLoss(false)}>Cancelar</button><button className="primary" disabled={busy}>Confirmar perda</button></div></form>}
-      <nav className="crm-drawer-tabs">{[{id:'history',label:'Histórico',icon:History},{id:'tasks',label:'Tarefas',icon:CalendarCheck},{id:'contact',label:'Contato',icon:UserRound},{id:'chat',label:'Conversas',icon:MessageSquare},{id:'sales',label:'Venda',icon:Phone}].map(item=><button key={item.id} className={tab===item.id?'active':''} onClick={()=>setTab(item.id)}><item.icon size={14}/>{item.label}</button>)}</nav>
+      <nav className="crm-drawer-tabs">{[{id:'history',label:'Histórico',icon:History},{id:'tasks',label:'Tarefas',icon:CalendarCheck},{id:'contact',label:'Contato',icon:UserRound},{id:'trade',label:lead.tradeIn?'Troca ✓':'Troca',icon:Repeat},{id:'wishes',label:'Desejos',icon:Heart},{id:'chat',label:'Conversas',icon:MessageSquare},{id:'sales',label:'Venda',icon:Phone}].map(item=><button key={item.id} className={tab===item.id?'active':''} onClick={()=>setTab(item.id)}><item.icon size={14}/>{item.label}</button>)}</nav>
       <div className="crm-drawer-content">
         {tab==='history'&&<>
           {!lead.archivedAt&&<form className="crm-inline-form" onSubmit={saveActivity}><h4>Registrar atividade</h4><div className="crm-form-grid"><label>Tipo<select value={kind} onChange={e=>setKind(e.target.value)}>{['note','call','whatsapp','email','visit'].map(k=><option key={k} value={k}>{activityLabels[k]}</option>)}</select></label><label>Quando aconteceu<input required type="datetime-local" value={occurred} onChange={e=>setOccurred(e.target.value)}/></label></div><label>O que aconteceu<textarea required minLength={2} maxLength={4000} rows={3} value={content} onChange={e=>setContent(e.target.value)} placeholder="Registre o contato e os próximos passos"/></label><button className="primary" disabled={busy}>Adicionar ao histórico</button></form>}
@@ -51,10 +62,21 @@ export function LeadDrawer({id,onClose,onChanged,onOpenChat}:{id:string;onClose:
         </>}
         {tab==='tasks'&&<><div className="crm-section-heading"><h4>Agenda deste lead</h4><button className="primary" disabled={!!lead.archivedAt||['won','lost'].includes(lead.stage)} onClick={()=>setTaskForm('new')}>Nova tarefa</button></div>{tasks?.items.map(t=><TaskRow key={t.id} task={t} busy={busy} onEdit={()=>setTaskForm(t)} onStatus={status=>action(()=>crm.setTaskStatus(t.id,status))}/>)}{tasks?.total===0&&<p className="crm-empty">Nenhuma tarefa registrada para este lead.</p>}<Pager page={taskPage} total={tasks?.total??0} size={30} onPage={setTaskPage}/></>}
         {tab==='contact'&&<form className="crm-inline-form" onSubmit={saveContact}><h4>Dados do cliente</h4><div className="crm-contact-links">{lead.customer?.phone&&<><a href={`tel:${lead.customer.phone.replace(/[^\d+]/g,'')}`}>Ligar</a><a target="_blank" rel="noopener noreferrer" href={`https://wa.me/${lead.customer.phone.replace(/\D/g,'').length<=11?'55':''}${lead.customer.phone.replace(/\D/g,'')}`}>Abrir WhatsApp</a></>}{lead.customer?.email&&<a href={`mailto:${encodeURIComponent(lead.customer.email)}`}>Escrever e-mail</a>}</div><label>Nome<input required minLength={2} maxLength={100} value={name} onChange={e=>setName(e.target.value)} disabled={!!lead.archivedAt}/></label><label>Telefone com DDD<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} disabled={!!lead.archivedAt}/></label><label>E-mail<input type="email" value={email} onChange={e=>setEmail(e.target.value)} disabled={!!lead.archivedAt}/></label><small>Esses dados pertencem ao cadastro do cliente e podem estar vinculados a outras oportunidades.</small><button className="primary" disabled={busy||!!lead.archivedAt}>Salvar contato</button></form>}
+        {tab==='trade'&&<TradeInTab lead={lead} onSaved={l=>{setLead(l);onChanged();}}/>}
+        {tab==='wishes'&&<WishesTab lead={lead} onChanged={()=>{void reload();onChanged();}}/>}
         {tab==='chat'&&<><h4>Atendimentos vinculados</h4>{chatIds.map(c=><div className="crm-chat-link" key={c.id}><div><strong>{c.mode==='bot'?'Assistente virtual':c.mode==='human'?'Atendimento humano':'Conversa encerrada'}</strong><small>Atualizado em {dateTime(c.updatedAt)}</small></div><button onClick={()=>onOpenChat(c.id)}>Abrir atendimento</button></div>)}{chatIds.length===0&&<p className="crm-empty">Este lead ainda não tem uma conversa do chat vinculada.</p>}</>}
         {tab==='sales'&&<>{lead.sale?<div className="crm-linked-sale"><h4>Venda vinculada</h4><p>Contrato {lead.sale.contractNumber??lead.sale.id}</p><strong>{money(lead.sale.price)}</strong><small>{dateTime(lead.sale.soldAt)}</small></div>:<form className="crm-inline-form" onSubmit={async e=>{e.preventDefault();await action(()=>crm.linkSale(id,saleId));}}><h4>Vincular uma venda já registrada</h4><p>A venda deve pertencer ao mesmo cliente e ao veículo de interesse. O lead será marcado como ganho.</p><label>Venda<select required value={saleId} onChange={e=>setSaleId(e.target.value)}><option value="">Selecione uma venda</option>{sales.map(s=><option key={s.id} value={s.id}>{s.contractNumber??'Contrato'} • {s.vehicle.brand} {s.vehicle.model} • {money(s.price)}</option>)}</select></label>{sales.length===0&&<small>Não há uma venda compatível disponível. Registre a venda na tela Vendas e volte aqui.</small>}<button className="primary" disabled={busy||!saleId||!!lead.archivedAt}>Vincular venda</button></form>}</>}
       </div>
       {edit&&<LeadForm lead={lead} onClose={()=>setEdit(false)} onSaved={l=>{setLead(l);setEdit(false);void reload();onChanged();}}/>}
+      {sending&&<WhatsAppSender phone={lead.customer?.phone} leadId={lead.id} category={lead.stage==='new'?'primeiro_contato':lead.vehicle?'disponivel':'retorno'}
+        context={{name:lead.customer?.name,seller:lead.assignedSeller?.name,vehicle:lead.vehicle?{id:lead.vehicle.id,brand:lead.vehicle.brand,model:lead.vehicle.model,year:lead.vehicle.year,price:lead.vehicle.price}:null}}
+        onClose={()=>setSending(false)} onSent={l=>{setSending(false);if(l)setLead(l);void reload();onChanged();}}/>}
+      {selling&&<div style={{position:'fixed',inset:0,zIndex:130}}><NewSaleModal onClose={()=>setSelling(false)} onSaved={()=>{setSelling(false);void reload();onChanged();}}
+        prefill={{leadId:lead.id,vehicleId:lead.vehicle&&lead.vehicle.status!=='sold'?lead.vehicle.id:null,sellerId:lead.assignedSellerId,customer:lead.customer?{id:lead.customer.id,name:lead.customer.name,phone:lead.customer.phone,email:lead.customer.email}:null,tradeIn:lead.tradeIn}}/></div>}
+      {reserving&&lead.vehicle&&<div style={{position:'fixed',inset:0,zIndex:130}}><ReservationModal canManage={manager} leadId={lead.id}
+        vehicle={{id:lead.vehicle.id,brand:lead.vehicle.brand,model:lead.vehicle.model,year:lead.vehicle.year,price:lead.vehicle.price} as Pick<Vehicle,'id'|'brand'|'model'|'year'|'price'>}
+        presetCustomer={lead.customer?({id:lead.customer.id,name:lead.customer.name,phone:lead.customer.phone,email:lead.customer.email} as Customer):null}
+        onClose={()=>setReserving(false)} onChanged={()=>{setReserving(false);void reload();onChanged();}}/></div>}
       {taskForm&&<TaskForm lead={lead} task={taskForm==='new'?undefined:taskForm} onClose={()=>setTaskForm(null)} onSaved={()=>{setTaskForm(null);void reload();onChanged();}}/>}
     </>}
   </aside></div>;

@@ -43,7 +43,7 @@ export interface FiscalInput {
 
 export const getSettings = () => request<SettingsData>("/settings");
 
-export const updateStore = (data: Partial<Omit<StoreInfo, "slug" | "logoUrl" | "coverUrl">>) =>
+export const updateStore = (data: Partial<Omit<StoreInfo, "logoUrl" | "coverUrl">>) =>
   request<SettingsData>("/settings/dealership", { method: "PATCH", body: data });
 
 export function uploadStoreImage(kind: "logo" | "cover", file: File) {

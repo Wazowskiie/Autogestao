@@ -3,6 +3,7 @@ import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { LeadStage, Prisma } from '../generated/prisma/client';
 import { CrmActivityDto, CrmContactDto, CrmLeadDto, CrmQueryDto, CrmTaskDto, CrmTaskQueryDto } from './crm.dto';
+import { getSettings, pickNextSeller } from './crm-helpers';
 
 const STAGES: LeadStage[] = ['new','contacted','negotiating','won','lost'];
 const STAGE_NAMES:Record<LeadStage,string>={new:'Novo',contacted:'Em contato',negotiating:'Em negociação',won:'Ganho',lost:'Perdido'};
@@ -26,7 +27,7 @@ export class CrmService {
   scope(u: AuthenticatedUser): Prisma.LeadWhereInput {
     return { dealershipId: u.dealershipId, ...(u.role === 'seller' ? { assignedSellerId: u.userId } : {}) };
   }
-  private where(u: AuthenticatedUser, q: CrmQueryDto): Prisma.LeadWhereInput {
+  private where(u: AuthenticatedUser, q: CrmQueryDto, slaHours = 2): Prisma.LeadWhereInput {
     if (q.from && q.to && new Date(q.from) > new Date(q.to)) throw new BadRequestException('A data inicial deve ser anterior à final');
     const where: Prisma.LeadWhereInput = { ...this.scope(u), archivedAt: q.archived ? { not: null } : null };
     if (q.stage) where.stage = q.stage as LeadStage;
@@ -36,6 +37,8 @@ export class CrmService {
     if (q.unassigned && u.role !== 'seller') where.assignedSellerId = null;
     if (q.from || q.to) where.createdAt = { ...(q.from ? { gte: new Date(q.from) } : {}), ...(q.to ? { lt: new Date(new Date(q.to).getTime() + 86400000) } : {}) };
     if (q.overdue) where.tasks = { some: { status: 'open', dueAt: { lt: new Date() } } };
+    // Lead novo sem nenhum contato depois do prazo de resposta
+    if (q.unattended) Object.assign(where, this.unattendedWhere(slaHours));
     if (q.search?.trim()) {
       const text = q.search.trim();
       where.OR = [
@@ -49,8 +52,12 @@ export class CrmService {
     }
     return where;
   }
+  unattendedWhere(slaHours: number): Prisma.LeadWhereInput {
+    return { stage: 'new', firstContactAt: null, lastContactAt: null, createdAt: { lt: new Date(Date.now() - slaHours * 3600000) } };
+  }
+  private async sla(u: AuthenticatedUser) { return (await getSettings(this.prisma, u.dealershipId)).slaHours; }
   async list(u: AuthenticatedUser, q: CrmQueryDto) {
-    const where = this.where(u, q), page = q.page ?? 1, pageSize = q.pageSize ?? 30;
+    const where = this.where(u, q, await this.sla(u)), page = q.page ?? 1, pageSize = q.pageSize ?? 30;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.lead.findMany({ where, include: LEAD_INCLUDE, orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }], skip: (page-1)*pageSize, take: pageSize }),
       this.prisma.lead.count({ where }),
@@ -58,7 +65,7 @@ export class CrmService {
     return { items, total, page, pageSize };
   }
   async board(u: AuthenticatedUser, q: CrmQueryDto) {
-    const where = this.where(u, q);
+    const where = this.where(u, q, await this.sla(u));
     const columns = await Promise.all(STAGES.map(async stage => {
       const filter: Prisma.LeadWhereInput = { AND: [where, { stage }] };
       const [items, total] = await this.prisma.$transaction([
@@ -74,7 +81,9 @@ export class CrmService {
     return Object.fromEntries(STAGES.map(stage => [stage, items.filter(item => item.stage === stage)]));
   }
   async summary(u: AuthenticatedUser, q: CrmQueryDto) {
-    const where = this.where(u, q);
+    const slaHours = await this.sla(u);
+    const where = this.where(u, q, slaHours);
+    const unattendedCount = await this.prisma.lead.count({ where: { ...this.scope(u), archivedAt: null, ...this.unattendedWhere(slaHours) } });
     const [stages, count, overdue, unassigned, won, active] = await this.prisma.$transaction([
       this.prisma.lead.groupBy({ by: ['stage'], where, orderBy:{stage:'asc'}, _count: true, _sum: { budget: true } }),
       this.prisma.lead.count({ where }),
@@ -83,7 +92,7 @@ export class CrmService {
       this.prisma.lead.count({ where: { AND: [where, { stage: 'won' }] } }),
       this.prisma.lead.aggregate({ where: { AND: [where, { stage: { in: ['new','contacted','negotiating'] } }] }, _sum: { budget: true } }),
     ]);
-    return { total: count, overdueTasks: overdue, unassigned, won, conversionRate: count ? Math.round(won/count*1000)/10 : 0,
+    return { slaHours, unattended: unattendedCount, total: count, overdueTasks: overdue, unassigned, won, conversionRate: count ? Math.round(won/count*1000)/10 : 0,
       pipelineValue: Number(active._sum.budget ?? 0), stages: stages.map(s => ({ stage: s.stage, count: s._count, value: Number(s._sum?.budget ?? 0) })) };
   }
   private async locked(tx: Tx, u: AuthenticatedUser, id: string) {
@@ -120,9 +129,10 @@ export class CrmService {
   }
   async create(u: AuthenticatedUser, dto: CrmLeadDto) {
     if (u.role === 'seller' && dto.assignedSellerId && dto.assignedSellerId !== u.userId) throw new ForbiddenException('Você pode criar leads somente para si');
-    const assignedSellerId = u.role === 'seller' ? u.userId : dto.assignedSellerId;
     const id = await this.prisma.$transaction(async tx => {
       await this.relations(tx, u, dto);
+      // Sem responsável escolhido: usa o rodízio entre vendedores (se estiver ligado)
+      const assignedSellerId = u.role === 'seller' ? u.userId : dto.assignedSellerId !== undefined ? dto.assignedSellerId : await pickNextSeller(tx, u.dealershipId);
       let customerId = dto.customerId;
       if (!customerId) {
         if (!dto.customerName?.trim() || dto.customerName.trim().length < 2) throw new BadRequestException('Informe um cliente ou nome válido');
@@ -170,6 +180,7 @@ export class CrmService {
       const lossReason=dto.lostReason!==undefined?dto.lostReason:lead.lostReason;
       if (lead.saleId && stage !== 'won') throw new ConflictException('Lead vinculado a venda deve permanecer ganho');
       if (stage === 'lost' && !lossReason?.trim()) throw new BadRequestException('Informe o motivo da perda');
+      if (lead.stage === 'new' && stage !== 'new' && !lead.firstContactAt) data.firstContactAt = new Date();
       if (dto.stage !== undefined) Object.assign(data, { stage, closedAt: ['won','lost'].includes(stage) ? (stage!==lead.stage?new Date():lead.closedAt??new Date()) : null,
         lostReason: stage === 'lost' ? clean(lossReason) : null });
       else if (dto.lostReason !== undefined) data.lostReason = stage === 'lost' ? clean(dto.lostReason) : null;
@@ -234,7 +245,10 @@ export class CrmService {
       const occurredAt = dto.occurredAt ? new Date(dto.occurredAt) : new Date();
       if (occurredAt > new Date(Date.now()+60000)) throw new BadRequestException('Um contato realizado não pode estar no futuro');
       await tx.crmActivity.create({ data: { dealershipId: u.dealershipId, leadId: id, userId: u.userId, kind: dto.kind, content: dto.content.trim(), occurredAt } });
-      if (dto.kind !== 'note') await tx.lead.update({ where: { id }, data: { lastContactAt: !lead.lastContactAt || occurredAt > lead.lastContactAt ? occurredAt : lead.lastContactAt } });
+      if (dto.kind !== 'note') await tx.lead.update({ where: { id }, data: {
+        lastContactAt: !lead.lastContactAt || occurredAt > lead.lastContactAt ? occurredAt : lead.lastContactAt,
+        ...(!lead.firstContactAt || occurredAt < lead.firstContactAt ? { firstContactAt: occurredAt } : {}),
+      } });
       await tx.auditLog.create({ data: { dealershipId: u.dealershipId, userId: u.userId, action: 'crm_contact', entity: 'lead', entityId: id } });
     });
     return this.detail(u,id);
@@ -355,7 +369,7 @@ export class CrmService {
     return this.detail(u,id);
   }
   async exportCsv(u: AuthenticatedUser,q:CrmQueryDto) {
-    const where=this.where(u,q);
+    const where=this.where(u,q,await this.sla(u));
     const total=await this.prisma.lead.count({where});
     if(total>10000) throw new BadRequestException('A exportação aceita até 10.000 leads. Aplique filtros para reduzir o conjunto.');
     const items=await this.prisma.lead.findMany({where,include:LEAD_INCLUDE,orderBy:{createdAt:'desc'},take:10000});

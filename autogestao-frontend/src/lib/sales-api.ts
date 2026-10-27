@@ -42,6 +42,7 @@ export interface CreateSaleFullInput {
   commissionAmount?: number;
   warrantyDays?: number;
   warrantyCoverage?: string;
+  leadId?: string;
 }
 
 export interface SalePaymentItem {
@@ -102,6 +103,12 @@ export interface AfterSaleItem {
   id: string; contractNumber: string | null; soldAt: string; customer: string; phone: string | null;
   vehicle: string; plate: string | null; deadline: string; daysLeft: number; pendingItems: string[];
 }
+export interface FinancingPendingItem {
+  paymentId: string; saleId: string; contractNumber: string | null; soldAt: string; customer: string; phone: string | null; seller: string;
+  vehicle: string; method: string; bank: string | null; status: FinancingStatus; amount: number; returnAmount: number; days: number;
+}
+export const getFinancingPending = () =>
+  request<{ items: FinancingPendingItem[]; analysis: number; approved: number; rejected: number; waitingAmount: number }>("/sales/financing-pending");
 export const getAfterSales = () => request<{ items: AfterSaleItem[]; overdue: number; dueSoon: number }>("/sales/after-sales");
 
 // ---------- Reservas ----------
@@ -118,7 +125,7 @@ export const listReservations = (params: { status?: string; vehicleId?: string }
   if (params.vehicleId) q.set("vehicleId", params.vehicleId);
   return request<Reservation[]>(`/reservations${q.toString() ? `?${q}` : ""}`);
 };
-export const createReservation = (body: { vehicleId: string; customerId: string; deposit?: number; depositMethod?: string; expiresAt?: string; notes?: string }) =>
+export const createReservation = (body: { leadId?: string; vehicleId: string; customerId: string; deposit?: number; depositMethod?: string; expiresAt?: string; notes?: string }) =>
   request<Reservation>("/reservations", { method: "POST", body });
 export const updateReservation = (id: string, body: { expiresAt?: string; notes?: string }) =>
   request<Reservation>(`/reservations/${id}`, { method: "PATCH", body });

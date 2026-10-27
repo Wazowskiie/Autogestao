@@ -24,6 +24,12 @@ export class SalesController {
     return this.salesService.summary(user.dealershipId, month, user);
   }
 
+  /** Financiamentos aguardando o banco */
+  @Get('financing-pending')
+  financingPending(@CurrentUser() user: AuthenticatedUser) {
+    return this.salesService.financingPending(user.dealershipId, user);
+  }
+
   /** Pós-venda: transferências pendentes e prazos */
   @Get('after-sales')
   afterSales(@CurrentUser() user: AuthenticatedUser) {

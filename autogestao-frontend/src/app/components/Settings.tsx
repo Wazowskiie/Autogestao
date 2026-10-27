@@ -165,9 +165,13 @@ function StoreTab({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.Sett
     name: d.name, cnpj: maskCnpj(d.cnpj ?? ""), phone: maskPhone(d.phone ?? ""),
     city: d.city ?? "", state: d.state ?? "", primaryColor: d.primaryColor ?? BLUE,
     street: d.street ?? "", number: d.number ?? "", district: d.district ?? "", zip: maskCep(d.zip ?? ""),
+    slug: d.slug,
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<"logo" | "cover" | null>(null);
+  const auth = useAuth();
+  const isOwner = auth.user?.role === "owner";
+  const siteUrl = `${window.location.origin}/loja/${form.slug}`;
   const n = useNotice();
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 
@@ -178,8 +182,10 @@ function StoreTab({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.Sett
         name: form.name, cnpj: onlyDigits(form.cnpj), phone: onlyDigits(form.phone),
         city: form.city, state: form.state.toUpperCase(), primaryColor: form.primaryColor,
         street: form.street, number: form.number, district: form.district, zip: onlyDigits(form.zip),
+        ...(form.slug !== d.slug ? { slug: form.slug } : {}),
       }));
-      n.show("ok", "Dados da loja salvos.");
+      n.show("ok", form.slug !== d.slug ? "Dados salvos. O endereço do site mudou: o link antigo parou de funcionar." : "Dados da loja salvos.");
+      if (form.slug !== d.slug) auth.refresh();
     } catch (e) { n.show("error", msg(e)); } finally { setSaving(false); }
   };
 
@@ -215,8 +221,13 @@ function StoreTab({ data, onSaved }: { data: s.SettingsData; onSaved: (d: s.Sett
           <Field label="Cidade"><input style={inputStyle} value={form.city} onChange={set("city")} /></Field>
           <Field label="UF"><input style={inputStyle} value={form.state} maxLength={2} placeholder="SP"
             onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })} /></Field>
-          <Field label="Endereço do site" hint="Não pode ser alterado">
-            <input style={{ ...inputStyle, background: "#F9FAFB", color: "#6B7280" }} value={`${d.slug}.autogestao.com.br`} readOnly />
+          <Field label="Endereço do site" hint={isOwner ? "Se mudar, o link antigo para de funcionar" : "Só o dono pode alterar"}>
+            <div className="flex items-center rounded-lg" style={{ ...inputStyle, padding: 0, overflow: "hidden", background: isOwner ? "#fff" : "#F9FAFB" }}>
+              <span style={{ fontSize: 12, color: "#9CA3AF", padding: "0 0 0 10px", whiteSpace: "nowrap" }}>{window.location.host}/loja/</span>
+              <input style={{ border: "none", outline: "none", flex: 1, minWidth: 0, padding: "9px 10px 9px 2px", fontSize: 13, background: "transparent" }} value={form.slug} readOnly={!isOwner}
+                onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-") })} />
+            </div>
+            <a href={siteUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#185FA5", marginTop: 4, display: "inline-block" }}>Abrir meu site ↗</a>
           </Field>
         </div>
         <div className="flex items-end gap-3 mt-3">

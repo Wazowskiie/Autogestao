@@ -69,7 +69,7 @@ function Autocomplete<T extends { id: string }>({
 
   useEffect(() => {
     if (selected) setQuery(getLabel(selected));
-  }, [value]);
+  }, [value, !!selected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = query
     ? items.filter(i => getLabel(i).toLowerCase().includes(query.toLowerCase()))
@@ -142,6 +142,8 @@ export function Sales() {
   const [editingSale, setEditingSale] = useState<api.Sale | null>(null);
   const [afterSales, setAfterSales] = useState<{ items: sapi.AfterSaleItem[]; overdue: number; dueSoon: number } | null>(null);
   const [showAfterSales, setShowAfterSales] = useState(false);
+  const [financing, setFinancing] = useState<Awaited<ReturnType<typeof sapi.getFinancingPending>> | null>(null);
+  const [showFinancing, setShowFinancing] = useState(false);
 
   const fetchSales = useCallback(async () => {
     setLoading(true);
@@ -155,6 +157,7 @@ export function Sales() {
       setTotal(res.total);
       setSummary(sum);
       sapi.getAfterSales().then(setAfterSales).catch(() => setAfterSales(null));
+      sapi.getFinancingPending().then(setFinancing).catch(() => setFinancing(null));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar vendas");
     } finally {
@@ -217,6 +220,19 @@ export function Sales() {
               </div>
             ))}
           </div>
+        )}
+
+        {financing && financing.items.length > 0 && (
+          <button onClick={() => setShowFinancing(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg mb-3 text-left"
+            style={{ background: financing.rejected ? "#FEF2F2" : "#EFF6FF", border: `1px solid ${financing.rejected ? "#FECACA" : "#BFDBFE"}`, fontSize: 13, color: financing.rejected ? "#991B1B" : "#1E40AF" }}>
+            <Wallet size={14} />
+            <span className="flex-1">
+              <b>Financiamentos:</b>{" "}
+              {[financing.analysis ? `${financing.analysis} em análise` : null, financing.approved ? `${financing.approved} aprovado${financing.approved > 1 ? "s" : ""} esperando o depósito` : null, financing.rejected ? `${financing.rejected} recusado${financing.rejected > 1 ? "s" : ""}` : null].filter(Boolean).join(" · ")}
+              {financing.waitingAmount > 0 ? ` · ${currency(financing.waitingAmount)} a receber dos bancos` : ""}
+            </span>
+            <span style={{ fontWeight: 600 }}>Ver lista</span>
+          </button>
         )}
 
         {afterSales && afterSales.items.length > 0 && (
@@ -344,6 +360,37 @@ export function Sales() {
           onClose={() => setEditingSale(null)}
           onSaved={() => { setEditingSale(null); fetchSales(); }}
         />
+      )}
+
+      {showFinancing && financing && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.5)" }} onClick={(e) => e.target === e.currentTarget && setShowFinancing(false)}>
+          <div className="w-full max-h-[85vh] overflow-y-auto rounded-xl" style={{ background: "#fff", maxWidth: 680, margin: 16 }}>
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "0.5px solid rgba(0,0,0,0.08)" }}>
+              <div>
+                <h3>Financiamentos aguardando o banco</h3>
+                <p style={{ fontSize: 12, color: "#6B7280" }}>Quando o banco aprovar ou depositar, abra a venda e atualize a situação da ficha.</p>
+              </div>
+              <button onClick={() => setShowFinancing(false)} style={{ color: "#6B7280" }}><X size={20} /></button>
+            </div>
+            <div className="px-6 py-4 flex flex-col gap-2">
+              {financing.items.map((f) => {
+                const st = { analysis: ["Em análise", "#FEF3C7", "#92400E"], approved: ["Aprovada · falta o depósito", "#DBEAFE", "#1E40AF"], rejected: ["Recusada", "#FEE2E2", "#991B1B"], paid: ["Paga", "#DCFCE7", "#166534"] }[f.status] ?? ["Em análise", "#FEF3C7", "#92400E"];
+                const late = f.status === "analysis" && f.days > 3;
+                return (
+                  <button key={f.paymentId} onClick={() => { setShowFinancing(false); setViewingSaleId(f.saleId); }}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[#F9FAFB]" style={{ border: `0.5px solid ${late ? "#FCA5A5" : "rgba(0,0,0,0.08)"}` }}>
+                    <div className="flex-1" style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 500, color: "#0F1923" }}>{f.customer} · {f.vehicle}</p>
+                      <p style={{ fontSize: 12, color: "#6B7280" }}>{f.bank || "Banco não informado"} · {currency(f.amount)}{f.returnAmount ? ` + retorno ${currency(f.returnAmount)}` : ""} · venda {f.contractNumber ?? ""} ({f.seller})</p>
+                      <p style={{ fontSize: 11, color: late ? "#B91C1C" : "#9CA3AF" }}>{f.days === 0 ? "Vendido hoje" : `Há ${f.days} dia${f.days > 1 ? "s" : ""}`}{late ? " · cobre o banco/correspondente" : ""}</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full shrink-0" style={{ fontSize: 11, fontWeight: 600, background: st[1], color: st[2] }}>{st[0]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
 
       {showAfterSales && afterSales && (
@@ -765,7 +812,14 @@ const newTradeIn = (): TradeInForm => ({
   color: "", km: "", engineCc: "", fuel: "", value: "", lookup: "idle",
 });
 
-function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (saleId?: string) => void }) {
+// Venda aberta a partir de um lead do CRM: cliente, veículo, vendedor e troca já preenchidos
+export interface SalePrefill {
+  leadId?: string; vehicleId?: string | null; sellerId?: string | null;
+  customer?: { id: string; name: string; phone?: string | null; email?: string | null } | null;
+  tradeIn?: { type?: string; plate?: string; brand?: string; model?: string; year?: number; km?: number; color?: string; expectedValue?: number; evaluatedValue?: number } | null;
+}
+
+export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => void; onSaved: (saleId?: string) => void; prefill?: SalePrefill }) {
   const auth = useAuth();
   const isOwner = auth.user?.role === "owner";
   const isManager = isOwner || auth.user?.role === "admin";
@@ -778,9 +832,9 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
   const [sellers, setSellers] = useState<api.Seller[]>([]);
   const [interestRates, setInterestRates] = useState<any[]>([]);
 
-  const [vehicleId, setVehicleId] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [sellerId, setSellerId] = useState("");
+  const [vehicleId, setVehicleId] = useState(prefill?.vehicleId ?? "");
+  const [customerId, setCustomerId] = useState(prefill?.customer?.id ?? "");
+  const [sellerId, setSellerId] = useState(prefill?.sellerId ?? "");
   const [price, setPrice] = useState("");
   const [cost, setCost] = useState("");
   const [soldAt, setSoldAt] = useState(todayISO());
@@ -796,7 +850,15 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
   const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
 
   // Troca e formas de pagamento
-  const [tradeIns, setTradeIns] = useState<TradeInForm[]>([]);
+  const [tradeIns, setTradeIns] = useState<TradeInForm[]>(() => {
+    const t = prefill?.tradeIn;
+    if (!t || !(t.brand || t.model || t.plate)) return [];
+    const value = t.evaluatedValue || t.expectedValue;
+    return [{
+      ...newTradeIn(), type: (t.type as api.VehicleType) || "moto", plate: t.plate ?? "", brand: t.brand ?? "", model: t.model ?? "",
+      year: t.year ? String(t.year) : "", color: t.color ?? "", km: t.km ? String(t.km) : "", value: value ? toMoneyText(value) : "",
+    }];
+  });
   const [payments, setPayments] = useState<PaymentForm[]>([]);
 
   // Promissórias (quando uma das formas é "Promissórias")
@@ -834,7 +896,8 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
       api.listVehicles({ status: "reserved", pageSize: 200 }).catch(() => ({ items: [] as api.Vehicle[] })),
     ]).then(([v, c, s, ir, reserved]) => {
       setVehicles([...v.items, ...reserved.items]);
-      setCustomers(c.items);
+      const pc = prefill?.customer;
+      setCustomers(pc && !c.items.some(x => x.id === pc.id) ? [...c.items, pc as api.Customer] : c.items);
       setSellers(s);
       setInterestRates(ir);
     }).catch(() => {});
@@ -863,6 +926,14 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
     }).catch(() => {});
     return () => { alive = false; };
   }, [vehicleId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Veio do CRM com o veículo escolhido: preenche custo e preço quando a lista carregar
+  useEffect(() => {
+    if (selectedVehicle && !price) {
+      setCost(toMoneyText(Number(selectedVehicle.cost)));
+      setPrice(toMoneyText(Number(selectedVehicle.price)));
+    }
+  }, [vehicles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function openNewCustomerForm(name: string) {
     setNewCustomerName(name);
@@ -1130,6 +1201,7 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
         })),
         expenses: saleExpenses.filter(e => e.description.trim()).map(e => ({ description: e.description.trim(), amount: round2(num(e.amount)), paid: e.paid })),
         commissionAmount: commissionText !== null ? round2(num(commissionText)) : undefined,
+        leadId: prefill?.leadId,
         warrantyDays: Number(warrantyDays) > 0 ? Number(warrantyDays) : undefined,
         warrantyCoverage: Number(warrantyDays) > 0 ? warrantyCoverage.trim() || undefined : undefined,
       });

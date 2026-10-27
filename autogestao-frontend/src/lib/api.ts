@@ -163,7 +163,7 @@ export function deleteCustomer(id: string) { return request<{ success: boolean }
 // ---------- Leads ----------
 export type LeadStage = "new" | "contacted" | "negotiating" | "won" | "lost";
 export interface LeadCustomer { id: string; name: string; phone: string | null; email: string | null; }
-export interface LeadVehicle { id: string; brand: string; model: string; year: number; photos?: { url: string }[]; }
+export interface LeadVehicle { id: string; brand: string; model: string; year: number; price?: number | string; status?: VehicleStatus; photos?: { url: string }[]; }
 export interface LeadSeller { id: string; name: string; }
 export type LeadTemperature = 'hot' | 'warm' | 'cold';
 export interface Lead { id: string; dealershipId: string; stage: LeadStage; source: string | null; notes: string | null; createdAt: string; updatedAt: string; customer: LeadCustomer | null; vehicle: LeadVehicle | null; assignedSeller: LeadSeller | null; temperature: LeadTemperature | null; budget: number | null; paymentIntent: string | null; nextActionDate: string | null; nextActionNote: string | null; }
@@ -380,6 +380,15 @@ export function listStorefrontVehicles(slug: string, params: StorefrontVehiclePa
   return publicRequest<StorefrontVehicleListResponse>(`/storefront/${slug}/vehicles?${query.toString()}`);
 }
 export function getStorefrontVehicle(slug: string, vehicleId: string) { return publicRequest<StorefrontVehicle>(`/storefront/${slug}/vehicles/${vehicleId}`); }
+export interface StorefrontLeadInput { name: string; phone: string; email?: string; vehicleId?: string; message?: string; tradeIn?: string; kind?: "interest" | "financing" | "visit"; website?: string }
+/** Formulário "Tenho interesse" do site: vira lead no CRM da loja */
+export async function sendStorefrontLead(slug: string, body: StorefrontLeadInput) {
+  const res = await fetch(`${API_URL}/storefront/${slug}/leads`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new ApiError(res.status === 429 ? "Muitas tentativas. Aguarde um minuto e tente de novo." : Array.isArray(data?.message) ? "Confira o nome e o telefone." : data?.message ?? "Não foi possível enviar.", res.status);
+  return data as { ok: boolean };
+}
 
 // ---------- Taxas de juros ----------
 export interface InterestRate {
