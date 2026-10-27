@@ -90,6 +90,7 @@ model Dealership {
   chatConversations ChatConversation[]
   crmActivities CrmActivity[]
   crmTasks CrmTask[]
+  adListings AdListing[]
 
   @@map("dealerships")
 }
@@ -190,6 +191,7 @@ model Vehicle {
   pendencies   VehiclePendency[]
   web          VehicleWeb?
   leads        Lead[]
+  adListings   AdListing[]
   sales        Sale[]        @relation("SaleVehicle")
   reservations VehicleReservation[]
   tradeInSale  Sale?         @relation("SaleTradeIns", fields: [tradeInSaleId], references: [id], onDelete: SetNull)
@@ -778,4 +780,33 @@ model VehicleReservation {
   @@index([dealershipId, status])
   @@index([vehicleId])
   @@map("vehicle_reservations")
+}
+
+// Central de anúncios
+model AdListing {
+  id              String    @id @default(uuid())
+  dealershipId    String    @map("dealership_id")
+  vehicleId       String?   @map("vehicle_id")
+  vehicleSnapshot Json?     @map("vehicle_snapshot")
+  archivedAt      DateTime? @map("archived_at")
+  publishedAt     DateTime? @map("published_at")
+  publishedById   String?   @map("published_by_id")
+  externalUrl     String?   @map("external_url")
+  removedAt       DateTime? @map("removed_at")
+  removedById     String?   @map("removed_by_id")
+  channel         String
+  title           String
+  description     String    @default("")
+  price           Decimal   @db.Decimal(12, 2)
+  photos          Json      @default("[]")
+  status          String    @default("draft")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  dealership Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  vehicle    Vehicle?   @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@unique([dealershipId, vehicleId, channel])
+  @@index([dealershipId, createdAt])
+  @@map("ad_listings")
 }
