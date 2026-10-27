@@ -83,6 +83,7 @@ export interface Vehicle {
   ownerCount: number | null;
   ipvaPaid: boolean | null; acceptsTrade: boolean | null;
   hasSpareKey: boolean | null; hasManual: boolean | null;
+  docStatus?: import("./vehicle-doc-status").DocStatus | null;
   cost: number; price: number;
   status: VehicleStatus;
   description: string | null; optionals: string[];
@@ -103,6 +104,7 @@ export interface VehicleInput {
   fuel?: string | null; transmission?: string | null;
   doors?: number | null; origin?: string | null; ownerCount?: number | null;
   ipvaPaid?: boolean; acceptsTrade?: boolean; hasSpareKey?: boolean; hasManual?: boolean;
+  docStatus?: import("./vehicle-doc-status").DocStatus | null;
   cost: number; price: number;
   description?: string | null; optionals?: string[];
 }

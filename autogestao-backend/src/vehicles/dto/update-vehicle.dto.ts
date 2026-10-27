@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import {
-  IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min, MinLength,
+  IsBoolean, IsEnum, IsInt, IsNumber, IsObject, IsOptional, IsString, Min, MinLength,
 } from 'class-validator';
 import { VehicleStatus, VehicleType } from '../../generated/prisma/client';
 
@@ -33,6 +33,8 @@ export class UpdateVehicleDto {
   @IsOptional() @IsBoolean() acceptsTrade?: boolean;
   @IsOptional() @IsBoolean() hasSpareKey?: boolean;
   @IsOptional() @IsBoolean() hasManual?: boolean;
+  // Licenciamento, multas, Renajud, recall e devolução
+  @IsOptional() @IsObject() docStatus?: Record<string, unknown> | null;
 
   @IsOptional() @IsNumber({}, { message: 'Preço de custo inválido' }) @Min(0) @Type(() => Number) cost?: number;
   @IsOptional() @IsNumber({}, { message: 'Preço de venda inválido' }) @Min(0) @Type(() => Number) price?: number;

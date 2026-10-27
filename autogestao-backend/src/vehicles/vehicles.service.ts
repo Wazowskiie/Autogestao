@@ -6,6 +6,7 @@ import {
 import { PlansService } from '../plans/plans.service';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { sanitizeDocStatus } from './doc-status';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { QueryVehicleDto } from './dto/query-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
@@ -60,6 +61,7 @@ export class VehiclesService {
         acceptsTrade: dto.acceptsTrade ?? false,
         hasSpareKey: dto.hasSpareKey ?? false,
         hasManual: dto.hasManual ?? false,
+        docStatus: (sanitizeDocStatus(dto.docStatus) ?? undefined) as Prisma.InputJsonValue | undefined,
 
         cost: dto.cost,
         price: dto.price,
@@ -122,7 +124,10 @@ export class VehiclesService {
   async update(dealershipId: string, id: string, dto: UpdateVehicleDto) {
     await this.findOne(dealershipId, id);
 
-    const data: Prisma.VehicleUpdateInput = { ...dto } as Prisma.VehicleUpdateInput;
+    const { docStatus, ...rest } = dto;
+    const data: Prisma.VehicleUpdateInput = { ...rest } as Prisma.VehicleUpdateInput;
+    const doc = sanitizeDocStatus(docStatus);
+    if (doc !== undefined) data.docStatus = doc === null ? Prisma.DbNull : (doc as Prisma.InputJsonValue);
     if (dto.plate !== undefined) data.plate = normalizePlate(dto.plate);
     if (dto.chassis) data.chassis = dto.chassis.toUpperCase().trim();
     if (dto.renavam) data.renavam = dto.renavam.replace(/\D/g, '');

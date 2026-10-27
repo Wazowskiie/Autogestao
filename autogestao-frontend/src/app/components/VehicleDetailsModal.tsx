@@ -1,3 +1,4 @@
+import { DOC_ITEMS, docItemText } from "../../lib/vehicle-doc-status";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   X, Pencil, ImageOff, Car, Bike, Truck, Package, Upload, Trash2, Star, ChevronDown, ChevronRight,
@@ -375,6 +376,12 @@ function VehicleTab({ v }: { v: VehicleFull }) {
       ["Nº de donos", v.ownerCount], ["IPVA pago", yesNo(v.ipvaPaid)], ["Chave reserva", yesNo(v.hasSpareKey)],
       ["Manual", yesNo(v.hasManual)], ["Aceita troca", yesNo(v.acceptsTrade)],
     ] },
+    ...(v.type !== "other" ? [{ title: "Situação do veículo", rows: DOC_ITEMS.map((d) => {
+      const it = v.docStatus?.[d.key];
+      const text = docItemText(d.key, it);
+      return [d.label, it?.status === "pending" ? <span style={{ color: "#B91C1C", fontWeight: 600 }}>⚠ {text}</span>
+        : it?.status === "ok" ? <span style={{ color: "#15803D" }}>✓ {text}</span> : <span style={{ color: "#9CA3AF" }}>{text}</span>] as [string, ReactNode];
+    }) }] : []),
   ];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>

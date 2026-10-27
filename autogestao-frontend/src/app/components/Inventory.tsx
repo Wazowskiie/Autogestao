@@ -1,3 +1,4 @@
+import { DOC_ITEMS, docProblems, type DocItem, type DocItemStatus, type DocKey, type DocStatus } from "../../lib/vehicle-doc-status";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Search, Car, Bike, Truck, Package, Edit2, Trash2, Globe, X, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
@@ -250,6 +251,13 @@ export function Inventory() {
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 500 }}>{v.brand} {v.model} {v.version ?? ""}</div>
                           <div style={{ fontSize: 12, color: "#6B7280" }}>{subtitle}</div>
+                          {docProblems(v.docStatus).length > 0 && (
+                            <div className="flex flex-wrap gap-1" style={{ marginTop: 3 }}>
+                              {docProblems(v.docStatus).map((p) => (
+                                <span key={p} className="px-1.5 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, background: "#FEE2E2", color: "#B91C1C" }}>⚠ {p}</span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -321,6 +329,74 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
+// ---------- Situação do veículo ----------
+/** Tira "não verificado" sem observação, para não guardar lixo */
+function cleanDocStatus(d: DocStatus): DocStatus | null {
+  const out: DocStatus = {};
+  for (const { key } of DOC_ITEMS) {
+    const it = d[key];
+    if (!it) continue;
+    if (it.status === "unknown" && !it.note) continue;
+    out[key] = { status: it.status, ...(it.year ? { year: it.year } : {}), ...(it.amount ? { amount: it.amount } : {}), ...(it.note ? { note: it.note } : {}) };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function DocStatusEditor({ value, onChange }: { value: DocStatus; onChange: (v: DocStatus) => void }) {
+  const set = (key: DocKey, patch: Partial<DocItem>) => {
+    const cur: DocItem = value[key] ?? { status: "unknown" };
+    onChange({ ...value, [key]: { ...cur, ...patch } });
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      {DOC_ITEMS.map((d) => {
+        const item = value[d.key] ?? { status: "unknown" as DocItemStatus };
+        const opts: { v: DocItemStatus; label: string; color: string; bg: string }[] = [
+          { v: "ok", label: d.ok, color: "#15803D", bg: "#ECFDF5" },
+          { v: "pending", label: d.pending, color: "#B91C1C", bg: "#FEF2F2" },
+          { v: "unknown", label: "Não verificado", color: "#6B7280", bg: "#F3F4F6" },
+        ];
+        return (
+          <div key={d.key} className="rounded-lg px-3 py-2.5" style={{ border: "0.5px solid rgba(0,0,0,0.1)", background: item.status === "pending" ? "#FFFBFB" : "#FAFAFA" }}>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div style={{ width: 120 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#0F1923" }}>{d.label}</div>
+                <div style={{ fontSize: 11, color: "#9CA3AF" }}>{d.help}</div>
+              </div>
+              <div className="flex gap-1 flex-wrap">
+                {opts.map((o) => {
+                  const active = item.status === o.v;
+                  return (
+                    <button key={o.v} type="button" onClick={() => set(d.key, { status: o.v })} className="px-2.5 py-1.5 rounded-md"
+                      style={{ fontSize: 12, fontWeight: active ? 600 : 400, border: active ? `1px solid ${o.color}` : "0.5px solid rgba(0,0,0,0.1)", background: active ? o.bg : "#fff", color: active ? o.color : "#6B7280" }}>
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {d.key === "licensing" && (
+                <input value={item.year ? String(item.year) : ""} inputMode="numeric" placeholder="Exercício (ano)" maxLength={4}
+                  onChange={(e) => set("licensing", { year: Number(e.target.value.replace(/\D/g, "")) || null })}
+                  className="rounded-lg px-2.5 py-1.5" style={{ ...inputStyle, background: "#fff", width: 130 }} />
+              )}
+              {d.key === "fines" && item.status === "pending" && (
+                <input value={item.amount ? String(item.amount).replace(".", ",") : ""} inputMode="decimal" placeholder="Valor das multas (R$)"
+                  onChange={(e) => { const n = Number(e.target.value.replace(/[^\d,]/g, "").replace(",", ".")); set("fines", { amount: Number.isFinite(n) && n > 0 ? n : null }); }}
+                  className="rounded-lg px-2.5 py-1.5" style={{ ...inputStyle, background: "#fff", width: 170 }} />
+              )}
+            </div>
+            {item.status === "pending" && (
+              <input value={item.note ?? ""} onChange={(e) => set(d.key, { note: e.target.value.slice(0, 300) || null })}
+                placeholder={d.key === "renajud" ? "Qual restrição? (ex.: circulação, transferência)" : d.key === "recall" ? "Qual recall?" : d.key === "returned" ? "Motivo da devolução / de quem veio" : "Observação (opcional)"}
+                className="w-full rounded-lg px-2.5 py-1.5 mt-2" style={{ ...inputStyle, background: "#fff" }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 type LookupState =
   | { status: "idle" }
   | { status: "loading" }
@@ -359,6 +435,8 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
   const [acceptsTrade, setAcceptsTrade] = useState(initial?.acceptsTrade ?? false);
   const [hasSpareKey, setHasSpareKey] = useState(initial?.hasSpareKey ?? false);
   const [hasManual, setHasManual] = useState(initial?.hasManual ?? false);
+  // Licenciamento, multas, Renajud, recall e devolução
+  const [docStatus, setDocStatus] = useState<DocStatus>(initial?.docStatus ?? {});
 
   // Preços
   const [cost, setCost] = useState(initial ? String(initial.cost) : "");
@@ -508,6 +586,7 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
         acceptsTrade,
         hasSpareKey: isOther ? false : hasSpareKey,
         hasManual,
+        docStatus: isOther ? null : cleanDocStatus(docStatus),
         cost: costNum, price: priceNum,
         description: description.trim() || null,
         optionals: selectedOptionals.filter((o) => optionalsList.includes(o)),
@@ -772,6 +851,14 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
               <Toggle label="Manual do proprietário" checked={hasManual} onChange={setHasManual} />
             </div>
           </div>
+
+          {/* Situação do veículo (documentação) */}
+          {!isOther && (
+            <div>
+              <p style={sectionTitleStyle}>Situação do veículo</p>
+              <DocStatusEditor value={docStatus} onChange={setDocStatus} />
+            </div>
+          )}
 
           {/* Opcionais (mudam conforme o tipo) */}
           <div>

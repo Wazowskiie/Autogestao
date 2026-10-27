@@ -352,6 +352,8 @@ export class AssistantToolsService {
       procedencia: v.origin,
       donos: v.ownerCount,
       ipva_pago: v.ipvaPaid,
+      // licenciamento, multas, Renajud, recall e devolução (ok = em dia / pending = com problema)
+      situacao_documento: v.docStatus ?? 'não informada',
       chave_reserva: v.hasSpareKey,
       manual: v.hasManual,
       aceita_troca: v.acceptsTrade,

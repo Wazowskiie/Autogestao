@@ -20,6 +20,7 @@ export interface VehicleFull {
   fuel?: string | null; transmission?: string | null; doors?: number | null;
   origin?: string | null; ownerCount?: number | null;
   ipvaPaid?: boolean | null; acceptsTrade?: boolean | null; hasSpareKey?: boolean | null; hasManual?: boolean | null;
+  docStatus?: import("./vehicle-doc-status").DocStatus | null;
   cost: Money; price: Money;
   description?: string | null; optionals?: string[];
   photos?: VehiclePhoto[];

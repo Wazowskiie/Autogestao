@@ -108,3 +108,26 @@ test('Entrada mínima: vendedor é bloqueado, dono libera confirmando', async ()
   await sales.create(shop.id, seller.id, body(v2.id, 16800), sellerActor);
   await prisma.dealership.update({ where: { id: shop.id }, data: { minDownPaymentPercent: null } });
 });
+
+test('Situação do veículo: licenciamento, multas, Renajud, recall e devolução', async () => {
+  const { VehiclesService } = require('../dist/src/vehicles/vehicles.service');
+  const vs = new VehiclesService(prisma);
+  const v = await vs.create(shop.id, owner.id, {
+    type: 'moto', brand: 'Honda', model: 'Biz 125', year: 2023, km: 1000, cost: 10000, price: 13000,
+    docStatus: {
+      licensing: { status: 'ok', year: 2026 },
+      fines: { status: 'pending', amount: '293.47', note: 'Excesso de velocidade' },
+      renajud: { status: 'ok' }, recall: { status: 'qualquer' }, returned: { status: 'pending', note: 'Voltou do cliente' },
+      hack: { status: 'ok' },
+    },
+  });
+  const saved = await prisma.vehicle.findUnique({ where: { id: v.id } });
+  assert.deepEqual(saved.docStatus.licensing, { status: 'ok', year: 2026 });
+  assert.equal(saved.docStatus.fines.amount, 293.47);
+  assert.equal(saved.docStatus.recall.status, 'unknown'); // valor inválido vira "não verificado"
+  assert.equal(saved.docStatus.hack, undefined);           // chave desconhecida é ignorada
+  await vs.update(shop.id, v.id, { docStatus: { fines: { status: 'ok' } } });
+  assert.deepEqual((await prisma.vehicle.findUnique({ where: { id: v.id } })).docStatus, { fines: { status: 'ok' } });
+  await vs.update(shop.id, v.id, { price: 12500 }); // editar outra coisa não apaga a situação
+  assert.deepEqual((await prisma.vehicle.findUnique({ where: { id: v.id } })).docStatus, { fines: { status: 'ok' } });
+});

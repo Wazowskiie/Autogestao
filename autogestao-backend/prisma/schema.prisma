@@ -164,6 +164,7 @@ model Vehicle {
   acceptsTrade          Boolean?               @map("accepts_trade")
   hasSpareKey           Boolean?               @map("has_spare_key")
   hasManual             Boolean?               @map("has_manual")
+  docStatus             Json?                  @map("doc_status")
   cost                  Decimal                @db.Decimal(12, 2)
   price                 Decimal                @db.Decimal(12, 2)
   status                VehicleStatus          @default(available)
