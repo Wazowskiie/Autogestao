@@ -8,6 +8,10 @@ export interface SaleDocuments {
   price: number;
   notes: string | null;
   seller: string;
+  status?: "active" | "canceled";
+  warrantyDays?: number | null;
+  warrantyCoverage?: string | null;
+  checklist?: Record<string, { done: boolean; at: string | null } | undefined>;
   dealership: {
     name: string; cnpj: string | null; phone: string | null; logoUrl: string | null;
     street: string | null; number: string | null; district: string | null; zip: string | null;
@@ -18,7 +22,7 @@ export interface SaleDocuments {
     type: string; brand: string; model: string; version: string | null; year: number; manufactureYear: number | null;
     color: string | null; plate: string | null; chassis: string | null; renavam: string | null; km: number; fuel: string | null;
   };
-  payments: { method: string; amount: number; installments: number | null; notes: string | null }[];
+  payments: { method: string; amount: number; installments: number | null; notes: string | null; bank?: string | null }[];
   tradeIns: {
     brand: string; model: string; version: string | null; year: number; manufactureYear: number | null; color: string | null;
     plate: string | null; chassis: string | null; renavam: string | null; km: number; value: number;
@@ -119,7 +123,19 @@ export function moneyInWords(value: number): string {
 const PAYMENT_NAMES: Record<string, string> = {
   pix: "PIX", cash: "Dinheiro", transfer: "Transferência bancária", card_credit: "Cartão de crédito", card_debit: "Cartão de débito",
   financing: "Financiamento", consortium: "Consórcio", promissory: "Notas promissórias", other: "Outro",
+  deposit: "Sinal pago na reserva",
 };
+// Recebido na hora (o resto entra depois: financiamento, consórcio e promissórias)
+const RECEIVED_NOW = ["pix", "cash", "transfer", "card_credit", "card_debit", "deposit"];
+const DAY = 24 * 60 * 60 * 1000;
+const plusDays = (iso: string, days: number) => new Date(new Date(iso).getTime() + days * DAY).toISOString();
+const canceledBanner = (doc: SaleDocuments) => (doc.status === "canceled"
+  ? `<p class="center" style="border:2px solid #b91c1c;color:#b91c1c;padding:6px;font-weight:bold;font-family:Arial">VENDA CANCELADA — documento sem validade</p>` : "");
+const logo = (s: SaleDocuments["dealership"]) => (s.logoUrl ? `<div class="center" style="margin-bottom:8px"><img src="${esc(s.logoUrl)}" style="max-height:60px;max-width:200px" alt=""></div>` : "");
+const vehicleLine = (v: SaleDocuments["vehicle"]) =>
+  `${esc(`${v.brand} ${v.model}${v.version ? ` ${v.version}` : ""}`)}, ano ${v.manufactureYear ? `${v.manufactureYear}/` : ""}${v.year}${v.color ? `, cor ${esc(v.color)}` : ""}, placa ${fill(v.plate, 90)}, chassi ${fill(v.chassis, 150)}, RENAVAM ${fill(v.renavam, 110)}`;
+const paymentName = (p: { method: string; installments: number | null; bank?: string | null }) =>
+  `${PAYMENT_NAMES[p.method] ?? p.method}${p.bank ? ` – ${p.bank}` : ""}${p.method === "card_credit" && p.installments && p.installments > 1 ? ` em ${p.installments}x` : ""}`;
 const vehicleKind = (t: string) => (t === "moto" ? "motocicleta" : t === "truck" ? "caminhão/utilitário" : "veículo");
 
 const BASE_CSS = `
@@ -164,6 +180,7 @@ export function contractHtml(doc: SaleDocuments) {
 
   const body = `
   ${s.logoUrl ? `<div class="center" style="margin-bottom:8px"><img src="${esc(s.logoUrl)}" style="max-height:60px;max-width:200px" alt=""></div>` : ""}
+  ${canceledBanner(doc)}
   <h1>CONTRATO DE COMPRA E VENDA DE VEÍCULO</h1>
   <p class="center muted">Contrato nº ${esc(doc.contractNumber)}</p>
 
@@ -181,7 +198,7 @@ export function contractHtml(doc: SaleDocuments) {
   <table>
     <tr><th>Forma de pagamento</th><th style="width:26%">Valor</th></tr>
     ${doc.tradeIns.map((t) => `<tr><td>Veículo recebido na troca: ${esc(`${t.brand} ${t.model} ${t.year}`)}${t.plate ? `, placa ${esc(t.plate)}` : ""}</td><td>${brl(t.value)}</td></tr>`).join("")}
-    ${doc.payments.map((p) => `<tr><td>${esc(PAYMENT_NAMES[p.method] ?? p.method)}${p.method === "card_credit" && p.installments && p.installments > 1 ? ` em ${p.installments}x` : ""}${p.method === "promissory" && notes.length ? ` – ${notes.length} parcela(s), conforme quadro abaixo` : ""}${p.notes ? ` (${esc(p.notes)})` : ""}</td><td>${brl(p.amount)}</td></tr>`).join("")}
+    ${doc.payments.map((p) => `<tr><td>${esc(paymentName(p))}${p.method === "promissory" && notes.length ? ` – ${notes.length} parcela(s), conforme quadro abaixo` : ""}${p.notes ? ` (${esc(p.notes)})` : ""}</td><td>${brl(p.amount)}</td></tr>`).join("")}
     <tr><th>Total</th><th>${brl(doc.price)}</th></tr>
   </table>
   ${doc.tradeIns.length ? `
@@ -196,7 +213,7 @@ export function contractHtml(doc: SaleDocuments) {
   <p>Parágrafo único – O atraso no pagamento de qualquer parcela sujeitará o(a) COMPRADOR(A) à multa de 2% (dois por cento) sobre o valor da parcela e juros de mora de 1% (um por cento) ao mês, calculados dia a dia.</p>` : ""}
 
   <h2>4. Da entrega e do estado do veículo</h2>
-  <p>O veículo é entregue nesta data ao(à) COMPRADOR(A), que declara tê-lo examinado e recebido em perfeito estado de funcionamento e conservação, de acordo com o que foi apresentado. O(A) VENDEDOR(A) assegura a garantia legal prevista no Código de Defesa do Consumidor.</p>
+  <p>O veículo é entregue nesta data ao(à) COMPRADOR(A), que declara tê-lo examinado e recebido em perfeito estado de funcionamento e conservação, de acordo com o que foi apresentado. O(A) VENDEDOR(A) assegura a garantia legal prevista no Código de Defesa do Consumidor.${doc.warrantyDays ? ` Além dela, o(a) VENDEDOR(A) concede garantia de <b>${doc.warrantyDays} (${integerWords(doc.warrantyDays)}) dias</b>, contados desta data, cobrindo: ${esc(doc.warrantyCoverage || "defeitos de funcionamento")}, nas condições do Termo de Garantia que acompanha este contrato.` : ""}</p>
 
   <h2>5. Da transferência e das responsabilidades</h2>
   <p>O(A) COMPRADOR(A) se compromete a providenciar a transferência do veículo para o seu nome no prazo de 30 (trinta) dias, conforme o art. 123 do Código de Trânsito Brasileiro, arcando com as despesas da transferência. O(A) VENDEDOR(A) fará a comunicação de venda ao órgão de trânsito, conforme o art. 134 do mesmo Código.</p>
@@ -281,13 +298,105 @@ export function promissoryHtml(doc: SaleDocuments, opts: { onlyOpen?: boolean } 
  * Abre o documento numa aba nova. A aba é aberta antes de buscar os dados
  * para o navegador não bloquear como pop-up.
  */
-export async function openSaleDocument(saleId: string, kind: "contract" | "promissory", opts: { onlyOpen?: boolean } = {}) {
+// ---------------- Termo de garantia ----------------
+export function warrantyHtml(doc: SaleDocuments) {
+  const s = doc.dealership, c = doc.customer, v = doc.vehicle;
+  const days = doc.warrantyDays ?? 0;
+  const body = `
+  ${logo(s)}${canceledBanner(doc)}
+  <h1>TERMO DE GARANTIA</h1>
+  <p class="center muted">Referente ao contrato nº ${esc(doc.contractNumber)}</p>
+  <p><b>${esc(s.name)}</b>${s.cnpj ? `, CNPJ ${esc(formatDoc(s.cnpj))}` : ""}, concede ao(à) comprador(a) <b>${esc(c.name)}</b>${c.document ? `, ${docLabel(c.document)} ${esc(formatDoc(c.document))}` : ""}, garantia sobre o(a) ${vehicleKind(v.type)} ${vehicleLine(v)}, com ${v.km ? `${v.km.toLocaleString("pt-BR")} km` : fill(null, 80) + " km"} na data da entrega.</p>
+
+  <h2>1. Prazo</h2>
+  <p>${days ? `<b>${days} (${integerWords(days)}) dias</b>, de ${shortDate(doc.soldAt)} até ${shortDate(plusDays(doc.soldAt, days))}` : fill(null, 240)}, sem prejuízo da garantia legal de 90 (noventa) dias prevista no art. 26 do Código de Defesa do Consumidor.</p>
+
+  <h2>2. O que está coberto</h2>
+  <p>${esc(doc.warrantyCoverage || "Defeitos de funcionamento")}. A garantia cobre o conserto ou a substituição das peças com defeito, com mão de obra, feitos pela loja ou por oficina indicada por ela.</p>
+
+  <h2>3. O que não está coberto</h2>
+  <p>Itens de desgaste natural (pneus, pastilhas e lonas de freio, embreagem, bateria, lâmpadas, velas, correias, kit relação, óleo e filtros); danos por mau uso, acidente, enchente ou falta de manutenção; peças alteradas ou consertos feitos fora sem autorização da loja; acessórios instalados depois da compra.</p>
+
+  <h2>4. Condições</h2>
+  <p>O(A) comprador(a) deve avisar a loja assim que perceber o defeito e não continuar usando o veículo se isso puder piorar o problema. A garantia é perdida se o veículo for desmontado ou consertado por terceiros sem autorização, se o hodômetro for alterado ou se as revisões e trocas de óleo não forem feitas nos prazos do fabricante.</p>
+
+  <p style="margin-top:18px">${fill(s.city, 120)}, ${longDate(doc.soldAt)}.</p>
+  <div class="sign"><div>${esc(s.name)}<br><span class="muted">LOJA</span></div><div>${esc(c.name)}<br><span class="muted">COMPRADOR(A)</span></div></div>`;
+  return shell(`Termo de garantia ${doc.contractNumber} – ${c.name}`, body);
+}
+
+// ---------------- Termo de entrega ----------------
+export function deliveryHtml(doc: SaleDocuments) {
+  const s = doc.dealership, c = doc.customer, v = doc.vehicle;
+  const ck = doc.checklist ?? {};
+  const box = (done?: boolean) => `<span style="display:inline-block;width:13px;height:13px;border:1px solid #333;margin-right:6px;vertical-align:-2px;text-align:center;line-height:12px;font-size:11px">${done ? "X" : ""}</span>`;
+  const items: [string, boolean | undefined][] = [
+    ["Chave principal", true],
+    ["Chave reserva", ck.keys?.done],
+    ["Manual do proprietário", ck.manual?.done],
+    ["CRLV (documento do veículo)", ck.documents?.done],
+    ["ATPV-e (autorização de transferência) assinado", ck.atpv?.done],
+    ["Contrato de compra e venda", true],
+    ...(doc.warrantyDays ? [["Termo de garantia", true] as [string, boolean]] : []),
+  ];
+  const body = `
+  ${logo(s)}${canceledBanner(doc)}
+  <h1>TERMO DE ENTREGA DE VEÍCULO</h1>
+  <p class="center muted">Referente ao contrato nº ${esc(doc.contractNumber)}</p>
+  <p>Eu, <b>${esc(c.name)}</b>${c.document ? `, ${docLabel(c.document)} ${esc(formatDoc(c.document))}` : ""}, declaro que recebi de <b>${esc(s.name)}</b> o(a) ${vehicleKind(v.type)} ${vehicleLine(v)}.</p>
+  <table>
+    <tr><th style="width:30%">Data e hora da entrega</th><td>${fill(null, 30)}/${fill(null, 30)}/${fill(null, 50)} às ${fill(null, 30)}:${fill(null, 30)}</td></tr>
+    <tr><th>Quilometragem na entrega</th><td>${v.km ? `${v.km.toLocaleString("pt-BR")} km` : fill(null, 120) + " km"}</td></tr>
+    <tr><th>Nível de combustível</th><td>${box()} Reserva &nbsp; ${box()} 1/4 &nbsp; ${box()} 1/2 &nbsp; ${box()} 3/4 &nbsp; ${box()} Cheio</td></tr>
+  </table>
+  <h2>Itens entregues</h2>
+  <p>${items.map(([t, d]) => `${box(d)}${esc(t)}`).join("<br>")}</p>
+  <h2>Declaração</h2>
+  <p>Declaro que examinei o veículo, que ele está de acordo com o que me foi apresentado e que o recebi em perfeito estado de funcionamento e conservação. A partir da data e hora acima, assumo a responsabilidade civil e criminal pelo uso do veículo, bem como por multas, impostos e débitos que vierem a ocorrer, comprometendo-me a fazer a transferência para o meu nome em até 30 (trinta) dias.</p>
+  <p>Observações: ${fill(null, 560)}</p>
+  <p style="margin-top:18px">${fill(s.city, 120)}, ${fill(null, 160)}.</p>
+  <div class="sign"><div>${esc(c.name)}<br><span class="muted">COMPRADOR(A) – RECEBI</span></div><div>${esc(s.name)}<br><span class="muted">LOJA – ENTREGUEI</span></div></div>`;
+  return shell(`Termo de entrega ${doc.contractNumber} – ${c.name}`, body);
+}
+
+// ---------------- Recibo ----------------
+export function receiptHtml(doc: SaleDocuments) {
+  const s = doc.dealership, c = doc.customer, v = doc.vehicle;
+  const now = doc.payments.filter((p) => RECEIVED_NOW.includes(p.method));
+  const later = doc.payments.filter((p) => !RECEIVED_NOW.includes(p.method));
+  const tradeTotal = doc.tradeIns.reduce((a, t) => a + t.value, 0);
+  const received = now.reduce((a, p) => a + p.amount, 0) + tradeTotal;
+  const body = `
+  ${logo(s)}${canceledBanner(doc)}
+  <h1>RECIBO</h1>
+  <p class="center" style="font-size:18px;font-weight:bold;margin:10px 0 16px">${brl(received)}</p>
+  <p>Recebemos de <b>${esc(c.name)}</b>${c.document ? `, ${docLabel(c.document)} ${esc(formatDoc(c.document))}` : ""}, a importância de <b>${brl(received)}</b> (${moneyInWords(received)}), referente à compra do(a) ${vehicleKind(v.type)} ${vehicleLine(v)}, contrato nº ${esc(doc.contractNumber)}, pago da seguinte forma:</p>
+  <table>
+    <tr><th>Forma</th><th style="width:28%">Valor</th></tr>
+    ${now.map((p) => `<tr><td>${esc(paymentName(p))}</td><td>${brl(p.amount)}</td></tr>`).join("")}
+    ${doc.tradeIns.map((t) => `<tr><td>Veículo na troca: ${esc(`${t.brand} ${t.model} ${t.year}`)}${t.plate ? `, placa ${esc(t.plate)}` : ""}</td><td>${brl(t.value)}</td></tr>`).join("")}
+    <tr><th>Total recebido</th><th>${brl(received)}</th></tr>
+  </table>
+  ${later.length ? `<p>Restante do preço total de ${brl(doc.price)}: ${later.map((p) => `${esc(paymentName(p))} de ${brl(p.amount)}`).join("; ")}, a ser recebido conforme o contrato.</p>` : `<p>Com este pagamento, o preço total de ${brl(doc.price)} está quitado.</p>`}
+  <p>Para clareza, firmamos o presente recibo.</p>
+  <p style="margin-top:18px">${fill(s.city, 120)}, ${longDate(doc.soldAt)}.</p>
+  <div class="sign" style="max-width:360px;margin-left:auto;margin-right:auto"><div>${esc(s.name)}${s.cnpj ? `<br><span class="muted">CNPJ ${esc(formatDoc(s.cnpj))}</span>` : ""}</div></div>`;
+  return shell(`Recibo ${doc.contractNumber} – ${c.name}`, body);
+}
+
+export type SaleDocumentKind = "contract" | "promissory" | "warranty" | "delivery" | "receipt";
+
+export async function openSaleDocument(saleId: string, kind: SaleDocumentKind, opts: { onlyOpen?: boolean } = {}) {
   const win = window.open("", "_blank");
   if (!win) throw new Error("O navegador bloqueou a nova aba. Libere os pop-ups para este site e tente de novo.");
   win.document.write(`<p style="font-family:Arial;padding:24px;color:#555">Gerando documento...</p>`);
   try {
     const doc = await getSaleDocuments(saleId);
-    const html = kind === "contract" ? contractHtml(doc) : promissoryHtml(doc, opts);
+    const html = kind === "contract" ? contractHtml(doc)
+      : kind === "warranty" ? warrantyHtml(doc)
+      : kind === "delivery" ? deliveryHtml(doc)
+      : kind === "receipt" ? receiptHtml(doc)
+      : promissoryHtml(doc, opts);
     win.document.open();
     win.document.write(html);
     win.document.close();

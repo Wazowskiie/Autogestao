@@ -562,7 +562,7 @@ export class VehicleDetailsService {
     const vehicle = await this.vehicle(dealershipId, vehicleId);
     const [expenses, sale, pendingCount, filesCount, photosCount, acquisition] = await Promise.all([
       this.listExpenses(dealershipId, vehicleId),
-      this.prisma.sale.findUnique({ where: { vehicleId }, select: { price: true, soldAt: true } }),
+      this.prisma.sale.findFirst({ where: { vehicleId, status: 'active' }, select: { price: true, soldAt: true } }),
       this.prisma.vehiclePendency.count({ where: { vehicleId, done: false } }),
       this.prisma.vehicleFile.count({ where: { vehicleId } }),
       this.prisma.vehiclePhoto.count({ where: { vehicleId } }),

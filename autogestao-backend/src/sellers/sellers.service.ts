@@ -110,11 +110,13 @@ export class SellersService {
     const result = await Promise.all(
       sellers.map(async (seller) => {
         const sales = await this.prisma.sale.findMany({
-          where: { ...where, sellerId: seller.id },
+          where: { ...where, sellerId: seller.id, status: 'active' },
         });
 
         const totalRevenue = sales.reduce((sum, s) => sum + Number(s.price), 0);
         const totalProfit = sales.reduce((sum, s) => sum + Number(s.profit), 0);
+        const commission = sales.reduce((sum, s) => sum + Number(s.commissionAmount), 0);
+        const commissionPending = sales.filter((s) => !s.commissionPaidAt).reduce((sum, s) => sum + Number(s.commissionAmount), 0);
 
         return {
           ...seller,
@@ -122,6 +124,8 @@ export class SellersService {
             salesCount: sales.length,
             totalRevenue,
             totalProfit,
+            commission,
+            commissionPending,
           },
         };
       }),

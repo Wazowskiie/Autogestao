@@ -135,10 +135,13 @@ export function Sellers() {
                       { label: "Vendas", value: String(seller.metrics.salesCount) },
                       { label: "Receita", value: currency(seller.metrics.totalRevenue) },
                       { label: "Lucro gerado", value: currency(seller.metrics.totalProfit) },
-                    ].map(({ label, value }) => (
+                      { label: "Comissão", value: currency(seller.metrics.commission ?? 0),
+                        sub: (seller.metrics.commissionPending ?? 0) > 0 ? `${currency(seller.metrics.commissionPending ?? 0)} a pagar` : undefined },
+                    ].map(({ label, value, sub }: { label: string; value: string; sub?: string }) => (
                       <div key={label} className="text-right">
                         <div style={{ fontSize: 12, color: "#9CA3AF" }}>{label}</div>
                         <div style={{ fontSize: 14, fontWeight: 600, color: "#0F1923" }}>{value}</div>
+                        {sub && <div style={{ fontSize: 11, color: "#B45309" }}>{sub}</div>}
                       </div>
                     ))}
                   </div>

@@ -191,7 +191,7 @@ export interface Sale {
   tradeIns?: SaleTradeIn[];
 }
 export interface SaleListResponse { items: Sale[]; total: number; page: number; pageSize: number; }
-export interface SaleSummary { count: number; totalRevenue: number; totalCost: number; totalProfit: number; avgMargin: number; }
+export interface SaleSummary { count: number; totalRevenue: number; totalCost: number; totalProfit: number; avgMargin: number; totalCommission?: number; canceledCount?: number; }
 export interface TradeInInput {
   type: VehicleType; brand: string; model: string; version?: string;
   year: number; manufactureYear?: number; color?: string; plate?: string;
@@ -215,7 +215,7 @@ export function createSale(input: CreateSaleInput) { return request<Sale>("/sale
 export function updateSale(id: string, input: UpdateSaleInput) { return request<Sale>(`/sales/${id}`, { method: "PATCH", body: input }); }
 
 // ---------- Vendedores ----------
-export interface SellerMetrics { salesCount: number; totalRevenue: number; totalProfit: number; }
+export interface SellerMetrics { salesCount: number; totalRevenue: number; totalProfit: number; commission?: number; commissionPending?: number; }
 
 export interface Seller {
   id: string;

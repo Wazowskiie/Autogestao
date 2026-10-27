@@ -37,6 +37,7 @@ export class PromissoryNotesService {
       where: { id: dto.saleId, dealershipId },
     });
     if (!sale) throw new NotFoundException('Venda não encontrada');
+    if (sale.status === 'canceled') throw new BadRequestException('Esta venda está cancelada.');
 
     // Verifica se já existe parcelamento pra essa venda
     const existing = await this.prisma.promissoryNote.count({

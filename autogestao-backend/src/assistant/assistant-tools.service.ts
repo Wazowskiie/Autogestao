@@ -378,7 +378,7 @@ export class AssistantToolsService {
 
   private async salesSummary(u: AuthenticatedUser, mes?: string) {
     const { month, range } = monthRange(mes);
-    const where: Prisma.SaleWhereInput = { dealershipId: u.dealershipId, soldAt: range, ...(isManager(u) ? {} : { sellerId: u.userId }) };
+    const where: Prisma.SaleWhereInput = { dealershipId: u.dealershipId, status: 'active', soldAt: range, ...(isManager(u) ? {} : { sellerId: u.userId }) };
     const sales = await this.prisma.sale.findMany({
       where,
       orderBy: { soldAt: 'desc' },
@@ -532,8 +532,8 @@ export class AssistantToolsService {
         ],
       });
     }
-    if (a.so_quem_comprou) and.push({ sales: { some: {} } });
-    if (a.sem_compra) and.push({ sales: { none: {} } });
+    if (a.so_quem_comprou) and.push({ sales: { some: { status: 'active' } } });
+    if (a.sem_compra) and.push({ sales: { none: { status: 'active' } } });
     const where: Prisma.CustomerWhereInput = { AND: and };
     const [total, items] = await Promise.all([
       this.prisma.customer.count({ where }),
@@ -553,7 +553,7 @@ export class AssistantToolsService {
     const manager = isManager(u);
     const { month, range } = monthRange();
     const customerWhere = this.customerScope(u);
-    const saleWhere: Prisma.SaleWhereInput = { dealershipId: d, ...(manager ? {} : { sellerId: u.userId }) };
+    const saleWhere: Prisma.SaleWhereInput = { dealershipId: d, status: 'active', ...(manager ? {} : { sellerId: u.userId }) };
     const leadWhere: Prisma.LeadWhereInput = { dealershipId: d, archivedAt: null, stage: { notIn: ['won', 'lost'] }, ...(manager ? {} : { assignedSellerId: u.userId }) };
 
     const [
@@ -562,7 +562,7 @@ export class AssistantToolsService {
     ] = await Promise.all([
       this.prisma.customer.count({ where: customerWhere }),
       this.prisma.customer.count({ where: { AND: [customerWhere, { createdAt: range }] } }),
-      this.prisma.customer.count({ where: { AND: [customerWhere, { sales: { some: {} } }] } }),
+      this.prisma.customer.count({ where: { AND: [customerWhere, { sales: { some: { status: 'active' } } }] } }),
       this.prisma.vehicle.groupBy({ by: ['status'], where: { dealershipId: d }, _count: { _all: true } }),
       this.prisma.vehicle.groupBy({ by: ['type'], where: { dealershipId: d, status: { not: 'sold' } }, _count: { _all: true } }),
       this.prisma.vehicle.aggregate({ where: { dealershipId: d, status: { not: 'sold' } }, _sum: { price: true, cost: true } }),

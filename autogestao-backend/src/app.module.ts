@@ -16,6 +16,7 @@ import { PartsModule } from './parts/parts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PromissoryNotesModule } from './promissory-notes/promissory-notes.module';
 import { SalesModule } from './sales/sales.module';
+import { ReservationsModule } from './reservations/reservations.module';
 import { SellersModule } from './sellers/sellers.module';
 import { StorefrontModule } from './storefront/storefront.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
@@ -26,7 +27,6 @@ import { VehicleDetailsModule } from './vehicle-details/vehicle-details.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { SettingsModule } from './settings/settings.module';
 import { PlansModule } from './plans/plans.module';
-import { AdsModule } from './ads/ads.module';
 
 @Module({
   imports: [
@@ -45,8 +45,8 @@ import { AdsModule } from './ads/ads.module';
     RenaveModule, 
     CustomersModule,
     LeadsModule,
-    AdsModule,
     SalesModule,
+    ReservationsModule,
     SellersModule,
     FinancialModule,
     PromissoryNotesModule,

@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString,
-  Max, Min, MinLength, ValidateNested,
+  Max, MaxLength, Min, MinLength, ValidateNested,
 } from 'class-validator';
 import { VehicleType } from '../../generated/prisma/client';
 
@@ -19,8 +19,29 @@ export enum PaymentMethod {
 // Formas que podem ser combinadas numa mesma venda
 export const SALE_PAYMENT_METHODS = [
   'pix', 'cash', 'transfer', 'card_credit', 'card_debit', 'financing', 'consortium', 'promissory',
+  // Sinal pago na reserva do veículo
+  'deposit',
 ] as const;
 export type SalePaymentMethod = (typeof SALE_PAYMENT_METHODS)[number];
+
+export const FINANCING_STATUSES = ['analysis', 'approved', 'rejected', 'paid'] as const;
+export type FinancingStatus = (typeof FINANCING_STATUSES)[number];
+
+// Despesa ligada à venda (transferência, vistoria, brinde...)
+export class SaleExpenseDto {
+  @IsString() @MinLength(1, { message: 'Descreva a despesa' }) @MaxLength(150)
+  description: string;
+
+  @IsNumber({}, { message: 'Valor da despesa inválido' }) @Min(0.01, { message: 'Informe o valor da despesa' }) @Type(() => Number)
+  amount: number;
+
+  @IsOptional() @IsDateString()
+  date?: string;
+
+  // false = ainda vai pagar (fica pendente no Financeiro)
+  @IsOptional() @IsBoolean()
+  paid?: boolean;
+}
 
 // Uma parte do pagamento (ex.: R$ 5.000 no PIX, R$ 12.000 no cartão em 10x)
 export class SalePaymentDto {
@@ -45,6 +66,16 @@ export class SalePaymentDto {
 
   @IsOptional() @IsString()
   notes?: string;
+
+  // Financiamento: banco, situação da ficha e retorno (comissão que o banco paga à loja)
+  @IsOptional() @IsString() @MaxLength(80)
+  bank?: string;
+
+  @IsOptional() @IsIn(FINANCING_STATUSES, { message: 'Situação do financiamento inválida' })
+  financingStatus?: FinancingStatus;
+
+  @IsOptional() @IsNumber({}, { message: 'Valor do retorno inválido' }) @Min(0) @Type(() => Number)
+  returnAmount?: number;
 }
 
 // Veículo que o cliente deu como parte do pagamento
@@ -122,4 +153,22 @@ export class CreateSaleDto {
   @ValidateNested({ each: true })
   @Type(() => SalePaymentDto)
   payments?: SalePaymentDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30, { message: 'No máximo 30 despesas' })
+  @ValidateNested({ each: true })
+  @Type(() => SaleExpenseDto)
+  expenses?: SaleExpenseDto[];
+
+  // Comissão do vendedor: se não vier, usa a % cadastrada no vendedor sobre o preço
+  @IsOptional() @IsNumber({}, { message: 'Comissão inválida' }) @Min(0) @Type(() => Number)
+  commissionAmount?: number;
+
+  // Garantia (ex.: 90 dias, "Motor e câmbio")
+  @IsOptional() @IsInt() @Min(0) @Max(3650) @Type(() => Number)
+  warrantyDays?: number;
+
+  @IsOptional() @IsString() @MaxLength(300)
+  warrantyCoverage?: string;
 }

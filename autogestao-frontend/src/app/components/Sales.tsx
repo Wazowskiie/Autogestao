@@ -5,6 +5,7 @@ import { getSettings } from "../../lib/settings-api";
 import * as api from "../../lib/api";
 import * as sapi from "../../lib/sales-api";
 import { useAuth } from "../../lib/auth-context";
+import { CancelSaleModal, SaleAfterPanel } from "./SaleAfterPanel";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -35,6 +36,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 // Nomes das formas usadas no pagamento dividido (inclui as antigas acima)
 const PAYMENT_NAMES: Record<string, string> = {
   ...PAYMENT_LABELS, cash: "Dinheiro", card_credit: "Cartão de crédito", card_debit: "Cartão de débito", mixed: "Várias formas",
+  deposit: "Sinal (reserva)",
 };
 
 /** Texto curto da forma de pagamento para a lista (ex.: "PIX + Cartão de crédito + Troca") */
@@ -138,6 +140,8 @@ export function Sales() {
   const [viewingSaleId, setViewingSaleId] = useState<string | null>(null);
   const [justCreated, setJustCreated] = useState(false);
   const [editingSale, setEditingSale] = useState<api.Sale | null>(null);
+  const [afterSales, setAfterSales] = useState<{ items: sapi.AfterSaleItem[]; overdue: number; dueSoon: number } | null>(null);
+  const [showAfterSales, setShowAfterSales] = useState(false);
 
   const fetchSales = useCallback(async () => {
     setLoading(true);
@@ -150,6 +154,7 @@ export function Sales() {
       setSales(res.items);
       setTotal(res.total);
       setSummary(sum);
+      sapi.getAfterSales().then(setAfterSales).catch(() => setAfterSales(null));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar vendas");
     } finally {
@@ -201,9 +206,9 @@ export function Sales() {
         {summary && (
           <div className="grid grid-cols-4 gap-4 mb-4">
             {[
-              { label: "Vendas", value: String(summary.count), color: "#185FA5" },
+              { label: summary.canceledCount ? `Vendas · ${summary.canceledCount} cancelada${summary.canceledCount > 1 ? "s" : ""}` : "Vendas", value: String(summary.count), color: "#185FA5" },
               { label: "Receita", value: currency(summary.totalRevenue), color: "#27500A" },
-              { label: "Lucro", value: currency(summary.totalProfit), color: "#7C3AED" },
+              { label: "Lucro real", value: currency(summary.totalProfit), color: "#7C3AED" },
               { label: "Margem média", value: `${summary.avgMargin.toFixed(1)}%`, color: "#D97706" },
             ].map(({ label, value, color }) => (
               <div key={label} className="p-4 rounded-xl" style={{ background: "#F4F6F9" }}>
@@ -212,6 +217,19 @@ export function Sales() {
               </div>
             ))}
           </div>
+        )}
+
+        {afterSales && afterSales.items.length > 0 && (
+          <button onClick={() => setShowAfterSales(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg mb-3 text-left"
+            style={{ background: afterSales.overdue ? "#FEF2F2" : "#FFFBEB", border: `1px solid ${afterSales.overdue ? "#FECACA" : "#FDE68A"}`, fontSize: 13, color: afterSales.overdue ? "#991B1B" : "#92400E" }}>
+            <RefreshCw size={14} />
+            <span className="flex-1">
+              <b>Pós-venda:</b> {afterSales.items.length} transferência{afterSales.items.length > 1 ? "s" : ""} pendente{afterSales.items.length > 1 ? "s" : ""}
+              {afterSales.overdue ? ` · ${afterSales.overdue} atrasada${afterSales.overdue > 1 ? "s" : ""}` : ""}
+              {afterSales.dueSoon ? ` · ${afterSales.dueSoon} vence${afterSales.dueSoon > 1 ? "m" : ""} em até 7 dias` : ""}
+            </span>
+            <span style={{ fontWeight: 600 }}>Ver lista</span>
+          </button>
         )}
 
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "#F4F6F9" }}>
@@ -246,14 +264,16 @@ export function Sales() {
               {filtered.map((s, i) => {
                 const Icon = s.vehicle.type === "moto" ? Bike : s.vehicle.type === "truck" ? Truck : Car;
                 const m = Number(s.margin);
+                const canceled = (s as sapi.SaleFull).status === "canceled";
                 return (
                   <tr key={s.id} onClick={() => setViewingSaleId(s.id)}
                     className="cursor-pointer hover:bg-[#F9FAFB]"
-                    style={{ borderBottom: i < filtered.length - 1 ? "0.5px solid rgba(0,0,0,0.06)" : "none" }}>
+                    style={{ borderBottom: i < filtered.length - 1 ? "0.5px solid rgba(0,0,0,0.06)" : "none", opacity: canceled ? 0.6 : 1 }}>
                     <td className="px-4 py-3">
                       <span style={{ fontSize: 12, color: "#185FA5", fontWeight: 500, background: "#EBF2FA", padding: "2px 8px", borderRadius: 99 }}>
                         {s.contractNumber ?? "—"}
                       </span>
+                      {canceled && <span style={{ display: "block", marginTop: 4, fontSize: 10, fontWeight: 600, color: "#DC2626" }}>CANCELADA</span>}
                     </td>
                     <td className="px-4 py-3" style={{ fontSize: 13, color: "#6B7280" }}>{new Date(s.soldAt).toLocaleDateString("pt-BR")}</td>
                     <td className="px-4 py-3">
@@ -274,7 +294,7 @@ export function Sales() {
                         {paymentSummary(s)}
                       </span>
                     </td>
-                    <td className="px-4 py-3" style={{ fontSize: 13, fontWeight: 500 }}>{currency(Number(s.price))}</td>
+                    <td className="px-4 py-3" style={{ fontSize: 13, fontWeight: 500, textDecoration: canceled ? "line-through" : undefined }}>{currency(Number(s.price))}</td>
                     <td className="px-4 py-3" style={{ fontSize: 13, color: Number(s.profit) >= 0 ? "#27500A" : "#DC2626", fontWeight: 500 }}>{currency(Number(s.profit))}</td>
                     <td className="px-4 py-3" style={{ fontSize: 13, color: m > 20 ? "#27500A" : m > 10 ? "#374151" : "#DC2626", fontWeight: 500 }}>{m.toFixed(1)}%</td>
                     {canEdit && (
@@ -282,8 +302,10 @@ export function Sales() {
                         <div className="flex items-center gap-2">
                           <button onClick={() => openSaleDocument(s.id, "contract").catch((e) => alert(e instanceof Error ? e.message : "Erro ao gerar contrato"))}
                             className="p-1.5 rounded" style={{ color: "#374151", background: "#F4F6F9" }} title="Imprimir contrato"><Printer size={13} /></button>
-                          <button onClick={() => setEditingSale(s)} className="p-1.5 rounded"
-                            style={{ color: "#185FA5", background: "#EBF2FA" }} title="Editar"><Edit2 size={13} /></button>
+                          {!canceled && (
+                            <button onClick={() => setEditingSale(s)} className="p-1.5 rounded"
+                              style={{ color: "#185FA5", background: "#EBF2FA" }} title="Editar"><Edit2 size={13} /></button>
+                          )}
                           <button onClick={() => setDeleteId(s.id)} className="p-1.5 rounded"
                             style={{ color: "#DC2626", background: "#FEE2E2" }} title="Excluir"><Trash2 size={13} /></button>
                         </div>
@@ -311,6 +333,7 @@ export function Sales() {
           canEdit={canEdit}
           justCreated={justCreated}
           onClose={() => { setViewingSaleId(null); setJustCreated(false); }}
+          onChanged={fetchSales}
           onEdit={(sale) => { setViewingSaleId(null); setEditingSale(sale); }}
         />
       )}
@@ -323,6 +346,37 @@ export function Sales() {
         />
       )}
 
+      {showAfterSales && afterSales && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.5)" }} onClick={(e) => e.target === e.currentTarget && setShowAfterSales(false)}>
+          <div className="w-full max-h-[85vh] overflow-y-auto rounded-xl" style={{ background: "#fff", maxWidth: 640, margin: 16 }}>
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "0.5px solid rgba(0,0,0,0.08)" }}>
+              <div>
+                <h3>Transferências pendentes</h3>
+                <p style={{ fontSize: 12, color: "#6B7280" }}>O comprador tem 30 dias para transferir o veículo. Clique para abrir a venda.</p>
+              </div>
+              <button onClick={() => setShowAfterSales(false)} style={{ color: "#6B7280" }}><X size={20} /></button>
+            </div>
+            <div className="px-6 py-4 flex flex-col gap-2">
+              {afterSales.items.map((a) => (
+                <button key={a.id} onClick={() => { setShowAfterSales(false); setViewingSaleId(a.id); }}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-[#F9FAFB]" style={{ border: "0.5px solid rgba(0,0,0,0.08)" }}>
+                  <div className="flex-1" style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 500, color: "#0F1923" }}>{a.vehicle}{a.plate ? ` · ${a.plate}` : ""}</p>
+                    <p style={{ fontSize: 12, color: "#6B7280" }}>{a.customer}{a.phone ? ` · ${formatPhone(a.phone)}` : ""} · venda {a.contractNumber ?? ""} de {new Date(a.soldAt).toLocaleDateString("pt-BR")}</p>
+                    <p style={{ fontSize: 11, color: "#9CA3AF" }}>Falta: {a.pendingItems.join(", ")}</p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full shrink-0" style={{
+                    fontSize: 11, fontWeight: 600,
+                    background: a.daysLeft < 0 ? "#FEE2E2" : a.daysLeft <= 7 ? "#FEF3C7" : "#F3F4F6",
+                    color: a.daysLeft < 0 ? "#991B1B" : a.daysLeft <= 7 ? "#92400E" : "#374151",
+                  }}>{a.daysLeft < 0 ? `${-a.daysLeft}d atrasada` : `${a.daysLeft}d restantes`}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Confirmação de exclusão */}
       {deleteId && (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.5)" }}>
@@ -330,6 +384,9 @@ export function Sales() {
             <h3 style={{ marginBottom: 8 }}>Excluir venda?</h3>
             <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 20 }}>
               Isso vai reverter o veículo para disponível, excluir as promissórias e o lançamento financeiro vinculado. Essa ação não pode ser desfeita.
+            </p>
+            <p style={{ fontSize: 12, color: "#92400E", background: "#FFFBEB", borderRadius: 8, padding: "8px 10px", marginBottom: 20, marginTop: -8 }}>
+              Excluir é para venda lançada errado ou de teste. Se o cliente desistiu, abra a venda e use <b>Cancelar venda</b>: o histórico fica guardado.
             </p>
             <div className="flex items-center justify-end gap-3">
               <button onClick={() => setDeleteId(null)} className="px-5 py-2 rounded-lg"
@@ -347,15 +404,23 @@ export function Sales() {
 }
 
 function SaleDetailsModal({
-  saleId, canEdit, onClose, onEdit, justCreated = false,
+  saleId, canEdit, onClose, onEdit, onChanged, justCreated = false,
 }: {
   saleId: string;
   canEdit: boolean;
   justCreated?: boolean;
   onClose: () => void;
   onEdit: (sale: api.Sale) => void;
+  onChanged?: () => void;
 }) {
-  const [sale, setSale] = useState<api.Sale | null>(null);
+  const [sale, setSaleState] = useState<sapi.SaleFull | null>(null);
+  const [canceling, setCanceling] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const dirty = useRef(false);
+  // Toda mudança feita aqui (despesa, comissão, pós-venda...) atualiza a lista quando fechar
+  const setSale = (s: sapi.SaleFull) => { setSaleState((prev) => ({ ...prev, ...s })); dirty.current = true; };
+  const close = () => { if (dirty.current) onChanged?.(); onClose(); };
+  const isCanceled = sale?.status === "canceled";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -363,8 +428,8 @@ function SaleDetailsModal({
     let active = true;
     setLoading(true);
     setError(null);
-    api.getSale(saleId)
-      .then((s) => { if (active) setSale(s); })
+    sapi.getSaleFull(saleId)
+      .then((s) => { if (active) setSaleState(s); })
       .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Erro ao carregar venda"); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -372,14 +437,17 @@ function SaleDetailsModal({
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.5)" }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-h-[90vh] overflow-y-auto rounded-xl" style={{ background: "#fff", maxWidth: 560, margin: 16 }}>
+      onClick={(e) => e.target === e.currentTarget && close()}>
+      <div className="w-full max-h-[90vh] overflow-y-auto rounded-xl" style={{ background: "#fff", maxWidth: 680, margin: 16 }}>
         <div className="relative px-6 pt-5 pb-6" style={{ background: "#0F1923" }}>
-          <button onClick={onClose} className="absolute right-5 top-5" style={{ color: "#9CA3AF" }}><X size={20} /></button>
+          <button onClick={close} className="absolute right-5 top-5" style={{ color: "#9CA3AF" }}><X size={20} /></button>
           <p style={{ fontSize: 11, color: "#185FA5", fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 }}>
             Vendas
           </p>
-          <h3 style={{ color: "#fff" }}>{sale?.contractNumber ? `Venda ${sale.contractNumber}` : "Detalhes da venda"}</h3>
+          <h3 style={{ color: "#fff" }} className="flex items-center gap-2">
+            {sale?.contractNumber ? `Venda ${sale.contractNumber}` : "Detalhes da venda"}
+            {isCanceled && <span className="px-2 py-0.5 rounded-full" style={{ fontSize: 11, background: "#DC2626", color: "#fff", fontWeight: 600 }}>Cancelada</span>}
+          </h3>
           {sale && <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 2 }}>{new Date(sale.soldAt).toLocaleDateString("pt-BR")}</p>}
         </div>
 
@@ -394,12 +462,18 @@ function SaleDetailsModal({
                   <CheckCircle2 size={15} /> Venda registrada! Imprima o contrato e as promissórias para o cliente assinar.
                 </div>
               )}
+              {notice && (
+                <div className="rounded-lg px-3 py-2" style={{ background: "#EFF6FF", color: "#1E40AF", fontSize: 13, border: "1px solid #BFDBFE" }}>{notice}</div>
+              )}
               {/* Documentos para imprimir */}
               <div className="flex flex-wrap gap-2">
                 <DocButton label="Contrato de venda" onClick={() => openSaleDocument(sale.id, "contract")} />
                 {((sale as { promissoryNotes?: unknown[] }).promissoryNotes?.length ?? 0) > 0 && (
                   <DocButton label="Notas promissórias" onClick={() => openSaleDocument(sale.id, "promissory")} />
                 )}
+                {!!sale.warrantyDays && <DocButton label="Termo de garantia" onClick={() => openSaleDocument(sale.id, "warranty")} />}
+                <DocButton label="Termo de entrega" onClick={() => openSaleDocument(sale.id, "delivery")} />
+                <DocButton label="Recibo" onClick={() => openSaleDocument(sale.id, "receipt")} />
               </div>
               {/* Veículo */}
               <div className="rounded-lg p-4" style={{ background: "#F4F6F9" }}>
@@ -429,22 +503,7 @@ function SaleDetailsModal({
                 </div>
               </div>
 
-              {/* Valores */}
-              <div className="rounded-lg overflow-hidden" style={{ border: "0.5px solid rgba(0,0,0,0.08)" }}>
-                {[
-                  { label: "Preço de venda", value: currency(Number(sale.price)) },
-                  { label: "Custo", value: currency(Number(sale.cost)) },
-                  { label: "Lucro", value: currency(Number(sale.profit)), color: Number(sale.profit) >= 0 ? "#27500A" : "#DC2626" },
-                  { label: "Margem", value: `${Number(sale.margin).toFixed(1)}%` },
-                  { label: "Forma de pagamento", value: paymentSummary(sale) },
-                ].map((row, i, arr) => (
-                  <div key={row.label} className="flex items-center justify-between px-4 py-2.5"
-                    style={{ borderBottom: i < arr.length - 1 ? "0.5px solid rgba(0,0,0,0.06)" : "none", background: i % 2 === 0 ? "#fff" : "#FAFBFC" }}>
-                    <span style={{ fontSize: 13, color: "#6B7280" }}>{row.label}</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: row.color ?? "#0F1923" }}>{row.value}</span>
-                  </div>
-                ))}
-              </div>
+              <SaleAfterPanel sale={sale} canEdit={canEdit} onChange={setSale} />
 
               {/* Como foi pago */}
               {!!(sale as sapi.SaleFull).payments?.length && (
@@ -456,6 +515,7 @@ function SaleDetailsModal({
                         style={{ background: "#F9FAFB", border: "0.5px solid rgba(0,0,0,0.06)" }}>
                         <div>
                           <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{PAYMENT_NAMES[p.method] ?? p.method}</span>
+                          {p.bank && <span style={{ fontSize: 12, color: "#6B7280" }}> · {p.bank}</span>}
                           {p.installments && p.installments > 1 && <span style={{ fontSize: 12, color: "#6B7280" }}> · {p.installments}x</span>}
                           {Number(p.feeAmount) > 0 && (
                             <span style={{ fontSize: 11, color: "#B45309", marginLeft: 6 }}>
@@ -531,9 +591,13 @@ function SaleDetailsModal({
         </div>
 
         <div className="flex items-center justify-end gap-3 px-6 py-4" style={{ borderTop: "0.5px solid rgba(0,0,0,0.08)" }}>
-          <button onClick={onClose} className="px-5 py-2 rounded-lg"
+          {canEdit && sale && !isCanceled && (
+            <button onClick={() => setCanceling(true)} className="px-4 py-2 rounded-lg mr-auto"
+              style={{ border: "1px solid #FCA5A5", color: "#DC2626", fontSize: 13, fontWeight: 500 }}>Cancelar venda</button>
+          )}
+          <button onClick={close} className="px-5 py-2 rounded-lg"
             style={{ border: "0.5px solid rgba(0,0,0,0.1)", fontSize: 13, color: "#374151" }}>Fechar</button>
-          {canEdit && sale && (
+          {canEdit && sale && !isCanceled && (
             <button onClick={() => onEdit(sale)} className="px-5 py-2 rounded-lg flex items-center gap-2"
               style={{ background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500 }}>
               <Edit2 size={14} /> Editar
@@ -541,6 +605,12 @@ function SaleDetailsModal({
           )}
         </div>
       </div>
+      {canceling && sale && (
+        <CancelSaleModal sale={sale} onClose={() => setCanceling(false)} onDone={async (msg) => {
+          setCanceling(false); setNotice(msg); dirty.current = true;
+          setSaleState(await sapi.getSaleFull(sale.id));
+        }} />
+      )}
     </div>
   );
 }
@@ -668,7 +738,21 @@ function rememberFee(method: string, value: string) {
   try { if (value) localStorage.setItem(`fee_${method}`, value); } catch { /* sem problema */ }
 }
 
-interface PaymentForm { key: number; method: sapi.SalePaymentMethod; amount: string; installments: string; feePercent: string }
+interface PaymentForm { key: number; method: sapi.SalePaymentMethod; amount: string; installments: string; feePercent: string; bank?: string; returnAmount?: string }
+interface ExpenseForm { key: number; description: string; amount: string; paid: boolean }
+const isFinancing = (m: string) => m === "financing" || m === "consortium";
+
+// Última garantia usada (só neste navegador)
+function lastWarranty() {
+  try {
+    const raw = localStorage.getItem("sale_warranty");
+    if (raw) { const w = JSON.parse(raw); return { days: String(w.days ?? ""), coverage: String(w.coverage ?? "") }; }
+  } catch { /* sem problema */ }
+  return { days: "90", coverage: "Motor e câmbio" };
+}
+function rememberWarranty(days: string, coverage: string) {
+  try { localStorage.setItem("sale_warranty", JSON.stringify({ days, coverage })); } catch { /* sem problema */ }
+}
 interface TradeInForm {
   key: number; type: api.VehicleType; plate: string; brand: string; model: string; version: string;
   year: string; manufactureYear: string; color: string; km: string; engineCc: string; fuel: string; value: string;
@@ -727,6 +811,14 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
   const [entryKey, setEntryKey] = useState<number | null>(null); // linha de pagamento criada para a entrada
   const [customRate, setCustomRate] = useState("");
 
+  // Reserva do veículo (o sinal entra como forma de pagamento)
+  const [reservation, setReservation] = useState<sapi.Reservation | null>(null);
+  // Despesas da venda, comissão e garantia
+  const [saleExpenses, setSaleExpenses] = useState<ExpenseForm[]>([]);
+  const [commissionText, setCommissionText] = useState<string | null>(null); // null = automática
+  const [warrantyDays, setWarrantyDays] = useState(() => lastWarranty().days);
+  const [warrantyCoverage, setWarrantyCoverage] = useState(() => lastWarranty().coverage);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -739,8 +831,9 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
       api.listCustomers({ pageSize: 200 }),
       api.listSellers(),
       api.listInterestRates(),
-    ]).then(([v, c, s, ir]) => {
-      setVehicles(v.items);
+      api.listVehicles({ status: "reserved", pageSize: 200 }).catch(() => ({ items: [] as api.Vehicle[] })),
+    ]).then(([v, c, s, ir, reserved]) => {
+      setVehicles([...v.items, ...reserved.items]);
       setCustomers(c.items);
       setSellers(s);
       setInterestRates(ir);
@@ -752,6 +845,23 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
       setCost(toMoneyText(Number(selectedVehicle.cost)));
       setPrice(toMoneyText(Number(selectedVehicle.price)));
     }
+    // Veículo reservado: já escolhe o cliente da reserva e coloca o sinal no pagamento
+    setPayments(prev => prev.filter(p => p.method !== "deposit"));
+    setReservation(null);
+    if (!vehicleId) return;
+    let alive = true;
+    sapi.listReservations({ vehicleId, status: "active" }).then((list) => {
+      const r = list[0];
+      if (!alive || !r) return;
+      setReservation(r);
+      setCustomers(prev => (prev.some(c => c.id === r.customerId) ? prev : [...prev, { id: r.customerId, name: r.customer.name, phone: r.customer.phone } as api.Customer]));
+      setCustomerId(r.customerId);
+      const deposit = Number(r.deposit);
+      if (deposit > 0) {
+        setPayments(prev => [{ key: formKey++, method: "deposit", amount: toMoneyText(deposit), installments: "1", feePercent: "" }, ...prev.filter(p => p.method !== "deposit")]);
+      }
+    }).catch(() => {});
+    return () => { alive = false; };
   }, [vehicleId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function openNewCustomerForm(name: string) {
@@ -790,7 +900,15 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
   const paidTotal = round2(payments.reduce((s, p) => s + num(p.amount), 0));
   const remaining = Number.isFinite(priceNum) ? round2(priceNum - tradeInTotal - paidTotal) : 0;
   const feesTotal = round2(payments.reduce((s, p) => s + (isCard(p.method) ? (num(p.amount) * num(p.feePercent)) / 100 : 0), 0));
-  const profit = Number.isFinite(priceNum) && Number.isFinite(costNum) ? priceNum - costNum - feesTotal : null;
+  const expensesTotal = round2(saleExpenses.reduce((s, e) => s + num(e.amount), 0));
+  const returnsTotal = round2(payments.reduce((s, p) => s + (isFinancing(p.method) ? num(p.returnAmount ?? "") : 0), 0));
+  // Comissão: % do vendedor sobre o preço (o dono/admin pode mudar o valor)
+  const sellerForCommission = sellers.find(x => x.id === (sellerId || auth.user?.id));
+  const commissionRate = Number(sellerForCommission?.commissionRate ?? 0);
+  const autoCommission = Number.isFinite(priceNum) ? round2((priceNum * commissionRate) / 100) : 0;
+  const commissionAmount = commissionText !== null ? num(commissionText) : autoCommission;
+  const profit = Number.isFinite(priceNum) && Number.isFinite(costNum)
+    ? round2(priceNum - costNum - feesTotal - expensesTotal - commissionAmount + returnsTotal) : null;
   const liveMargin = profit !== null && costNum > 0 ? (profit / costNum) * 100 : null;
 
   // Promissórias: a taxa incide sobre o valor da linha "Promissórias"
@@ -951,6 +1069,12 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
       return;
     }
     if (payments.some(p => !(num(p.amount) > 0))) { setError("Informe o valor de cada forma de pagamento."); return; }
+    for (const e of saleExpenses) {
+      if (!e.description.trim() && !e.amount.trim()) continue;
+      if (!e.description.trim()) { setError("Descreva cada despesa da venda."); return; }
+      if (!(num(e.amount) > 0)) { setError(`Informe o valor da despesa "${e.description}".`); return; }
+    }
+    if (commissionText !== null && !(Number.isFinite(parseBRL(commissionText)) && parseBRL(commissionText) >= 0)) { setError("Valor da comissão inválido."); return; }
     if (payments.filter(p => p.method === "promissory").length > 1) { setError("Use só uma linha de promissórias."); return; }
     if (Math.abs(remaining) >= 0.01) {
       setError(remaining > 0
@@ -1001,8 +1125,15 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
           amount: round2(num(p.amount)),
           installments: p.method === "card_credit" ? Number(p.installments) || 1 : undefined,
           feePercent: isCard(p.method) && p.feePercent ? num(p.feePercent) : undefined,
+          bank: isFinancing(p.method) && p.bank?.trim() ? p.bank.trim() : undefined,
+          returnAmount: isFinancing(p.method) && num(p.returnAmount ?? "") > 0 ? round2(num(p.returnAmount ?? "")) : undefined,
         })),
+        expenses: saleExpenses.filter(e => e.description.trim()).map(e => ({ description: e.description.trim(), amount: round2(num(e.amount)), paid: e.paid })),
+        commissionAmount: commissionText !== null ? round2(num(commissionText)) : undefined,
+        warrantyDays: Number(warrantyDays) > 0 ? Number(warrantyDays) : undefined,
+        warrantyCoverage: Number(warrantyDays) > 0 ? warrantyCoverage.trim() || undefined : undefined,
       });
+      rememberWarranty(warrantyDays, warrantyCoverage);
 
       if (promissoryLine && totalPromissory > 0) {
         await api.createPromissoryNotes({
@@ -1055,6 +1186,14 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
                 <Car size={14} style={{ color: "#9CA3AF" }} />
                 <span>{selectedVehicle.year} · {selectedVehicle.km.toLocaleString("pt-BR")} km{selectedVehicle.color ? ` · ${selectedVehicle.color}` : ""}</span>
                 <span style={{ marginLeft: "auto", fontWeight: 500, color: "#374151" }}>Tabela: {currency(Number(selectedVehicle.price))}</span>
+              </div>
+            )}
+            {reservation && (
+              <div className="mt-2 px-3 py-2 rounded-lg" style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", fontSize: 12, color: "#1E40AF" }}>
+                Reservado para <b>{reservation.customer.name}</b>
+                {Number(reservation.deposit) > 0 ? <> com sinal de <b>{currency(Number(reservation.deposit))}</b> (já está nas formas de pagamento)</> : ""}
+                {reservation.expiresAt ? ` · até ${new Date(reservation.expiresAt).toLocaleDateString("pt-BR")}` : ""}.
+                {" "}Para vender a outro cliente, cancele a reserva no Estoque.
               </div>
             )}
           </div>
@@ -1285,18 +1424,23 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
                     <div className="flex items-end gap-2">
                       <div style={{ flex: 1.2 }}>
                         <label style={smallLabel}>Forma</label>
-                        <select value={p.method} onChange={(e) => updatePayment(p.key, { method: e.target.value as sapi.SalePaymentMethod })}
-                          className="w-full rounded-lg px-3 py-2" style={selectStyle}>
-                          {SALE_PAYMENT_OPTIONS.map(o => (
-                            <option key={o.value} value={o.value}
-                              disabled={o.value === "promissory" && p.method !== "promissory" && !!promissoryLine}>{o.label}</option>
-                          ))}
-                        </select>
+                        {p.method === "deposit" ? (
+                          <div className="w-full rounded-lg px-3 py-2" style={{ ...selectStyle, background: "#EFF6FF", color: "#1E40AF", fontWeight: 500 }}>Sinal pago na reserva</div>
+                        ) : (
+                          <select value={p.method} onChange={(e) => updatePayment(p.key, { method: e.target.value as sapi.SalePaymentMethod })}
+                            className="w-full rounded-lg px-3 py-2" style={selectStyle}>
+                            {SALE_PAYMENT_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}
+                                disabled={o.value === "promissory" && p.method !== "promissory" && !!promissoryLine}>{o.label}</option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                       <div style={{ flex: 1 }}>
                         <label style={smallLabel}>{p.method === "promissory" ? "Valor parcelado" : p.key === entryKey ? "Valor (entrada)" : "Valor"}</label>
                         <input value={p.amount} inputMode="decimal" placeholder="0,00" onChange={(e) => updatePayment(p.key, { amount: e.target.value })}
-                          className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                          readOnly={p.method === "deposit"}
+                          className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: p.method === "deposit" ? "#F3F4F6" : "#fff" }} />
                       </div>
                       {p.method === "card_credit" && (
                         <div style={{ width: 82 }}>
@@ -1314,10 +1458,27 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
                             className="w-full rounded-lg px-2 py-2" style={{ ...inputStyle, background: "#fff" }} />
                         </div>
                       )}
-                      <button type="button" title="Remover" onClick={() => removePayment(p.key)} className="p-2 rounded-lg" style={{ color: "#DC2626" }}>
-                        <Trash2 size={15} />
-                      </button>
+                      {p.method !== "deposit" ? (
+                        <button type="button" title="Remover" onClick={() => removePayment(p.key)} className="p-2 rounded-lg" style={{ color: "#DC2626" }}>
+                          <Trash2 size={15} />
+                        </button>
+                      ) : <span style={{ width: 31 }} />}
                     </div>
+                    {isFinancing(p.method) && (
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div>
+                          <label style={smallLabel}>Banco / financeira</label>
+                          <input value={p.bank ?? ""} placeholder="Ex: Banco Pan, Santander..." onChange={(e) => updatePayment(p.key, { bank: e.target.value })}
+                            className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                        </div>
+                        <div>
+                          <label style={smallLabel}>Retorno (o banco paga à loja)</label>
+                          <input value={p.returnAmount ?? ""} inputMode="decimal" placeholder="0,00" onChange={(e) => updatePayment(p.key, { returnAmount: e.target.value })}
+                            className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                        </div>
+                        <p className="col-span-2" style={{ fontSize: 11, color: "#9CA3AF" }}>A ficha começa "Em análise". Quando o banco aprovar ou depositar, atualize na própria venda.</p>
+                      </div>
+                    )}
                     {(fee > 0 || perInstallment > 0 || (remaining !== 0 && Math.abs(remaining) >= 0.01)) && (
                       <div className="flex items-center gap-3 mt-2 flex-wrap" style={{ fontSize: 11, color: "#6B7280" }}>
                         {perInstallment > 0 && <span>{p.installments}x de {currency(perInstallment)}</span>}
@@ -1501,6 +1662,61 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
             </div>
           </div>
 
+          {/* ================= Despesas, comissão e garantia ================= */}
+          <div className="rounded-xl" style={{ border: "0.5px solid rgba(0,0,0,0.1)" }}>
+            <div className="flex items-center justify-between px-4 py-3" style={{ background: "#F9FAFB", borderRadius: "12px 12px 0 0" }}>
+              <div className="flex items-center gap-2">
+                <FileText size={15} style={{ color: "#185FA5" }} />
+                <span style={sectionTitle}>Despesas da venda</span>
+                {expensesTotal > 0 && <span style={{ fontSize: 12, color: "#6B7280" }}>· {currency(expensesTotal)}</span>}
+              </div>
+              <button type="button" onClick={() => setSaleExpenses(prev => [...prev, { key: formKey++, description: "", amount: "", paid: true }])}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg" style={{ fontSize: 12, fontWeight: 500, color: "#185FA5", background: "#EBF2FA" }}>
+                <Plus size={13} /> Adicionar
+              </button>
+            </div>
+            <div className="px-4 py-3 space-y-2" style={{ borderTop: "0.5px solid rgba(0,0,0,0.08)" }}>
+              {saleExpenses.length === 0 && <p style={{ fontSize: 12, color: "#9CA3AF" }}>Transferência, vistoria, revisão, brinde, combustível... Entram no Financeiro e saem do lucro. Dá para lançar depois, na venda.</p>}
+              {saleExpenses.map(e => (
+                <div key={e.key} className="flex items-center gap-2">
+                  <input value={e.description} placeholder="Descrição" onChange={(ev) => setSaleExpenses(prev => prev.map(x => x.key === e.key ? { ...x, description: ev.target.value } : x))}
+                    className="flex-1 rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                  <input value={e.amount} placeholder="0,00" inputMode="decimal" onChange={(ev) => setSaleExpenses(prev => prev.map(x => x.key === e.key ? { ...x, amount: ev.target.value } : x))}
+                    className="rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff", width: 110 }} />
+                  <label className="flex items-center gap-1" style={{ fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>
+                    <input type="checkbox" checked={e.paid} onChange={(ev) => setSaleExpenses(prev => prev.map(x => x.key === e.key ? { ...x, paid: ev.target.checked } : x))} /> Paga
+                  </label>
+                  <button type="button" onClick={() => setSaleExpenses(prev => prev.filter(x => x.key !== e.key))} className="p-2" style={{ color: "#DC2626" }}><Trash2 size={15} /></button>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-3 grid grid-cols-2 gap-4" style={{ borderTop: "0.5px solid rgba(0,0,0,0.08)" }}>
+              <div>
+                <label style={smallLabel}>Comissão do vendedor{sellerForCommission ? ` (${sellerForCommission.name})` : ""}</label>
+                {isManager ? (
+                  <input value={commissionText ?? (autoCommission ? toMoneyText(autoCommission) : "")} inputMode="decimal" placeholder="0,00"
+                    onChange={(e) => setCommissionText(e.target.value)}
+                    className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                ) : (
+                  <div className="rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#F3F4F6" }}>{currency(commissionAmount)}</div>
+                )}
+                <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+                  {commissionText === null ? `${commissionRate.toLocaleString("pt-BR")}% do preço, cadastrado no vendedor.` : <>Valor alterado. <button type="button" onClick={() => setCommissionText(null)} style={{ color: "#185FA5", fontWeight: 600 }}>Voltar ao automático</button></>}
+                </p>
+              </div>
+              <div>
+                <label style={smallLabel}>Garantia da loja</label>
+                <div className="flex gap-2">
+                  <input value={warrantyDays} onChange={(e) => setWarrantyDays(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="0"
+                    className="rounded-lg px-3 py-2 shrink-0" style={{ ...inputStyle, background: "#fff", width: 70 }} title="Dias de garantia (0 = sem garantia da loja)" />
+                  <input value={warrantyCoverage} onChange={(e) => setWarrantyCoverage(e.target.value)} placeholder="O que cobre" disabled={!(Number(warrantyDays) > 0)}
+                    className="flex-1 min-w-0 rounded-lg px-3 py-2" style={{ ...inputStyle, background: Number(warrantyDays) > 0 ? "#fff" : "#F3F4F6" }} />
+                </div>
+                <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>{Number(warrantyDays) > 0 ? `${warrantyDays} dias. Sai no contrato e no termo de garantia.` : "0 = só a garantia legal."}</p>
+              </div>
+            </div>
+          </div>
+
           {/* ================= Resumo ================= */}
           {Number.isFinite(priceNum) && priceNum > 0 && (
             <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${Math.abs(remaining) < 0.01 ? "#27500A" : "#185FA5"}` }}>
@@ -1515,7 +1731,7 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
                 {payments.map(p => num(p.amount) > 0 && (
                   <div key={p.key} className="flex justify-between">
                     <span style={{ color: "#6B7280" }}>
-                      (−) {SALE_PAYMENT_OPTIONS.find(o => o.value === p.method)?.label}
+                      (−) {PAYMENT_NAMES[p.method] ?? p.method}
                       {p.method === "card_credit" && Number(p.installments) > 1 ? ` em ${p.installments}x` : ""}
                     </span>
                     <span>{currency(num(p.amount))}</span>
@@ -1535,8 +1751,15 @@ function NewSaleModal({ onClose, onSaved }: { onClose: () => void; onSaved: (sal
 
           {liveMargin !== null && profit !== null && (
             <div className="px-3 py-2 rounded-lg" style={{ background: profit >= 0 ? "#EAF3DE" : "#FEE2E2", fontSize: 13, color: profit >= 0 ? "#27500A" : "#DC2626" }}>
-              Margem: <strong>{liveMargin.toFixed(1)}%</strong> · Lucro: {currency(profit)}
-              {feesTotal > 0 && <span style={{ color: "#6B7280" }}> (já descontada a taxa do cartão de {currency(feesTotal)})</span>}
+              Margem: <strong>{liveMargin.toFixed(1)}%</strong> · Lucro real: {currency(profit)}
+              {(feesTotal > 0 || expensesTotal > 0 || commissionAmount > 0 || returnsTotal > 0) && (
+                <span style={{ color: "#6B7280" }}> ({[
+                  feesTotal > 0 ? `− taxa cartão ${currency(feesTotal)}` : null,
+                  expensesTotal > 0 ? `− despesas ${currency(expensesTotal)}` : null,
+                  commissionAmount > 0 ? `− comissão ${currency(commissionAmount)}` : null,
+                  returnsTotal > 0 ? `+ retorno ${currency(returnsTotal)}` : null,
+                ].filter(Boolean).join(" ")})</span>
+              )}
             </div>
           )}
 

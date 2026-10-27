@@ -382,7 +382,7 @@ function NewPromissoryModal({ onClose, onSaved }: { onClose: () => void; onSaved
 
   useEffect(() => {
     api.listSales({ pageSize: 100 })
-      .then((s) => setSales(s.items))
+      .then((s) => setSales(s.items.filter((x) => (x as { status?: string }).status !== "canceled")))
       .catch(() => setError("Não foi possível carregar as vendas"))
       .finally(() => setSalesLoading(false));
   }, []);

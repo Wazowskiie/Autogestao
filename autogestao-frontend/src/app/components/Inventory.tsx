@@ -1,6 +1,8 @@
 import { DOC_ITEMS, docProblems, type DocItem, type DocItemStatus, type DocKey, type DocStatus } from "../../lib/vehicle-doc-status";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Search, Car, Bike, Truck, Package, Edit2, Trash2, Globe, X, Loader2, CheckCircle2, AlertTriangle, Receipt } from "lucide-react";
+import { Plus, Search, Car, Bike, Truck, Package, Edit2, Trash2, Globe, X, Loader2, CheckCircle2, AlertTriangle, Receipt, Bookmark } from "lucide-react";
+import { ReservationModal } from "./ReservationModal";
+import { useAuth } from "../../lib/auth-context";
 import { StatusBadge } from "./StatusBadge";
 import { VehicleDetailsModal, type VehicleDetails } from "./VehicleDetailsModal";
 import * as api from "../../lib/api";
@@ -131,6 +133,9 @@ export function Inventory() {
   const [modalVehicle, setModalVehicle] = useState<api.Vehicle | "new" | null>(null);
   // Veículo aberto no painel "Dados do veículo"
   const [details, setDetails] = useState<api.Vehicle | null>(null);
+  const [reserving, setReserving] = useState<api.Vehicle | null>(null);
+  const auth = useAuth();
+  const canManage = auth.user?.role === "owner" || auth.user?.role === "admin";
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -277,6 +282,10 @@ export function Inventory() {
                     </td>
                     <td style={{ padding: "12px 16px" }}>
                       <div className="flex items-center gap-2">
+                        {v.status !== "sold" && (
+                          <button title={v.status === "reserved" ? "Ver reserva" : "Reservar (sinal)"} onClick={(e) => { e.stopPropagation(); setReserving(v); }} className="p-1.5 rounded"
+                            style={{ color: v.status === "reserved" ? "#fff" : "#7C3AED", background: v.status === "reserved" ? "#7C3AED" : "#F3E8FF" }}><Bookmark size={13} /></button>
+                        )}
                         <button title="Editar" onClick={(e) => { e.stopPropagation(); setModalVehicle(v); }} className="p-1.5 rounded" style={{ color: "#6B7280", background: "#F4F6F9" }}><Edit2 size={13} /></button>
                         <button title="Publicar no site" onClick={(e) => e.stopPropagation()} className="p-1.5 rounded" style={{ color: "#185FA5", background: "#EBF2FA" }}><Globe size={13} /></button>
                         <button title="Excluir" onClick={(e) => { e.stopPropagation(); handleDelete(v); }} className="p-1.5 rounded" style={{ color: "#DC2626", background: "#FEE2E2" }}><Trash2 size={13} /></button>
@@ -301,6 +310,10 @@ export function Inventory() {
           initial={modalVehicle === "new" ? null : modalVehicle}
           onClose={() => setModalVehicle(null)}
           onSaved={() => { setModalVehicle(null); fetchVehicles(); }} />
+      )}
+      {reserving && (
+        <ReservationModal vehicle={reserving} canManage={canManage} onClose={() => setReserving(null)}
+          onChanged={() => { setReserving(null); fetchVehicles(); }} />
       )}
     </div>
   );

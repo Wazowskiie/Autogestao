@@ -334,7 +334,7 @@ export class CrmService {
   async eligibleSales(u: AuthenticatedUser,id:string) {
     const lead=await this.detail(u,id);
     if(!lead.customerId) return [];
-    return this.prisma.sale.findMany({where:{dealershipId:u.dealershipId,customerId:lead.customerId,...(lead.vehicleId?{vehicleId:lead.vehicleId}:{}),...(u.role==='seller'?{sellerId:u.userId}:{}),crmLead:null},
+    return this.prisma.sale.findMany({where:{dealershipId:u.dealershipId,status:'active',customerId:lead.customerId,...(lead.vehicleId?{vehicleId:lead.vehicleId}:{}),...(u.role==='seller'?{sellerId:u.userId}:{}),crmLead:null},
       select:{id:true,contractNumber:true,price:true,soldAt:true,vehicle:{select:{brand:true,model:true,year:true}}},orderBy:{soldAt:'desc'},take:50});
   }
   async linkSale(u: AuthenticatedUser,id:string,saleId:string) {

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export class QuerySaleDto {
   @IsOptional()
@@ -9,6 +9,10 @@ export class QuerySaleDto {
   @IsOptional()
   @IsString()
   sellerId?: string;
+
+  @IsOptional()
+  @IsIn(['active', 'canceled'])
+  status?: 'active' | 'canceled';
 
   @IsOptional()
   @Type(() => Number)
