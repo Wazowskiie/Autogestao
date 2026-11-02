@@ -1,10 +1,10 @@
-import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { createValidationPipe } from './common/validation';
 import { PortugueseExceptionFilter } from './common/filters/portuguese-exception.filter';
 
 async function bootstrap() {
@@ -31,25 +31,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      exceptionFactory: (errors) => {
-        // Junta todas as mensagens de validação (já em português, definidas
-        // nas DTOs com class-validator) num único array plano.
-        const mensagens = errors.flatMap((erro) =>
-          erro.constraints ? Object.values(erro.constraints) : [],
-        );
-        return {
-          statusCode: 400,
-          message: mensagens.length ? mensagens : ['Dados inválidos'],
-          error: 'Requisição inválida',
-        };
-      },
-    }),
-  );
+  app.useGlobalPipes(createValidationPipe());
 
   app.useGlobalFilters(new PortugueseExceptionFilter());
 
