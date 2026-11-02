@@ -3,6 +3,7 @@ import { IsDateString, IsEmail, IsOptional, IsString, MinLength } from 'class-va
 export class UpdateCustomerDto {
   @IsOptional() @IsString() @MinLength(2) name?: string;
   @IsOptional() @IsString() document?: string;
+  @IsOptional() @IsString() rg?: string;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsEmail() email?: string;
   @IsOptional() @IsString() address?: string;

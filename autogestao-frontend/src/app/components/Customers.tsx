@@ -175,6 +175,7 @@ const inputStyle = { border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13, outli
 function CustomerModal({ initial, onClose, onSaved }: { initial: api.Customer | null; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [document, setDocument] = useState(initial?.document ?? "");
+  const [rg, setRg] = useState(initial?.rg ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [address, setAddress] = useState(initial?.address ?? "");
@@ -199,6 +200,7 @@ function CustomerModal({ initial, onClose, onSaved }: { initial: api.Customer | 
       const payload: api.CustomerInput = {
         name: name.trim(),
         document: document || undefined,
+        rg: rg.trim() || undefined,
         phone: phone || undefined,
         email: email || undefined,
         address: address || undefined,
@@ -240,10 +242,15 @@ function CustomerModal({ initial, onClose, onSaved }: { initial: api.Customer | 
                 <input placeholder="Nome completo" value={name} onChange={(e) => setName(e.target.value)}
                   className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>CPF / CNPJ</label>
                   <input placeholder="000.000.000-00" value={document} onChange={(e) => setDocument(e.target.value)}
+                    className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>RG / IE</label>
+                  <input placeholder="RG ou inscrição estadual" value={rg} onChange={(e) => setRg(e.target.value)}
                     className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
                 </div>
                 <div>

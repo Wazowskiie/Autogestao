@@ -115,7 +115,11 @@ export class VehiclesService {
     // simplesmente não o encontra.
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id, dealershipId },
-      include: { photos: true },
+      include: {
+        photos: true,
+        // Venda ativa (para os impressos de saída no "Dados do veículo")
+        sales: { where: { status: 'active' }, select: { id: true, contractNumber: true }, orderBy: { soldAt: 'desc' }, take: 1 },
+      },
     });
 
     if (!vehicle) {

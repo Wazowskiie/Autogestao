@@ -75,7 +75,7 @@ export class SalesService {
     const sale = await this.prisma.sale.findFirst({
       where: { id, dealershipId, ...(actor?.role === 'seller' ? { sellerId: actor.userId } : {}) },
       include: {
-        vehicle: true,
+        vehicle: { include: { photos: { orderBy: { order: 'asc' }, take: 6 } } },
         customer: true,
         seller: { select: { name: true } },
         payments: { orderBy: { createdAt: 'asc' } },
@@ -100,10 +100,16 @@ export class SalesService {
       id: sale.id,
       contractNumber,
       soldAt: sale.soldAt,
+      // Hora do registro da venda (vendas antigas não têm)
+      createdAt: sale.createdAt,
       price: Number(sale.price),
       notes: sale.notes,
+      transferInfo: sale.transferInfo,
       seller: sale.seller.name,
       status: sale.status,
+      canceledAt: sale.canceledAt,
+      cancelReason: sale.cancelReason,
+      refundAmount: Number(sale.refundAmount),
       warrantyDays: sale.warrantyDays,
       warrantyCoverage: sale.warrantyCoverage,
       checklist: (sale.deliveryChecklist ?? {}) as Record<string, { done: boolean; at: string | null }>,
@@ -113,15 +119,19 @@ export class SalesService {
         city: d.focusNfeMunicipio || d.city, state: d.focusNfeUf || d.state,
       },
       customer: {
-        name: sale.customer.name, document: sale.customer.document, phone: sale.customer.phone,
+        name: sale.customer.name, document: sale.customer.document, rg: sale.customer.rg, phone: sale.customer.phone,
         email: sale.customer.email, address: sale.customer.address,
       },
       vehicle: {
         type: v.type, brand: v.brand, model: v.model, version: v.version, year: v.year, manufactureYear: v.manufactureYear,
         color: v.color, plate: v.plate, chassis: v.chassis, renavam: v.renavam, km: v.km, fuel: v.fuel,
+        engineCc: v.engineCc, ipvaPaid: v.ipvaPaid, hasSpareKey: v.hasSpareKey, hasManual: v.hasManual,
+        photos: v.photos.map((ph) => ph.url),
       },
       payments: sale.payments.map((p) => ({
         method: p.method, amount: Number(p.amount), installments: p.installments, notes: p.notes, bank: p.bank,
+        installmentAmount: p.installmentAmount != null ? Number(p.installmentAmount) : null,
+        paymentDate: p.paymentDate,
       })),
       tradeIns: sale.tradeIns.map((t) => ({ ...t, value: Number(t.cost) })),
       promissoryNotes: sale.promissoryNotes.map((n) => ({
@@ -171,6 +181,8 @@ export class SalesService {
         method: p.method,
         amount,
         installments: p.method === 'card_credit' ? p.installments ?? 1 : null,
+        installmentAmount: p.method === 'card_credit' && p.installmentAmount ? round2(Number(p.installmentAmount)) : null,
+        paymentDate: p.paymentDate ? parseDateOnly(p.paymentDate) : null,
         feePercent,
         feeAmount: feePercent ? round2((amount * feePercent) / 100) : 0,
         notes: p.notes?.trim() || null,
@@ -268,6 +280,7 @@ export class SalesService {
           commissionAmount,
           warrantyDays: dto.warrantyDays ?? null,
           warrantyCoverage: dto.warrantyCoverage?.trim() || null,
+          transferInfo: dto.transferInfo?.trim() || null,
         },
       });
 
@@ -843,10 +856,16 @@ export class SalesService {
   }
 
   // Só owner/admin podem editar — proteção feita no controller via @Roles
-  async update(dealershipId: string, id: string, data: Partial<{ notes: string; paymentMethod: string }>) {
+  async update(dealershipId: string, id: string, data: Partial<{ notes: string; paymentMethod: string; transferInfo: string }>) {
     const sale = await this.prisma.sale.findFirst({ where: { id, dealershipId } });
     if (!sale) throw new NotFoundException('Venda não encontrada');
-    return this.prisma.sale.update({ where: { id }, data: { notes: data.notes, paymentMethod: data.paymentMethod } });
+    return this.prisma.sale.update({
+      where: { id },
+      data: {
+        notes: data.notes, paymentMethod: data.paymentMethod,
+        transferInfo: data.transferInfo !== undefined ? data.transferInfo.trim() || null : undefined,
+      },
+    });
   }
 
   // Só owner/admin podem excluir
