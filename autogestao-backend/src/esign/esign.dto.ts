@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { plainToInstance, Transform } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength, ValidateIf, ValidateNested } from 'class-validator';
 
 export class SignerDto {
@@ -31,8 +31,13 @@ export class CreateSignatureDto {
   @IsOptional() @IsString() @MaxLength(500)
   message?: string;
 
-  @Transform(({ value }) => { if (typeof value !== 'string') return value; try { return JSON.parse(value); } catch { return value; } })
+  // Converte o texto JSON em SignerDto de verdade (senão a validação não reconhece os campos)
+  @Transform(({ obj }) => {
+    let v: unknown = obj?.signers;
+    if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return v; } }
+    return Array.isArray(v) ? v.map((x) => (x && typeof x === 'object' ? plainToInstance(SignerDto, x) : x)) : v;
+  })
   @IsArray({ message: 'Lista de quem vai assinar inválida' }) @ArrayMinSize(1, { message: 'Informe quem vai assinar' }) @ArrayMaxSize(6)
-  @ValidateNested({ each: true }) @Type(() => SignerDto)
+  @ValidateNested({ each: true })
   signers: SignerDto[];
 }

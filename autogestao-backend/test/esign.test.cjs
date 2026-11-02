@@ -204,3 +204,25 @@ test('Sem chave no servidor, avisa', async () => {
   await assert.rejects(esign.create(U(), sale.id, { printId: 'contract', title: 'X', signers }, file), /ainda não foi configurada/);
   process.env.AUTENTIQUE_TOKEN = tok;
 });
+
+test('Validação de verdade do pedido (multipart: signers chega como texto JSON)', async () => {
+  const { createValidationPipe } = require('../dist/src/common/validation');
+  const { CreateSignatureDto } = require('../dist/src/esign/esign.dto');
+  const pipe = createValidationPipe();
+  const run = (body) => pipe.transform(body, { type: 'body', metatype: CreateSignatureDto });
+  const ok = await run({ printId: 'contract', title: 'Contrato de venda', message: 'contrato de venda chronos tech', signers: JSON.stringify([
+    { role: 'buyer', name: 'ALEX ANDRADE', email: 'isabel@gmail.com', phone: '85987769655', channel: 'email' },
+    { role: 'store', name: 'Isabel Andrade', email: 'loja@gmail.com', phone: '8597769611', channel: 'email' },
+    { role: 'witness', name: 'Francisco', email: 't@gmail.com', phone: '85986391797', channel: 'email' },
+  ]) });
+  assert.equal(ok.signers.length, 3); assert.equal(ok.signers[2].role, 'witness');
+  // WhatsApp sem e-mail passa
+  await run({ printId: 'contract', title: 'X1', signers: JSON.stringify([{ role: 'buyer', name: 'Juarez', email: '', phone: '85989557980', channel: 'whatsapp' }]) });
+  // erros mostram o motivo de verdade, não só "Dados inválidos"
+  const bad = await run({ printId: 'contract', title: 'X1', signers: JSON.stringify([{ role: 'buyer', name: 'J', email: 'nao-e-email', channel: 'email', extra: 1 }]) }).catch((e) => e);
+  assert.ok(bad.message.some((m) => /nome de quem vai assinar/.test(m)), bad.message);
+  assert.ok(bad.message.some((m) => /E-mail de quem vai assinar inválido/.test(m)), bad.message);
+  assert.ok(bad.message.some((m) => /extra should not exist/.test(m)), bad.message);
+  const vazio = await run({ printId: 'contract', title: 'X1', signers: '[]' }).catch((e) => e);
+  assert.ok(vazio.message.some((m) => /Informe quem vai assinar/.test(m)));
+});
