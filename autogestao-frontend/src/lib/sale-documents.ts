@@ -888,3 +888,65 @@ export function salePrintHtml(printId: string, doc: SaleDocuments, format: Print
   const { body, css, title } = renderPrint(print, doc);
   return format === "doc" ? wordHtml(title, body, css) : shell(title, body, css, format === "pdf");
 }
+
+// ---------------- PDF de verdade (para a assinatura eletrônica) ----------------
+
+/** Prefixa as regras do CSS do impresso com .sp-root para não vazar no sistema */
+function scopeCss(css: string) {
+  // tira @page e @media (só servem para a impressão do navegador)
+  let out = css;
+  for (;;) {
+    const i = out.search(/@(page|media)[^{]*\{/);
+    if (i < 0) break;
+    let depth = 0, j = out.indexOf("{", i);
+    for (; j < out.length; j++) { if (out[j] === "{") depth++; else if (out[j] === "}" && --depth === 0) break; }
+    out = out.slice(0, i) + out.slice(j + 1);
+  }
+  return out.replace(/([^{}]+)\{([^{}]*)\}/g, (_, sel: string, decl: string) => {
+    const scoped = sel.split(",").map((s) => s.trim()).filter(Boolean).map((s) => {
+      if (s === "body") return ".sp-root";
+      if (s === "*") return ".sp-root, .sp-root *";
+      return `.sp-root ${s}`;
+    }).join(", ");
+    return `${scoped} {${decl}}\n`;
+  });
+}
+
+/** Gera o PDF (A4) de um impresso, no próprio navegador */
+export async function salePrintPdf(printId: string, doc: SaleDocuments): Promise<Blob> {
+  const print = SALE_PRINTS.find((p) => p.id === printId);
+  if (!print) throw new Error("Impresso não encontrado");
+  const reason = print.unavailable?.(doc);
+  if (reason) throw new Error(reason);
+  const { body, css } = renderPrint(print, doc);
+  const { default: html2pdf } = await import("html2pdf.js");
+
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;left:-10000px;top:0;width:182mm;background:#fff;";
+  host.innerHTML = `<style>${scopeCss(BASE_CSS + css)}
+    .sp-root { position: relative; background: #fff; }
+    .sp-root .copy { position: absolute; top: 300px; }
+    .sp-root .page-break { height: 0; }</style>
+    <div class="sp-root">${body}</div>`;
+  document.body.appendChild(host);
+  try {
+    // espera logo e fotos carregarem (as que não carregarem ficam de fora)
+    await Promise.all(Array.from(host.querySelectorAll("img")).map((img) => {
+      img.crossOrigin = "anonymous";
+      return img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = img.onerror = () => r(); setTimeout(r, 8000); });
+    }));
+    const blob: Blob = await html2pdf()
+      .set({
+        margin: [14, 14, 14, 14],
+        image: { type: "jpeg", quality: 0.92 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["css", "legacy"], before: ".page-break", avoid: ["p", "tr", ".np", "table.signs", "h2", "table.fields"] },
+      })
+      .from(host.querySelector(".sp-root") as HTMLElement)
+      .outputPdf("blob");
+    return blob;
+  } finally {
+    host.remove();
+  }
+}

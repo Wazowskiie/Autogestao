@@ -80,6 +80,9 @@ model Dealership {
   focusNfeUf                String?  @map("focus_nfe_uf")
   focusNfeCep               String?  @map("focus_nfe_cep")
 
+  // Assinatura eletrônica (Autentique): pasta da loja dentro da conta da Chronos
+  esignFolderId             String?  @map("esign_folder_id")
+
   users         User[]
   vehicles      Vehicle[]
   customers     Customer[]
@@ -97,6 +100,7 @@ model Dealership {
   adListings AdListing[]
   crmTemplates CrmMessageTemplate[]
   whatsappAccount WhatsappAccount?
+  saleSignatures SaleSignature[]
 
   @@map("dealerships")
 }
@@ -340,6 +344,7 @@ model Sale {
   payments        SalePayment[]
   expenses        SaleExpense[]
   crmLead         Lead? @relation("CrmLeadSale")
+  signatures      SaleSignature[]
 
   @@index([dealershipId])
   @@index([vehicleId])
@@ -974,3 +979,34 @@ model WhatsappMessage {
   @@map("whatsapp_messages")
 }
 
+
+// Impresso da venda enviado para assinatura eletrônica (Autentique)
+model SaleSignature {
+  id           String    @id @default(uuid())
+  dealershipId String    @map("dealership_id")
+  saleId       String    @map("sale_id")
+  // Qual impresso (contract, promissory...) e o título que aparece na tela
+  printId      String    @map("print_id")
+  title        String
+  provider     String    @default("autentique")
+  // id do documento no provedor
+  externalId   String?   @unique @map("external_id")
+  // sending | waiting | signed | rejected | canceled | error
+  status       String    @default("sending")
+  // [{ name, email, phone, role, channel, publicId, signed, signedAt, rejected }]
+  signers      Json
+  lastError    String?   @map("last_error")
+  createdById  String?   @map("created_by_id")
+  sentAt       DateTime? @map("sent_at")
+  completedAt  DateTime? @map("completed_at")
+  canceledAt   DateTime? @map("canceled_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  dealership Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  sale       Sale       @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([dealershipId, saleId])
+  @@index([dealershipId, createdAt])
+  @@map("sale_signatures")
+}

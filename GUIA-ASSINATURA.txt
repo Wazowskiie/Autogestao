@@ -1,0 +1,47 @@
+ASSINATURA ELETRÔNICA (AUTENTIQUE)
+==================================
+
+Como funciona
+- A conta da Autentique é uma só, da Chronos. Cada loja ganha uma pasta própria
+  (criada sozinha no primeiro envio).
+- Em Vendas → venda → "Todos os impressos de saída" (ou Estoque → Dados do veículo → aba
+  "Impressos de saída"), o botão "Ass.Eletrônica" gera o PDF do impresso e manda para a Autentique.
+- Cada pessoa (comprador, loja, testemunhas) recebe o link por e-mail ou WhatsApp e assina pelo celular.
+- A Autentique avisa o sistema quando alguém assina ou recusa. O status aparece em
+  "Assinaturas eletrônicas", com o botão "Baixar documento assinado" quando todos assinarem.
+- Planos: Profissional 30 envios/mês, Premium 100/mês, Básico não tem.
+  Para mudar, edite esignPerMonth em autogestao-backend/src/plans/plan-catalog.ts.
+- Custo na Autentique (pago pela Chronos): cerca de US$ 0,01 por documento + US$ 0,002 por
+  assinante avisado por e-mail ou US$ 0,02 por WhatsApp. Documentos de teste não são cobrados.
+
+1) CHAVE DA API
+   - Entre na Autentique → Configurações (ou Perfil) → API → gere/copie a chave (token).
+
+2) WEBHOOK (aviso quando alguém assina)
+   - No painel de desenvolvedor da Autentique, cadastre o endereço:
+       https://SEU-ENDERECO-DA-API/api/v1/esign/webhook
+     (o mesmo endereço do PUBLIC_API_URL do .env, com /api/v1/esign/webhook no final)
+   - Marque os eventos: signature.accepted, signature.rejected e document.finished.
+   - Copie o "segredo" (secret) do webhook.
+   Sem o webhook o sistema funciona, mas o status só muda quando alguém clica em "Atualizar".
+
+3) NO .env DO BACKEND (no VPS: /var/www/Autogestao/autogestao-backend/.env)
+   AUTENTIQUE_TOKEN=cole_a_chave
+   AUTENTIQUE_SANDBOX=true
+   AUTENTIQUE_WEBHOOK_SECRET=cole_o_segredo
+   Com AUTENTIQUE_SANDBOX=true os documentos são de TESTE: grátis e sem validade jurídica.
+
+4) ATUALIZAR O VPS (mesmos passos de sempre)
+   cd /var/www/Autogestao
+   cp -r autogestao-backend/storage ~/storage-backup
+   git pull origin main
+   cp -rn ~/storage-backup/. autogestao-backend/storage/
+   cd autogestao-backend && npm install && npx prisma migrate deploy && npx prisma generate && npm run build
+   cd ../autogestao-frontend && npm install && npm run build
+   pm2 restart all
+
+5) PASSAR A VALER DE VERDADE
+   - Troque no .env: AUTENTIQUE_SANDBOX=false
+   - pm2 restart all
+   - O plano grátis da Autentique permite 10 documentos por mês pela API. Para mais, assine o
+     plano pago dela (o valor do plano vira um consumo mínimo mensal).
