@@ -67,6 +67,14 @@ export class SalePaymentDto {
   @IsOptional() @IsString()
   notes?: string;
 
+  // Cartão de crédito: valor de cada parcela cobrada do cliente (ex.: 10x de R$ 598,00)
+  @IsOptional() @IsNumber({}, { message: 'Valor da parcela inválido' }) @Min(0.01) @Type(() => Number)
+  installmentAmount?: number;
+
+  // Data em que o pagamento foi feito (vazio = data da venda)
+  @IsOptional() @IsDateString()
+  paymentDate?: string;
+
   // Financiamento: banco, situação da ficha e retorno (comissão que o banco paga à loja)
   @IsOptional() @IsString() @MaxLength(80)
   bank?: string;
@@ -171,6 +179,10 @@ export class CreateSaleDto {
 
   @IsOptional() @IsString() @MaxLength(300)
   warrantyCoverage?: string;
+
+  // "Dados da transferência" do contrato (ex.: Aberto cliente)
+  @IsOptional() @IsString() @MaxLength(200)
+  transferInfo?: string;
 
   // Lead do CRM que virou esta venda (se não vier, o sistema procura o lead aberto do cliente)
   @IsOptional() @IsUUID()

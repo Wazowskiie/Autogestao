@@ -6,6 +6,7 @@ export class CreateCustomerDto {
   name: string;
 
   @IsOptional() @IsString() document?: string;
+  @IsOptional() @IsString() rg?: string;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsEmail({}, { message: 'informe um e-mail válido' }) email?: string;
   @IsOptional() @IsString() address?: string;

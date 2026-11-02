@@ -14,6 +14,8 @@ export interface SalePaymentInput {
   method: SalePaymentMethod;
   amount: number;
   installments?: number; // cartão de crédito
+  installmentAmount?: number; // cartão: valor de cada parcela cobrada do cliente
+  paymentDate?: string;       // data em que o pagamento foi feito (vazio = data da venda)
   feePercent?: number;   // taxa da maquininha (%)
   bank?: string;            // financiamento
   financingStatus?: FinancingStatus;
@@ -42,6 +44,7 @@ export interface CreateSaleFullInput {
   commissionAmount?: number;
   warrantyDays?: number;
   warrantyCoverage?: string;
+  transferInfo?: string;
   leadId?: string;
 }
 

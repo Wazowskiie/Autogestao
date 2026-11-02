@@ -24,6 +24,8 @@ export interface VehicleFull {
   cost: Money; price: Money;
   description?: string | null; optionals?: string[];
   photos?: VehiclePhoto[];
+  /** Venda ativa deste veículo (se já foi vendido) */
+  sales?: { id: string; contractNumber: string | null }[];
   createdAt: string; updatedAt?: string;
 }
 

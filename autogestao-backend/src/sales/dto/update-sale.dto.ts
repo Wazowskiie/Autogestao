@@ -3,4 +3,5 @@ import { PaymentMethod } from './create-sale.dto';
 export class UpdateSaleDto {
   @IsOptional() @IsString() @MaxLength(6000) notes?: string;
   @IsOptional() @IsEnum(PaymentMethod) paymentMethod?: string;
+  @IsOptional() @IsString() @MaxLength(200) transferInfo?: string;
 }

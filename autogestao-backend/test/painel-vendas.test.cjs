@@ -153,3 +153,30 @@ test('Entrada completa: canal, intermediário, débitos em lista e observação 
   pub = await sf.getVehicle(shop.slug, v.id);
   assert.equal(pub.description, 'Lander revisada, pronta para trilha');
 });
+
+test('Impressos de saída: venda igual ao modelo (2 cartões, RG, hora, transferência)', async () => {
+  await prisma.dealership.update({ where: { id: shop.id }, data: { cnpj: '13024150000187', city: 'Fortaleza', state: 'CE', focusNfeLogradouro: 'Avenida Presidente Castelo Branco', focusNfeNumero: '4714', focusNfeBairro: 'Barra do Ceará' } });
+  const c = await prisma.customer.create({ data: { dealershipId: shop.id, name: 'Juarez Domingos Rodrigues', rg: '92002109052', document: '28364430300', phone: '85989557980', address: 'Caucaia/CE, na Rua Nossa Senhora dos Prazeres nº 250, BLC 10 C APT 102, bairro: Icaraí, cep: 61621-125' } });
+  const v = await prisma.vehicle.create({ data: { dealershipId: shop.id, type: 'moto', brand: 'HONDA', model: 'CG 150 FAN ES', year: 2012, manufactureYear: 2012, color: 'PRETO', fuel: 'flex', km: 1, plate: 'OIJ6D27', chassis: '9C2KC1670CR616919', price: 9000, cost: 6000 } });
+  const s = await sales.create(shop.id, owner.id, {
+    vehicleId: v.id, customerId: c.id, price: 9000, cost: 6000, soldAt: '2026-10-30', transferInfo: 'Aberto cliente',
+    notes: 'VEÍCULO SENDO VENDIDO NA MODALIDADE REPASSE, SEM GARANTIA.',
+    payments: [
+      { method: 'card_credit', amount: 5200, installments: 10, installmentAmount: 598, paymentDate: '2026-10-26' },
+      { method: 'card_credit', amount: 3800, installments: 10, installmentAmount: 437, paymentDate: '2026-10-30' },
+    ],
+  }, actor);
+  const d = await sales.documents(shop.id, s.id, actor);
+  assert.equal(d.customer.rg, '92002109052');
+  assert.equal(d.transferInfo, 'Aberto cliente');
+  assert.ok(d.createdAt, 'venda nova tem hora');
+  assert.equal(d.vehicle.fuel, 'flex');
+  assert.deepEqual(d.payments.map((p) => [p.installments, p.installmentAmount]), [[10, 598], [10, 437]]);
+  assert.equal(new Date(d.payments[0].paymentDate).toISOString().slice(0, 10), '2026-10-26');
+  // vehicles.findOne devolve a venda ativa (aba "Impressos de saída")
+  const withSale = await prisma.vehicle.findFirst({ where: { id: v.id }, include: { sales: { where: { status: 'active' }, select: { id: true } } } });
+  assert.equal(withSale.sales[0].id, s.id);
+  await sales.update(shop.id, s.id, { transferInfo: 'Despachante da loja' });
+  assert.equal((await sales.documents(shop.id, s.id, actor)).transferInfo, 'Despachante da loja');
+  fs.writeFileSync(path.join(process.env.STORAGE_DIR, '..', 'impressos-doc.json'), JSON.stringify(d));
+});

@@ -137,7 +137,7 @@ export function lookupPlate(plate: string) { return request<PlateLookupResult>(`
 // ---------- Clientes ----------
 export interface Customer {
   id: string; dealershipId: string;
-  name: string; document: string | null;
+  name: string; document: string | null; rg?: string | null;
   phone: string | null; email: string | null; address: string | null;
   birthDate: string | null; gender: string | null;
   howMet: string | null; tags: string[]; notes: string | null;
@@ -145,7 +145,7 @@ export interface Customer {
 }
 export interface CustomerListResponse { items: Customer[]; total: number; page: number; pageSize: number; }
 export interface CustomerInput {
-  name: string; document?: string; phone?: string; email?: string; address?: string;
+  name: string; document?: string; rg?: string; phone?: string; email?: string; address?: string;
   birthDate?: string; gender?: string; howMet?: string; tags?: string[]; notes?: string;
 }
 

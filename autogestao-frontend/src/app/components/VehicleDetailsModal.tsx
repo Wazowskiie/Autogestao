@@ -1,4 +1,5 @@
 import { DOC_ITEMS, docItemText } from "../../lib/vehicle-doc-status";
+import { SalePrintsPanel } from "./SalePrintsPanel";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   X, Pencil, ImageOff, Car, Bike, Truck, Package, Upload, Trash2, Star, ChevronDown, ChevronRight,
@@ -72,7 +73,7 @@ const STATUS_LABEL: Record<string, { text: string; bg: string; fg: string }> = {
 };
 
 // ---------- Abas ----------
-type Tab = "vehicle" | "files" | "nfe" | "media" | "expenses" | "summary" | "web" | "entry" | "pendencies" | "financial";
+type Tab = "vehicle" | "files" | "nfe" | "media" | "expenses" | "summary" | "web" | "entry" | "pendencies" | "financial" | "prints";
 const TABS: { id: Tab; label: string }[] = [
   { id: "vehicle", label: "Veículo" },
   { id: "files", label: "Arquivos" },
@@ -151,7 +152,7 @@ export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChang
 
         {/* Abas (rolam para o lado em telas pequenas) */}
         <div style={{ flexShrink: 0, display: "flex", gap: 2, padding: "0 16px", borderBottom: `1px solid ${C.border}`, overflowX: "auto", overflowY: "hidden" }}>
-          {TABS.map((t) => (
+          {[...TABS, ...(v.sales?.[0] ? [{ id: "prints" as Tab, label: "Impressos de saída" }] : [])].map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
               flexShrink: 0, padding: "13px 14px", border: 0, background: "transparent", cursor: "pointer",
               fontSize: 14, fontWeight: 500, whiteSpace: "nowrap",
@@ -175,6 +176,7 @@ export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChang
           {tab === "entry" && <EntryTab v={v} onChanged={refresh} />}
           {tab === "pendencies" && <PendenciesTab v={v} />}
           {tab === "financial" && <FinancialTab v={v} />}
+          {tab === "prints" && v.sales?.[0] && <SalePrintsPanel saleId={v.sales[0].id} />}
         </div>
 
         {/* Rodapé */}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, Plus, Car, Bike, Truck, X, FileText, Edit2, Trash2, ChevronDown, UserPlus, RefreshCw, Wallet, Loader2, Printer, CheckCircle2 } from "lucide-react";
 import { openSaleDocument } from "../../lib/sale-documents";
+import { SalePrintsModal } from "./SalePrintsPanel";
 import { getSettings } from "../../lib/settings-api";
 import * as api from "../../lib/api";
 import * as sapi from "../../lib/sales-api";
@@ -463,6 +464,7 @@ function SaleDetailsModal({
   const [sale, setSaleState] = useState<sapi.SaleFull | null>(null);
   const [canceling, setCanceling] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showPrints, setShowPrints] = useState(false);
   const dirty = useRef(false);
   // Toda mudança feita aqui (despesa, comissão, pós-venda...) atualiza a lista quando fechar
   const setSale = (s: sapi.SaleFull) => { setSaleState((prev) => ({ ...prev, ...s })); dirty.current = true; };
@@ -518,10 +520,12 @@ function SaleDetailsModal({
                 {((sale as { promissoryNotes?: unknown[] }).promissoryNotes?.length ?? 0) > 0 && (
                   <DocButton label="Notas promissórias" onClick={() => openSaleDocument(sale.id, "promissory")} />
                 )}
-                {!!sale.warrantyDays && <DocButton label="Termo de garantia" onClick={() => openSaleDocument(sale.id, "warranty")} />}
-                <DocButton label="Termo de entrega" onClick={() => openSaleDocument(sale.id, "delivery")} />
-                <DocButton label="Recibo" onClick={() => openSaleDocument(sale.id, "receipt")} />
+                <button onClick={() => setShowPrints(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                  style={{ background: "#fff", color: "#185FA5", border: "1px solid #185FA5", fontSize: 13, fontWeight: 500 }}>
+                  <FileText size={14} /> Todos os impressos de saída
+                </button>
               </div>
+              {showPrints && <SalePrintsModal saleId={sale.id} onClose={() => setShowPrints(false)} />}
               {/* Veículo */}
               <div className="rounded-lg p-4" style={{ background: "#F4F6F9" }}>
                 <p style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Veículo</p>
@@ -785,7 +789,7 @@ function rememberFee(method: string, value: string) {
   try { if (value) localStorage.setItem(`fee_${method}`, value); } catch { /* sem problema */ }
 }
 
-interface PaymentForm { key: number; method: sapi.SalePaymentMethod; amount: string; installments: string; feePercent: string; bank?: string; returnAmount?: string }
+interface PaymentForm { key: number; method: sapi.SalePaymentMethod; amount: string; installments: string; feePercent: string; bank?: string; returnAmount?: string; installmentAmount?: string; paymentDate?: string }
 interface ExpenseForm { key: number; description: string; amount: string; paid: boolean }
 const isFinancing = (m: string) => m === "financing" || m === "consortium";
 
@@ -880,6 +884,7 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
   const [commissionText, setCommissionText] = useState<string | null>(null); // null = automática
   const [warrantyDays, setWarrantyDays] = useState(() => lastWarranty().days);
   const [warrantyCoverage, setWarrantyCoverage] = useState(() => lastWarranty().coverage);
+  const [transferInfo, setTransferInfo] = useState("Aberto cliente");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1196,6 +1201,8 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
           amount: round2(num(p.amount)),
           installments: p.method === "card_credit" ? Number(p.installments) || 1 : undefined,
           feePercent: isCard(p.method) && p.feePercent ? num(p.feePercent) : undefined,
+          installmentAmount: p.method === "card_credit" && num(p.installmentAmount ?? "") > 0 ? round2(num(p.installmentAmount ?? "")) : undefined,
+          paymentDate: p.paymentDate || undefined,
           bank: isFinancing(p.method) && p.bank?.trim() ? p.bank.trim() : undefined,
           returnAmount: isFinancing(p.method) && num(p.returnAmount ?? "") > 0 ? round2(num(p.returnAmount ?? "")) : undefined,
         })),
@@ -1204,6 +1211,7 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
         leadId: prefill?.leadId,
         warrantyDays: Number(warrantyDays) > 0 ? Number(warrantyDays) : undefined,
         warrantyCoverage: Number(warrantyDays) > 0 ? warrantyCoverage.trim() || undefined : undefined,
+        transferInfo: transferInfo.trim() || undefined,
       });
       rememberWarranty(warrantyDays, warrantyCoverage);
 
@@ -1536,6 +1544,26 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
                         </button>
                       ) : <span style={{ width: 31 }} />}
                     </div>
+                    {p.method === "card_credit" && (
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div>
+                          <label style={smallLabel}>Parcela cobrada do cliente</label>
+                          <input value={p.installmentAmount ?? ""} inputMode="decimal" placeholder={perInstallment > 0 ? toMoneyText(round2(perInstallment)) : "0,00"}
+                            onChange={(e) => updatePayment(p.key, { installmentAmount: e.target.value })}
+                            className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                        </div>
+                        <div>
+                          <label style={smallLabel}>Data em que passou o cartão</label>
+                          <input type="date" value={p.paymentDate ?? ""} onChange={(e) => updatePayment(p.key, { paymentDate: e.target.value })}
+                            className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                        </div>
+                        {num(p.installmentAmount ?? "") > 0 && Number(p.installments) > 0 && (
+                          <p className="col-span-2" style={{ fontSize: 11, color: "#6B7280" }}>
+                            Total pago pelo cliente: {p.installments}x de {currency(num(p.installmentAmount ?? ""))} = <b>{currency(round2(num(p.installmentAmount ?? "") * Number(p.installments)))}</b>. Sai assim no contrato.
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {isFinancing(p.method) && (
                       <div className="grid grid-cols-2 gap-2 mt-2">
                         <div>
@@ -1785,6 +1813,12 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
                     className="flex-1 min-w-0 rounded-lg px-3 py-2" style={{ ...inputStyle, background: Number(warrantyDays) > 0 ? "#fff" : "#F3F4F6" }} />
                 </div>
                 <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>{Number(warrantyDays) > 0 ? `${warrantyDays} dias. Sai no contrato e no termo de garantia.` : "0 = só a garantia legal."}</p>
+              </div>
+              <div>
+                <label style={smallLabel}>Dados da transferência</label>
+                <input value={transferInfo} onChange={(e) => setTransferInfo(e.target.value)} placeholder="Ex: Aberto cliente, Despachante da loja"
+                  className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>Sai em "Documentação" no contrato.</p>
               </div>
             </div>
           </div>

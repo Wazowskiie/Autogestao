@@ -16,6 +16,7 @@ export class CustomersService {
         createdById: user?.userId,
         name: dto.name,
         document: dto.document,
+        rg: dto.rg,
         phone: dto.phone,
         email: dto.email,
         address: dto.address,
