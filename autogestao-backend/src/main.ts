@@ -16,7 +16,11 @@ async function bootstrap() {
   // Fotos dos veículos (pasta storage/public), abertas direto pelo link
   app.useStaticAssets(join(process.cwd(), 'storage', 'public'), {
     prefix: '/files/',
-    setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
+    setHeaders: (res) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      // Fotos e logo são públicas; liberar CORS deixa o sistema colocá-las no PDF da assinatura eletrônica
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    },
   });
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));

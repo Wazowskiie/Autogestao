@@ -10,6 +10,7 @@ export type PlanFeature =
   | 'nfe'          // Emissão de nota fiscal (Focus NFe)
   | 'renave'       // Integração RENAVE
   | 'assistant'    // Assistente de IA
+  | 'esign'        // Assinatura eletrônica dos impressos (D4Sign)
   | 'priority_support';
 
 export const FEATURE_LABELS: Record<PlanFeature, string> = {
@@ -18,6 +19,7 @@ export const FEATURE_LABELS: Record<PlanFeature, string> = {
   nfe: 'Nota fiscal (NF-e)',
   renave: 'RENAVE',
   assistant: 'Assistente de IA',
+  esign: 'Assinatura eletrônica',
   priority_support: 'Suporte prioritário',
 };
 
@@ -35,6 +37,7 @@ export interface PlanSpec {
   plateLookupsPerMonth: number;
   nfePerMonth: number;     // 0 = não emite
   assistantPerDay: number; // perguntas por dia para a loja toda; 0 = sem assistente
+  esignPerMonth: number;   // documentos enviados para assinatura eletrônica por mês; 0 = não tem
   features: PlanFeature[];
   highlight?: boolean;
   support: string;
@@ -52,6 +55,7 @@ export const PLAN_CATALOG: PlanSpec[] = [
     plateLookupsPerMonth: 30,
     nfePerMonth: 0,
     assistantPerDay: 0,
+    esignPerMonth: 0,
     features: [],
     support: 'Suporte por e-mail e chat',
   },
@@ -66,7 +70,8 @@ export const PLAN_CATALOG: PlanSpec[] = [
     plateLookupsPerMonth: 100,
     nfePerMonth: 30,
     assistantPerDay: 40,
-    features: ['crm', 'chat', 'nfe', 'renave', 'assistant'],
+    esignPerMonth: 30,
+    features: ['crm', 'chat', 'nfe', 'renave', 'assistant', 'esign'],
     highlight: true,
     support: 'Suporte por WhatsApp em horário comercial',
   },
@@ -81,7 +86,8 @@ export const PLAN_CATALOG: PlanSpec[] = [
     plateLookupsPerMonth: 300,
     nfePerMonth: 100,
     assistantPerDay: 150,
-    features: ['crm', 'chat', 'nfe', 'renave', 'assistant', 'priority_support'],
+    esignPerMonth: 100,
+    features: ['crm', 'chat', 'nfe', 'renave', 'assistant', 'esign', 'priority_support'],
     support: 'WhatsApp prioritário + implantação grátis',
   },
 ];
@@ -114,6 +120,7 @@ export function planHighlights(p: PlanSpec): string[] {
     ...(p.nfePerMonth > 0 ? [`Nota fiscal: ${p.nfePerMonth} notas por mês`] : []),
     ...(p.features.includes('renave') ? ['Integração RENAVE'] : []),
     ...(p.assistantPerDay > 0 ? [`Assistente de IA: ${p.assistantPerDay} perguntas por dia`] : []),
+    ...(p.esignPerMonth > 0 ? [`Assinatura eletrônica: ${p.esignPerMonth} documentos por mês`] : []),
     p.support,
   ];
 }

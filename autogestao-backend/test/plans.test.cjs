@@ -36,7 +36,7 @@ test('Catálogo atualiza o banco e loja nova ganha teste grátis do Profissional
   assert.equal(await prisma.plan.count(), 3);
   const c = await plans.current(actor(owner));
   assert.equal(c.plan.id, 'plan-profissional'); assert.equal(c.trialActive, true); assert.equal(c.canSwitchFree, true);
-  assert.ok(c.trialDaysLeft >= 29); assert.deepEqual(c.features.sort(), ['assistant', 'chat', 'crm', 'nfe', 'renave']);
+  assert.ok(c.trialDaysLeft >= 29); assert.deepEqual(c.features.sort(), ['assistant', 'chat', 'crm', 'esign', 'nfe', 'renave']);
 });
 
 test('Trocar para o Básico tira CRM, chat, NF-e, RENAVE e assistente', async () => {

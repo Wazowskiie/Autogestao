@@ -1,7 +1,9 @@
-// Lista "Impressos de saída" da venda: cada impresso em HTML, PDF, DOC e (em breve) assinatura eletrônica
-import { useEffect, useState } from "react";
+// Lista "Impressos de saída" da venda: cada impresso em HTML, PDF, DOC e assinatura eletrônica (D4Sign)
+import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { SALE_PRINTS, getSaleDocuments, openSalePrint, type PrintFormat, type SaleDocuments } from "../../lib/sale-documents";
+import { getEsignOverview, listSignatures, type EsignOverview, type SaleSignature } from "../../lib/esign-api";
+import { SignatureList, SignModal } from "./SaleSignatures";
 
 const FORMATS: { id: PrintFormat; label: string; hint: string }[] = [
   { id: "html", label: "HTML", hint: "Abrir numa aba nova" },
@@ -14,11 +16,26 @@ export function SalePrintsPanel({ saleId }: { saleId: string }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [esign, setEsign] = useState<EsignOverview | null>(null);
+  const [signatures, setSignatures] = useState<SaleSignature[]>([]);
+  const [signing, setSigning] = useState<{ id: string; title: string } | null>(null);
+
+  const loadSignatures = useCallback(() => {
+    listSignatures(saleId).then(setSignatures).catch(() => undefined);
+  }, [saleId]);
 
   useEffect(() => {
     setDoc(null); setLoadError(null);
     getSaleDocuments(saleId).then(setDoc).catch((e) => setLoadError(e instanceof Error ? e.message : "Erro ao carregar a venda"));
-  }, [saleId]);
+    getEsignOverview().then(setEsign).catch(() => setEsign(null));
+    loadSignatures();
+  }, [saleId, loadSignatures]);
+
+  const esignBlock = !esign ? "Carregando..."
+    : !esign.configured ? "A assinatura eletrônica ainda não foi ativada no servidor."
+    : !esign.planAllows ? `A assinatura eletrônica não faz parte do plano ${esign.planName}. Veja em Planos.`
+    : esign.used >= esign.limit ? `A loja já usou os ${esign.limit} envios do mês.`
+    : null;
 
   const run = async (printId: string, format: PrintFormat) => {
     const key = `${printId}:${format}`;
@@ -63,16 +80,27 @@ export function SalePrintsPanel({ saleId }: { saleId: string }) {
                       </button>
                     );
                   })}
-                  <button disabled title="Em breve: assinatura eletrônica com validade jurídica"
-                    style={{ ...btn, opacity: 0.45, cursor: "not-allowed" }}>Ass.Eletrônica</button>
+                  <button disabled={!!reason || !!esignBlock} onClick={() => setSigning({ id: p.id, title: p.title })}
+                    title={reason ?? esignBlock ?? "Enviar para o cliente assinar pelo celular (e-mail ou WhatsApp)"}
+                    style={{ ...btn, opacity: reason || esignBlock ? 0.45 : 1, cursor: reason || esignBlock ? "not-allowed" : "pointer", color: reason || esignBlock ? "#374151" : "#185FA5", borderColor: reason || esignBlock ? "#E5E7EB" : "#B9D3EE" }}>
+                    Ass.Eletrônica
+                  </button>
                 </div>
               </div>
             );
           })}
           <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8 }}>
             Campos sem informação no cadastro saem como linha em branco para preencher à mão. Confira CNPJ e endereço da loja em Configurações → Loja, e CPF, RG e endereço no cadastro do cliente.
+            {esign?.configured && esign.planAllows && ` Assinatura eletrônica: ${esign.used} de ${esign.limit} envios usados neste mês.`}
+            {esign?.sandbox && esign.configured && " (ambiente de testes da D4Sign: as assinaturas não têm validade jurídica)"}
           </p>
+          <SignatureList signatures={signatures} onChanged={loadSignatures} />
         </div>
+      )}
+      {signing && doc && (
+        <SignModal saleId={saleId} doc={doc} printId={signing.id} title={signing.title}
+          onClose={() => setSigning(null)}
+          onSent={() => { setSigning(null); loadSignatures(); getEsignOverview().then(setEsign).catch(() => undefined); }} />
       )}
     </div>
   );

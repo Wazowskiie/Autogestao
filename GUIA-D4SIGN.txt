@@ -1,0 +1,44 @@
+ASSINATURA ELETRÔNICA (D4SIGN)
+==============================
+
+Como funciona
+- A conta da D4Sign é uma só, da Chronos. Cada loja ganha uma pasta própria dentro do cofre
+  (criada sozinha no primeiro envio).
+- Em Vendas → venda → "Todos os impressos de saída" (ou Estoque → Dados do veículo → aba
+  "Impressos de saída"), o botão "Ass.Eletrônica" gera o PDF do impresso e manda para a D4Sign.
+- Cada pessoa (comprador, loja, testemunhas) recebe o link por e-mail ou WhatsApp e assina pelo celular.
+- A D4Sign avisa o sistema quando alguém assina. O status aparece em "Assinaturas eletrônicas",
+  com o botão "Baixar documento assinado" quando todos assinarem.
+- Planos: Profissional 30 envios/mês, Premium 100/mês, Básico não tem.
+  Para mudar, edite esignPerMonth em autogestao-backend/src/plans/plan-catalog.ts.
+
+1) CRIAR A CONTA DE TESTES (grátis, sem validade jurídica)
+   - https://sandbox.d4sign.com.br/criar.html
+   - Entre na conta e crie um cofre (ex.: "Chronos - Lojas").
+   - Menu "Dev API": copie o tokenAPI e o cryptKey, e clique em "Gerar Secret Key MAC".
+   - Abra o cofre: o UUID dele aparece no endereço da página (ou peça para o Claude listar pela API).
+
+2) NO .env DO BACKEND (no VPS: /var/www/Autogestao/autogestao-backend/.env)
+   D4SIGN_BASE_URL=https://sandbox.d4sign.com.br/api/v1
+   D4SIGN_TOKEN_API=...
+   D4SIGN_CRYPT_KEY=...
+   D4SIGN_SAFE_UUID=...
+   D4SIGN_HMAC_SECRET=...
+   PUBLIC_API_URL tem que ser o endereço https da API (é para lá que a D4Sign manda os avisos).
+
+3) ATUALIZAR O VPS (mesmos passos de sempre)
+   cd /var/www/Autogestao
+   cp -r autogestao-backend/storage ~/storage-backup
+   git pull origin main
+   cp -rn ~/storage-backup/. autogestao-backend/storage/
+   cd autogestao-backend && npm install && npx prisma migrate deploy && npx prisma generate && npm run build
+   cd ../autogestao-frontend && npm install && npm run build
+   pm2 restart all
+
+4) PASSAR PARA PRODUÇÃO (assinaturas com validade jurídica)
+   - Contrate a D4Sign (https://d4sign.com.br) e repita o passo 1 na conta de produção
+     (https://secure.d4sign.com.br).
+   - IMPORTANTE: por padrão a API da D4Sign aceita só 10 chamadas por hora. Cada envio usa 4 ou 5.
+     Peça ao comercial da D4Sign para aumentar o limite (diga que é um sistema para várias lojas).
+   - Troque no .env: D4SIGN_BASE_URL=https://secure.d4sign.com.br/api/v1 e as chaves da conta nova.
+   - pm2 restart all
