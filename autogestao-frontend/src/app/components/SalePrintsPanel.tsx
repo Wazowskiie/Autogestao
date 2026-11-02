@@ -1,4 +1,4 @@
-// Lista "Impressos de saída" da venda: cada impresso em HTML, PDF, DOC e assinatura eletrônica (D4Sign)
+// Lista "Impressos de saída" da venda: cada impresso em HTML, PDF, DOC e assinatura eletrônica (Autentique)
 import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { SALE_PRINTS, getSaleDocuments, openSalePrint, type PrintFormat, type SaleDocuments } from "../../lib/sale-documents";
@@ -92,7 +92,7 @@ export function SalePrintsPanel({ saleId }: { saleId: string }) {
           <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8 }}>
             Campos sem informação no cadastro saem como linha em branco para preencher à mão. Confira CNPJ e endereço da loja em Configurações → Loja, e CPF, RG e endereço no cadastro do cliente.
             {esign?.configured && esign.planAllows && ` Assinatura eletrônica: ${esign.used} de ${esign.limit} envios usados neste mês.`}
-            {esign?.sandbox && esign.configured && " (ambiente de testes da D4Sign: as assinaturas não têm validade jurídica)"}
+            {esign?.sandbox && esign.configured && " (modo de teste: os documentos não têm validade jurídica)"}
           </p>
           <SignatureList signatures={signatures} onChanged={loadSignatures} />
         </div>

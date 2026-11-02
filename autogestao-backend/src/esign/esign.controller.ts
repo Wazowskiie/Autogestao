@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { AnyFilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import { Body, Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import type { Request } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -35,7 +36,7 @@ export class EsignController {
   @Roles('owner', 'admin') @Post(':id/cancel') cancel(@CurrentUser() u: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) { return this.esign.cancel(u, id); }
 }
 
-/** Aviso da D4Sign (form-data). Sem login: confere a Content-Hmac e consulta a D4Sign de novo. */
+/** Aviso da Autentique (JSON). Sem login: confere a x-autentique-signature e consulta a Autentique de novo. */
 @Public()
 @SkipThrottle()
 @Controller('esign/webhook')
@@ -44,8 +45,7 @@ export class EsignWebhookController {
 
   @Post()
   @HttpCode(200)
-  @UseInterceptors(AnyFilesInterceptor({ limits: { files: 0, fieldSize: 64 * 1024 } }))
-  receive(@Body() body: Record<string, unknown>, @Headers('content-hmac') hmac?: string) {
-    return this.esign.webhook(body, hmac);
+  receive(@Req() req: Request & { rawBody?: Buffer }, @Body() body: unknown, @Headers('x-autentique-signature') signature?: string) {
+    return this.esign.webhook(req.rawBody, body, signature);
   }
 }

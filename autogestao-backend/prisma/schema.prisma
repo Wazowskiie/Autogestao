@@ -80,8 +80,8 @@ model Dealership {
   focusNfeUf                String?  @map("focus_nfe_uf")
   focusNfeCep               String?  @map("focus_nfe_cep")
 
-  // Assinatura eletrônica (D4Sign): pasta da loja dentro do cofre da Chronos
-  d4signFolderUuid          String?  @map("d4sign_folder_uuid")
+  // Assinatura eletrônica (Autentique): pasta da loja dentro da conta da Chronos
+  esignFolderId             String?  @map("esign_folder_id")
 
   users         User[]
   vehicles      Vehicle[]
@@ -980,7 +980,7 @@ model WhatsappMessage {
 }
 
 
-// Impresso da venda enviado para assinatura eletrônica (D4Sign)
+// Impresso da venda enviado para assinatura eletrônica (Autentique)
 model SaleSignature {
   id           String    @id @default(uuid())
   dealershipId String    @map("dealership_id")
@@ -988,12 +988,12 @@ model SaleSignature {
   // Qual impresso (contract, promissory...) e o título que aparece na tela
   printId      String    @map("print_id")
   title        String
-  provider     String    @default("d4sign")
-  // UUID do documento na D4Sign
+  provider     String    @default("autentique")
+  // id do documento no provedor
   externalId   String?   @unique @map("external_id")
-  // sending | waiting | signed | canceled | error
+  // sending | waiting | signed | rejected | canceled | error
   status       String    @default("sending")
-  // [{ name, email, phone, role, channel, signed, signedAt }]
+  // [{ name, email, phone, role, channel, publicId, signed, signedAt, rejected }]
   signers      Json
   lastError    String?   @map("last_error")
   createdById  String?   @map("created_by_id")

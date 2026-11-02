@@ -10,7 +10,7 @@ export type PlanFeature =
   | 'nfe'          // Emissão de nota fiscal (Focus NFe)
   | 'renave'       // Integração RENAVE
   | 'assistant'    // Assistente de IA
-  | 'esign'        // Assinatura eletrônica dos impressos (D4Sign)
+  | 'esign'        // Assinatura eletrônica dos impressos (Autentique)
   | 'priority_support';
 
 export const FEATURE_LABELS: Record<PlanFeature, string> = {

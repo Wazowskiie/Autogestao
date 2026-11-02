@@ -13,6 +13,7 @@ const STATUS: Record<SaleSignature["status"], { text: string; bg: string; fg: st
   sending: { text: "Enviando", bg: "#EFF6FF", fg: "#1E40AF" },
   waiting: { text: "Aguardando assinaturas", bg: "#FEF3C7", fg: "#92400E" },
   signed: { text: "Assinado", bg: "#DCFCE7", fg: "#166534" },
+  rejected: { text: "Recusado", bg: "#FEE2E2", fg: "#991B1B" },
   canceled: { text: "Cancelado", bg: "#F3F4F6", fg: "#6B7280" },
   error: { text: "Erro no envio", bg: "#FEE2E2", fg: "#991B1B" },
 };
@@ -47,7 +48,7 @@ export function SignModal({ saleId, doc, printId, title, onClose, onSent }: {
     setError(null);
     for (const r of rows) {
       if (r.name.trim().length < 2) return setError("Preencha o nome de todos que vão assinar.");
-      if (!/^\S+@\S+\.\S+$/.test(r.email.trim())) return setError(`Informe um e-mail válido para ${r.name || ROLE_LABEL[r.role]}. A D4Sign exige e-mail mesmo quando o link vai pelo WhatsApp.`);
+      if (r.channel === "email" && !/^\S+@\S+\.\S+$/.test(r.email.trim())) return setError(`Informe um e-mail válido para ${r.name || ROLE_LABEL[r.role]}.`);
       if (r.channel === "whatsapp" && (r.phone ?? "").replace(/\D/g, "").length < 10) return setError(`Informe o WhatsApp de ${r.name} com DDD.`);
     }
     try {
@@ -56,7 +57,7 @@ export function SignModal({ saleId, doc, printId, title, onClose, onSent }: {
       setStep("upload");
       await sendForSignature(saleId, {
         printId, title, message: message.trim() || undefined,
-        signers: rows.map(({ key: _k, ...r }) => ({ ...r, name: r.name.trim(), email: r.email.trim(), phone: r.phone?.trim() || undefined })),
+        signers: rows.map(({ key: _k, ...r }) => ({ ...r, name: r.name.trim(), email: r.channel === "email" ? r.email.trim() : "", phone: r.phone?.trim() || undefined })),
         pdf,
       });
       onSent();
@@ -89,7 +90,7 @@ export function SignModal({ saleId, doc, printId, title, onClose, onSent }: {
               </div>
               <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
                 <div><span style={label}>Nome</span><input style={input} value={r.name} disabled={busy} onChange={(e) => set(r.key, { name: e.target.value })} /></div>
-                <div><span style={label}>E-mail</span><input style={input} value={r.email} disabled={busy} type="email" onChange={(e) => set(r.key, { email: e.target.value })} /></div>
+                <div><span style={label}>E-mail{r.channel === "whatsapp" ? " (opcional)" : ""}</span><input style={input} value={r.email} disabled={busy} type="email" onChange={(e) => set(r.key, { email: e.target.value })} /></div>
                 <div>
                   <span style={label}>Receber o link por</span>
                   <select style={input} value={r.channel} disabled={busy} onChange={(e) => set(r.key, { channel: e.target.value as SignerChannel })}>
@@ -120,7 +121,7 @@ export function SignModal({ saleId, doc, printId, title, onClose, onSent }: {
           <button onClick={send} disabled={busy} className="flex items-center gap-2"
             style={{ padding: "8px 16px", borderRadius: 8, background: "#185FA5", color: "#fff", fontSize: 14, fontWeight: 600, opacity: busy ? 0.75 : 1 }}>
             {busy && <Loader2 size={14} className="animate-spin" />}
-            {step === "pdf" ? "Gerando o PDF..." : step === "upload" ? "Enviando para a D4Sign..." : "Enviar para assinar"}
+            {step === "pdf" ? "Gerando o PDF..." : step === "upload" ? "Enviando para a Autentique..." : "Enviar para assinar"}
           </button>
         </div>
       </div>
@@ -173,9 +174,9 @@ export function SignatureList({ signatures, onChanged }: { signatures: SaleSigna
                 Enviado em {fmt(s.sentAt ?? s.createdAt)}{s.completedAt ? ` · concluído em ${fmt(s.completedAt)}` : ""}{s.canceledAt ? ` · cancelado em ${fmt(s.canceledAt)}` : ""}
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1" style={{ marginTop: 6 }}>
-                {s.signers.map((p) => (
-                  <span key={p.email} className="flex items-center gap-1" style={{ fontSize: 12, color: p.signed ? "#166534" : "#6B7280" }}>
-                    {p.signed ? <CheckCircle2 size={13} /> : s.status === "canceled" ? <XCircle size={13} /> : <Clock size={13} />}
+                {s.signers.map((p, i) => (
+                  <span key={i} className="flex items-center gap-1" style={{ fontSize: 12, color: p.signed ? "#166534" : p.rejected ? "#991B1B" : "#6B7280" }}>
+                    {p.signed ? <CheckCircle2 size={13} /> : p.rejected || s.status === "canceled" ? <XCircle size={13} /> : <Clock size={13} />}
                     {p.name} ({ROLE_LABEL[p.role]}){p.signed && p.signedAt ? ` · ${fmt(p.signedAt)}` : ""}
                   </span>
                 ))}

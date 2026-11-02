@@ -1,4 +1,4 @@
-// Assinatura eletrônica dos impressos de saída (D4Sign)
+// Assinatura eletrônica dos impressos de saída (Autentique)
 import { request } from "./api";
 import { upload } from "./vehicle-details-api";
 
@@ -6,11 +6,11 @@ export type SignerRole = "buyer" | "store" | "witness" | "other";
 export type SignerChannel = "email" | "whatsapp";
 
 export interface SignerInput { name: string; email: string; phone?: string; role: SignerRole; channel: SignerChannel }
-export interface SignerState extends SignerInput { phone: string | null; signed: boolean; signedAt: string | null }
+export interface SignerState extends SignerInput { phone: string | null; signed: boolean; signedAt: string | null; rejected?: boolean }
 
 export interface SaleSignature {
   id: string; saleId: string; printId: string; title: string;
-  status: "sending" | "waiting" | "signed" | "canceled" | "error";
+  status: "sending" | "waiting" | "signed" | "rejected" | "canceled" | "error";
   signers: SignerState[]; lastError: string | null;
   sentAt: string | null; completedAt: string | null; canceledAt: string | null; createdAt: string;
 }

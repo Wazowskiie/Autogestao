@@ -1,5 +1,5 @@
--- Assinatura eletrônica dos impressos de saída (D4Sign)
-ALTER TABLE "dealerships" ADD COLUMN "d4sign_folder_uuid" TEXT;
+-- Assinatura eletrônica dos impressos de saída (Autentique)
+ALTER TABLE "dealerships" ADD COLUMN "esign_folder_id" TEXT;
 
 CREATE TABLE "sale_signatures" (
     "id" TEXT NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE "sale_signatures" (
     "sale_id" TEXT NOT NULL,
     "print_id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
-    "provider" TEXT NOT NULL DEFAULT 'd4sign',
+    "provider" TEXT NOT NULL DEFAULT 'autentique',
     "external_id" TEXT,
     "status" TEXT NOT NULL DEFAULT 'sending',
     "signers" JSONB NOT NULL,

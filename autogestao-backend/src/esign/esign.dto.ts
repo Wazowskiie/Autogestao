@@ -1,12 +1,13 @@
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength, ValidateIf, ValidateNested } from 'class-validator';
 
 export class SignerDto {
   @IsString() @MinLength(2, { message: 'Informe o nome de quem vai assinar' }) @MaxLength(120)
   name: string;
 
-  @IsEmail({}, { message: 'E-mail de quem vai assinar inválido' })
-  email: string;
+  // Obrigatório quando o link vai por e-mail
+  @IsOptional() @ValidateIf((o) => o.email !== '') @IsEmail({}, { message: 'E-mail de quem vai assinar inválido' })
+  email?: string;
 
   @IsOptional() @IsString() @MaxLength(30)
   phone?: string;
