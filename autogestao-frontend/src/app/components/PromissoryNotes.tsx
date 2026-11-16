@@ -175,9 +175,10 @@ export function PromissoryNotes() {
           <h2>Promissórias</h2>
           {viewToggle}
         </div>
-        <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg flex items-center gap-2" style={{ background: "var(--primary)", color: "#fff", fontSize: 13, fontWeight: 500 }}>
+        {/* Vendedor só consulta: as promissórias dele nascem junto com a venda */}
+        {canSeeReport && <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg flex items-center gap-2" style={{ background: "var(--primary)", color: "#fff", fontSize: 13, fontWeight: 500 }}>
           <Plus size={16} /> Gerar promissórias
-        </button>
+        </button>}
       </div>
 
       <div className="flex-1 overflow-auto px-6 py-5">
@@ -331,7 +332,7 @@ export function PromissoryNotes() {
                           </div>
                           {note.paid && note.paidAt && <div style={{ fontSize: 11, color: "#15803D" }}>pago em {new Date(note.paidAt).toLocaleDateString("pt-BR")}</div>}
                           <div className="flex items-center gap-1.5" style={{ marginTop: 8 }}>
-                            {!note.paid && (
+                            {!note.paid && canSeeReport && (
                               <button onClick={() => handlePay(note)} className="flex items-center gap-1 px-2 py-1 rounded-md flex-1 justify-center"
                                 style={{ fontSize: 12, fontWeight: 600, color: "#fff", background: "#16A34A" }}>
                                 <Check size={12} /> Dar baixa

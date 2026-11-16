@@ -46,6 +46,8 @@ export function SaleAfterPanel({ sale, canEdit, onChange }: { sale: sapi.SaleFul
   const expTotal = expenses.reduce((t, e) => t + n(e.amount), 0);
   const commission = n(sale.commissionAmount);
   const profit = n(sale.profit);
+  // Para o vendedor o servidor não envia custo nem lucro: o bloco de resultado e as despesas somem
+  const hideResult = (sale.profit as unknown) == null && (sale.cost as unknown) == null;
 
   const rows: { label: string; value: number; sign?: "-" | "+"; strong?: boolean }[] = [
     { label: "Preço de venda", value: n(sale.price) },
@@ -69,7 +71,7 @@ export function SaleAfterPanel({ sale, canEdit, onChange }: { sale: sapi.SaleFul
       )}
 
       {/* Resultado real */}
-      <div>
+      {!hideResult && <div>
         <p style={label}>Resultado da venda</p>
         <div style={box}>
           {rows.map((r, i) => (
@@ -83,9 +85,9 @@ export function SaleAfterPanel({ sale, canEdit, onChange }: { sale: sapi.SaleFul
             <span style={{ fontSize: 15, fontWeight: 700, color: profit >= 0 ? "#15803D" : "#DC2626" }}>{brl(profit)}</span>
           </div>
         </div>
-      </div>
+      </div>}
 
-      <ExpensesSection sale={sale} canEdit={canEdit && !canceled} onChange={onChange} />
+      {!hideResult && <ExpensesSection sale={sale} canEdit={canEdit && !canceled} onChange={onChange} />}
       {payments.filter((p) => p.method === "financing" || p.method === "consortium").map((p) => (
         <FinancingSection key={p.id} sale={sale} payment={p} canEdit={canEdit && !canceled} onChange={onChange} />
       ))}

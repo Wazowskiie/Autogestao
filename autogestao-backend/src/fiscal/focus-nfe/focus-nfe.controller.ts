@@ -17,6 +17,7 @@ interface AuthenticatedRequest extends Request {
 
 // Não precisa de @UseGuards aqui — o projeto já aplica JwtAuthGuard e
 // RolesGuard globalmente via APP_GUARD no app.module.ts.
+@Roles('owner', 'admin')
 @RequiresFeature('nfe')
 @Controller('fiscal/nfe')
 export class FocusNfeController {

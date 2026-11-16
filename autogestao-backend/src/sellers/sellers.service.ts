@@ -17,6 +17,8 @@ import {
   MinLength,
 } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
+import { isSeller } from '../common/seller-view';
 
 export class CreateSellerDto {
   @IsString({ message: 'O nome deve ser um texto' })
@@ -91,9 +93,10 @@ const SELLER_SELECT = {
 export class SellersService {
   constructor(private readonly prisma: PrismaService, @Optional() private readonly plans?: PlansService) {}
 
-  async findAll(dealershipId: string, month?: string) {
+  async findAll(dealershipId: string, month?: string, actor?: AuthenticatedUser) {
     const sellers = await this.prisma.user.findMany({
-      where: { dealershipId, role: 'seller', active: true },
+      // Vendedor logado: só os próprios números (não vê os colegas)
+      where: { dealershipId, role: 'seller', active: true, ...(isSeller(actor) ? { id: actor!.userId } : {}) },
       select: SELLER_SELECT,
     });
 
@@ -123,7 +126,7 @@ export class SellersService {
           metrics: {
             salesCount: sales.length,
             totalRevenue,
-            totalProfit,
+            totalProfit: isSeller(actor) ? null : totalProfit,
             commission,
             commissionPending,
           },
@@ -134,7 +137,8 @@ export class SellersService {
     return result;
   }
 
-  async findOne(dealershipId: string, id: string) {
+  async findOne(dealershipId: string, id: string, actor?: AuthenticatedUser) {
+    if (isSeller(actor) && id !== actor!.userId) throw new NotFoundException('Vendedor não encontrado');
     const seller = await this.prisma.user.findFirst({
       where: { id, dealershipId, role: 'seller' },
       select: { ...SELLER_SELECT, role: true },

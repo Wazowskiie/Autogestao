@@ -10,12 +10,12 @@ export class SellersController {
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query('month') month?: string) {
-    return this.sellersService.findAll(user.dealershipId, month);
+    return this.sellersService.findAll(user.dealershipId, month, user);
   }
 
   @Get(':id')
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.sellersService.findOne(user.dealershipId, id);
+    return this.sellersService.findOne(user.dealershipId, id, user);
   }
 
   @Roles('owner', 'admin')

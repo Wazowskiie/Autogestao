@@ -15,6 +15,7 @@ class AdjustStockDto {
   qty: number; // positivo = entrada, negativo = saída
 }
 
+@Roles('owner', 'admin')
 @Controller('parts')
 export class PartsController {
   constructor(private readonly partsService: PartsService) {}
@@ -29,13 +30,13 @@ export class PartsController {
     return this.partsService.findOne(user.dealershipId, id);
   }
 
-  @Roles('owner', 'admin', 'seller')
+  @Roles('owner', 'admin')
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePartDto) {
     return this.partsService.create(user.dealershipId, dto);
   }
 
-  @Roles('owner', 'admin', 'seller')
+  @Roles('owner', 'admin')
   @Patch(':id')
   update(
     @CurrentUser() user: AuthenticatedUser,
@@ -45,7 +46,7 @@ export class PartsController {
     return this.partsService.update(user.dealershipId, id, dto);
   }
 
-  @Roles('owner', 'admin', 'seller')
+  @Roles('owner', 'admin')
   @Patch(':id/stock')
   adjustStock(
     @CurrentUser() user: AuthenticatedUser,

@@ -11,6 +11,8 @@ import { sanitizeDocStatus } from './doc-status';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { QueryVehicleDto } from './dto/query-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
+import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
+import { isSeller, vehicleForSeller } from '../common/seller-view';
 
 // "abc-1d23" -> "ABC1D23"
 function normalizePlate(plate?: string | null) {
@@ -75,7 +77,7 @@ export class VehiclesService {
     return created;
   }
 
-  async findAll(dealershipId: string, query: QueryVehicleDto) {
+  async findAll(dealershipId: string, query: QueryVehicleDto, actor?: AuthenticatedUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
@@ -106,10 +108,11 @@ export class VehiclesService {
       this.prisma.vehicle.count({ where }),
     ]);
 
-    return { items, total, page, pageSize };
+    // Vendedor não vê o custo de compra
+    return { items: isSeller(actor) ? items.map(vehicleForSeller) : items, total, page, pageSize };
   }
 
-  async findOne(dealershipId: string, id: string) {
+  async findOne(dealershipId: string, id: string, actor?: AuthenticatedUser) {
     // O filtro por dealershipId aqui é o que garante o isolamento entre
     // revendas: mesmo sabendo o id de um veículo de outra revenda, a busca
     // simplesmente não o encontra.
@@ -126,7 +129,7 @@ export class VehiclesService {
       throw new NotFoundException('Veículo não encontrado');
     }
 
-    return vehicle;
+    return isSeller(actor) ? vehicleForSeller(vehicle) : vehicle;
   }
 
   async update(dealershipId: string, id: string, dto: UpdateVehicleDto) {
