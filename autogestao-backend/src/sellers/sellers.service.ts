@@ -58,6 +58,12 @@ export class UpdateSellerDto {
   @MinLength(2, { message: 'O nome deve ter ao menos 2 caracteres' })
   name?: string;
 
+  // Nova senha (opcional): o dono/admin troca a senha de um vendedor que esqueceu a dele
+  @IsOptional()
+  @IsString({ message: 'A senha deve ser um texto' })
+  @MinLength(8, { message: 'A senha deve ter ao menos 8 caracteres' })
+  password?: string;
+
   @IsOptional()
   @IsString({ message: 'O telefone deve ser um texto' })
   @MaxLength(20, { message: 'Telefone inválido' })
@@ -201,11 +207,16 @@ export class SellersService {
       throw new BadRequestException('Comissão deve estar entre 0 e 100');
     }
 
-    return this.prisma.user.update({
-      where: { id },
-      data: dto,
-      select: SELLER_SELECT,
-    });
+    const { password, ...data } = dto;
+    if (!password) return this.prisma.user.update({ where: { id }, data, select: SELLER_SELECT });
+
+    // Senha nova: grava o hash e derruba as sessões abertas com a senha antiga
+    const passwordHash = await argon2.hash(password);
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id }, data: { ...data, passwordHash }, select: SELLER_SELECT }),
+      this.prisma.refreshToken.updateMany({ where: { userId: id, revoked: false }, data: { revoked: true } }),
+    ]);
+    return updated;
   }
 
   async remove(dealershipId: string, id: string) {

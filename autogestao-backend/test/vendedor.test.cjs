@@ -94,6 +94,19 @@ test('Clientes e promissórias: só os do próprio vendedor', async () => {
   assert.equal(ofBeto.total, total); assert.equal(ofBeto.items[0].sale.profit, null); assert.equal(ofBeto.items[0].sale.vehicle.cost, null);
 });
 
+test('Dono troca a senha do vendedor: a senha nova vale e as sessões antigas caem', async () => {
+  const argon2 = require('argon2');
+  await prisma.refreshToken.create({ data: { userId: beto.id, tokenHash: 'sessao-antiga', expiresAt: new Date(Date.now() + 86400000) } });
+  const updated = await sellers.update(shop.id, beto.id, { password: 'NovaSenha#2026', jobTitle: 'Vendedor Sênior' });
+  assert.equal(updated.jobTitle, 'Vendedor Sênior'); assert.equal(updated.passwordHash, undefined);
+  const stored = await prisma.user.findUnique({ where: { id: beto.id } });
+  assert.ok(await argon2.verify(stored.passwordHash, 'NovaSenha#2026'));
+  assert.equal((await prisma.refreshToken.findFirst({ where: { tokenHash: 'sessao-antiga' } })).revoked, true);
+  // sem senha no pedido, a senha continua a mesma
+  await sellers.update(shop.id, beto.id, { phone: '85999990000' });
+  assert.equal((await prisma.user.findUnique({ where: { id: beto.id } })).passwordHash, stored.passwordHash);
+});
+
 test('Rotas de gestão ficam fechadas para o vendedor', () => {
   const roles = (file, cls, method) => {
     const C = require(`../dist/src/${file}`)[cls];
