@@ -3,6 +3,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePromissoryNoteDto } from './dto/create-promissory-note.dto';
 import { QueryPromissoryNoteDto } from './dto/query-promissory-note.dto';
 import { InterestRatesService } from '../interest-rates/interest-rates.service';
+import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
+import { isSeller, saleForSeller } from '../common/seller-view';
+
+// A promissória carrega a venda junto: para o vendedor, sem custo nem lucro
+const noteFor = <T extends { sale?: unknown }>(actor: AuthenticatedUser | undefined, note: T): T =>
+  isSeller(actor) && note.sale ? { ...note, sale: saleForSeller(note.sale) } : note;
 
 const NOTE_INCLUDE = {
   customer: { select: { id: true, name: true, phone: true } },
@@ -31,10 +37,10 @@ function startOfTodayBrazil() {
 export class PromissoryNotesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dealershipId: string, dto: CreatePromissoryNoteDto) {
-    // Valida que a venda pertence à revenda
+  async create(dealershipId: string, dto: CreatePromissoryNoteDto, actor?: AuthenticatedUser) {
+    // Valida que a venda pertence à revenda (e, para o vendedor, que a venda é dele)
     const sale = await this.prisma.sale.findFirst({
-      where: { id: dto.saleId, dealershipId },
+      where: { id: dto.saleId, dealershipId, ...(isSeller(actor) ? { sellerId: actor!.userId } : {}) },
     });
     if (!sale) throw new NotFoundException('Venda não encontrada');
     if (sale.status === 'canceled') throw new BadRequestException('Esta venda está cancelada.');
@@ -77,14 +83,16 @@ export class PromissoryNotesService {
       }),
     );
 
-    return notes;
+    return notes.map((n) => noteFor(actor, n));
   }
 
-  async findAll(dealershipId: string, query: QueryPromissoryNoteDto) {
+  async findAll(dealershipId: string, query: QueryPromissoryNoteDto, actor?: AuthenticatedUser) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 50;
 
-    const where: any = { dealershipId };
+    // Vendedor: só as promissórias das vendas dele (lista e resumo)
+    const scope: any = { dealershipId, ...(isSeller(actor) ? { sale: { sellerId: actor!.userId } } : {}) };
+    const where: any = { ...scope };
 
     if (query.saleId) where.saleId = query.saleId;
     if (query.customerId) where.customerId = query.customerId;
@@ -111,7 +119,7 @@ export class PromissoryNotesService {
 
     // Resumo de vencidas, a vencer e pagas
     const allNotes = await this.prisma.promissoryNote.findMany({
-      where: { dealershipId },
+      where: scope,
       select: { paid: true, dueDate: true, amount: true, saleId: true },
     });
 
@@ -126,7 +134,7 @@ export class PromissoryNotesService {
     const settledSales = new Set(allNotes.filter((n) => !openSales.has(n.saleId)).map((n) => n.saleId));
 
     return {
-      items,
+      items: items.map((n) => noteFor(actor, n)),
       total,
       page,
       pageSize,

@@ -1,6 +1,8 @@
 /* MARKER-MAKE-KIT-INVOKED */
 import { useEffect, useState } from "react";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, sellerNavItems } from "./components/Sidebar";
+import { SellerDashboard } from "./components/SellerDashboard";
+import { SellerInventory } from "./components/SellerInventory";
 import { Dashboard } from "./components/Dashboard";
 import { Inventory } from "./components/Inventory";
 import { LeadsCRM } from "./components/LeadsCRMNext";
@@ -47,6 +49,10 @@ export default function App() {
   const plan = usePlan();
   const [page, setPage] = useState<Page>("login");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Vendedor entra pelo mesmo login, mas cai num painel próprio, só com as áreas dele
+  const isSeller = auth.user?.role === "seller";
+  const sellerPages = sellerNavItems.map((i) => i.id) as Page[];
 
   const navigate = (p: string) => setPage(p as Page);
 
@@ -109,6 +115,8 @@ export default function App() {
 
   // Shell layout
   const renderPage = () => {
+  // Página fora da área do vendedor (ou fora do plano da loja): volta para o início dele
+  if (isSeller && (!sellerPages.includes(page) || hiddenPages.includes(page))) return <SellerDashboard onNavigate={navigate} />;
   if (hiddenPages.includes(page)) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ background: "var(--background)" }}>
@@ -124,8 +132,8 @@ export default function App() {
     );
   }
   switch (page) {
-    case "dashboard": return <Dashboard onNavigate={navigate} />;
-    case "inventory": return <Inventory />;
+    case "dashboard": return isSeller ? <SellerDashboard onNavigate={navigate} /> : <Dashboard onNavigate={navigate} />;
+    case "inventory": return isSeller ? <SellerInventory /> : <Inventory />;
     case "leads": return <LeadsCRM initialLeadId={crmLeadId} onCloseLead={()=>setCrmLeadId(null)} onOpenChat={id=>{setChatId(id);setPage('chat');}} />;
     case "financial": return <Financial />;
     case "sales": return <Sales />;
@@ -178,6 +186,7 @@ export default function App() {
         onLogout={handleLogout}
         hiddenPages={hiddenPages}
         planName={plan.current?.plan.name}
+        variant={isSeller ? "seller" : "manager"}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -200,8 +209,8 @@ export default function App() {
 
           {/* Breadcrumb / page links */}
           <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-            {(["dashboard", "inventory", "sales", "customers", "leads", "sellers", "financial", "promissory", "parts"] as Page[]).filter((p) => !hiddenPages.includes(p)).map((p) => {
-              const labels: Record<string, string> = {
+            {(isSeller ? sellerPages : ["dashboard", "inventory", "sales", "customers", "leads", "sellers", "financial", "promissory", "parts"] as Page[]).filter((p) => !hiddenPages.includes(p)).map((p) => {
+              const labels: Record<string, string> = isSeller ? Object.fromEntries(sellerNavItems.map((i) => [i.id, i.label])) : {
                 dashboard: "Dashboard",
                 inventory: "Estoque",
                 sales: "Vendas",

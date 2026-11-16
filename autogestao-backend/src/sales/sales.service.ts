@@ -5,6 +5,7 @@ import { QuerySaleDto } from './dto/query-sale.dto';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 import { Prisma } from '../generated/prisma/client';
 import { scanWishesForVehicle } from '../crm/crm-helpers';
+import { isSeller, saleForSeller } from '../common/seller-view';
 import { CancelSaleDto, ChecklistKey, SaleExpenseDto, UpdateChecklistDto, UpdateCommissionDto, UpdateFinancingDto, UpdateSaleExpenseDto, UpdateWarrantyDto } from './dto/sale-extras.dto';
 
 const SALE_INCLUDE = {
@@ -150,6 +151,10 @@ export class SalesService {
     });
     if (!vehicle) throw new NotFoundException('Veículo não encontrado');
     if (vehicle.status === 'sold') throw new BadRequestException('Este veículo já foi vendido');
+    // O vendedor não vê nem informa o custo: vale sempre o custo cadastrado no veículo
+    // e a comissão segue o percentual do cadastro (o vendedor não define a própria comissão).
+    // Despesas da venda mexem no Financeiro: também ficam com o dono/admin
+    if (isSeller(actor)) { dto.cost = Number(vehicle.cost); dto.commissionAmount = undefined; dto.expenses = undefined; }
 
     const reservation = await this.prisma.vehicleReservation.findFirst({
       where: { dealershipId, vehicleId: dto.vehicleId, status: 'active' },
@@ -480,7 +485,8 @@ export class SalesService {
     const trades = await this.prisma.vehicle.findMany({ where: { tradeInSaleId: sale.id }, select: { id: true } });
     for (const t of trades) await scanWishesForVehicle(this.prisma, t.id).catch(() => 0);
 
-    return this.prisma.sale.findUnique({ where: { id: sale.id }, include: SALE_INCLUDE });
+    const result = await this.prisma.sale.findUnique({ where: { id: sale.id }, include: SALE_INCLUDE });
+    return isSeller(actor) ? saleForSeller(result) : result;
   }
 
   // =====================================================================
@@ -681,7 +687,7 @@ export class SalesService {
       customer: p.sale.customer.name, phone: p.sale.customer.phone, seller: p.sale.seller.name,
       vehicle: `${p.sale.vehicle.brand} ${p.sale.vehicle.model} ${p.sale.vehicle.year}`,
       method: p.method, bank: p.bank, status: (p.financingStatus ?? 'analysis') as string,
-      amount: Number(p.amount), returnAmount: Number(p.returnAmount),
+      amount: Number(p.amount), returnAmount: isSeller(actor) ? 0 : Number(p.returnAmount),
       days: Math.floor((now - p.sale.soldAt.getTime()) / DAY),
     }));
     return {
@@ -822,7 +828,7 @@ export class SalesService {
       this.prisma.sale.count({ where }),
     ]);
 
-    return { items, total, page, pageSize };
+    return { items: isSeller(actor) ? items.map(saleForSeller) : items, total, page, pageSize };
   }
 
   async findOne(dealershipId: string, id: string, actor?: AuthenticatedUser) {
@@ -831,7 +837,7 @@ export class SalesService {
       include: { ...SALE_INCLUDE, promissoryNotes: true },
     });
     if (!sale) throw new NotFoundException('Venda não encontrada');
-    return sale;
+    return isSeller(actor) ? saleForSeller(sale) : sale;
   }
 
   async summary(dealershipId: string, month?: string, actor?: AuthenticatedUser) {
@@ -852,6 +858,8 @@ export class SalesService {
       : 0;
 
     const totalCommission = sales.reduce((sum, s) => sum + Number(s.commissionAmount), 0);
+    // Vendedor: só quantidade, valor vendido e a própria comissão
+    if (isSeller(actor)) return { count: sales.length, totalRevenue, totalCost: null, totalProfit: null, avgMargin: null, totalCommission, canceledCount };
     return { count: sales.length, totalRevenue, totalCost, totalProfit, avgMargin, totalCommission, canceledCount };
   }
 

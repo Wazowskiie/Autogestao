@@ -20,6 +20,8 @@ interface SidebarProps {
   hiddenPages?: string[];
   /** Nome do plano atual, mostrado no rodapé */
   planName?: string;
+  /** Menu do vendedor: só as áreas dele, com nomes próprios e sem o botão de plano */
+  variant?: "manager" | "seller";
 }
 
 const navItems = [
@@ -39,6 +41,18 @@ const navItems = [
   { id: "settings", label: "Configurações", icon: Settings },
 ] as const;
 
+// O que o vendedor enxerga (o servidor também bloqueia o resto para ele)
+export const sellerNavItems = [
+  { id: "dashboard", label: "Início", icon: LayoutDashboard },
+  { id: "inventory", label: "Estoque", icon: Car },
+  { id: "leads", label: "Meus leads", icon: Users },
+  { id: "chat", label: "Atendimentos", icon: MessageSquare },
+  { id: "sales", label: "Minhas vendas", icon: ShoppingBag },
+  { id: "customers", label: "Meus clientes", icon: UserCheck },
+  { id: "promissory", label: "Promissórias", icon: FileText },
+  { id: "settings", label: "Minha conta", icon: Settings },
+] as const;
+
 export function Sidebar({
   currentPage,
   onNavigate,
@@ -48,7 +62,10 @@ export function Sidebar({
   onLogout,
   hiddenPages = [],
   planName,
+  variant = "manager",
 }: SidebarProps) {
+  const isSeller = variant === "seller";
+  const items: readonly { id: string; label: string; icon: typeof Car }[] = isSeller ? sellerNavItems : navItems;
   const initials = userName
     .split(" ")
     .filter(Boolean)
@@ -78,15 +95,20 @@ export function Sidebar({
           <Car size={18} color="#fff" />
         </div>
         {!collapsed && (
-          <span style={{ color: "#fff", fontWeight: 600, fontSize: 15, letterSpacing: "-0.01em" }}>
-            AutoGestão
-          </span>
+          <div className="flex flex-col min-w-0">
+            <span style={{ color: "#fff", fontWeight: 600, fontSize: 15, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
+              AutoGestão
+            </span>
+            {isSeller && (
+              <span style={{ color: "#93C5FD", fontSize: 11, fontWeight: 500, lineHeight: 1.3 }}>Área do vendedor</span>
+            )}
+          </div>
         )}
       </div>
 
       {/* Nav items */}
       <nav className="flex flex-col gap-0.5 px-2 py-3 flex-1">
-        {navItems.filter(({ id }) => !hiddenPages.includes(id)).map(({ id, label, icon: Icon }) => {
+        {items.filter(({ id }) => !hiddenPages.includes(id)).map(({ id, label, icon: Icon }) => {
           const active = currentPage === id;
           return (
             <button
@@ -113,6 +135,7 @@ export function Sidebar({
         className="px-2 py-3"
         style={{ borderTop: "1px solid var(--sidebar-border)" }}
       >
+        {!isSeller && (
         <button
           onClick={() => onNavigate("plans")}
           className="w-full rounded-lg px-3 py-2 mb-2 flex items-center gap-2 transition-colors"
@@ -121,6 +144,7 @@ export function Sidebar({
           {!collapsed && <span style={{ fontSize: 12 }}>⚡ {planName ? `Plano ${planName} · mudar` : "Upgrade de plano"}</span>}
           {collapsed && <Plus size={16} />}
         </button>
+        )}
 
         <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.05)" }}>
           <div
@@ -138,6 +162,8 @@ export function Sidebar({
           {!collapsed && (
             <button
               onClick={onLogout}
+              title="Sair"
+              aria-label="Sair"
               style={{ color: "rgba(255,255,255,0.4)", flexShrink: 0 }}
             >
               <LogOut size={15} />

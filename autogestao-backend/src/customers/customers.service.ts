@@ -46,7 +46,7 @@ export class CustomersService {
           }
         : {}),
     };
-    if (user?.role === 'seller') where.AND = [{ OR: [{ createdById: user.userId }, { leads: { some: { assignedSellerId: user.userId } } }] }];
+    if (user?.role === 'seller') where.AND = [{ OR: [{ createdById: user.userId }, { leads: { some: { assignedSellerId: user.userId } } }, { sales: { some: { sellerId: user.userId } } }] }];
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.customer.findMany({
@@ -63,7 +63,7 @@ export class CustomersService {
 
   async findOne(dealershipId: string, id: string, user?: AuthenticatedUser) {
     const customer = await this.prisma.customer.findFirst({
-      where: { id, dealershipId, ...(user?.role === 'seller' ? { OR: [{ createdById: user.userId }, { leads: { some: { assignedSellerId: user.userId } } }] } : {}) },
+      where: { id, dealershipId, ...(user?.role === 'seller' ? { OR: [{ createdById: user.userId }, { leads: { some: { assignedSellerId: user.userId } } }, { sales: { some: { sellerId: user.userId } } }] } : {}) },
       include: {
         leads: { where: { ...(user?.role==='seller'?{assignedSellerId:user.userId}:{}) }, orderBy: { createdAt: 'desc' }, take: 5 },
         sales: { where: { ...(user?.role==='seller'?{sellerId:user.userId}:{}) }, orderBy: { soldAt: 'desc' }, take: 5 },

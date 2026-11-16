@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Search, Plus, Phone, Mail, Edit2, Trash2, X, Tag } from "lucide-react";
 import * as api from "../../lib/api";
+import { useAuth } from "../../lib/auth-context";
 
 const HOW_MET_OPTIONS = [
   "Indicação", "Instagram", "Facebook", "WhatsApp", "Site",
@@ -30,6 +31,8 @@ function age(birthDate: string): number {
 }
 
 export function Customers() {
+  const auth = useAuth();
+  const canDelete = auth.user?.role === "owner" || auth.user?.role === "admin";
   const [customers, setCustomers] = useState<api.Customer[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -150,7 +153,7 @@ export function Customers() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <button onClick={() => setModal(c)} className="p-1.5 rounded" style={{ color: "#6B7280", background: "#F4F6F9" }}><Edit2 size={13} /></button>
-                      <button onClick={() => handleDelete(c)} className="p-1.5 rounded" style={{ color: "#DC2626", background: "#FEE2E2" }}><Trash2 size={13} /></button>
+                      {canDelete && <button onClick={() => handleDelete(c)} className="p-1.5 rounded" style={{ color: "#DC2626", background: "#FEE2E2" }}><Trash2 size={13} /></button>}
                     </div>
                   </td>
                 </tr>

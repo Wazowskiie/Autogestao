@@ -16,7 +16,8 @@ import { VehicleDetailsService } from './vehicle-details.service';
 
 const MB = 1024 * 1024;
 const id = new ParseUUIDPipe({ exceptionFactory: () => new BadRequestException('Identificador inválido') });
-const WRITE = ['owner', 'admin', 'seller'] as const;
+// Custos, notas, despesas e documentos do veículo: só dono/admin (o vendedor consulta o estoque pela lista)
+const WRITE = ['owner', 'admin'] as const;
 
 // Abre o arquivo no navegador (PDF e imagem) ou baixa (os demais)
 function sendFile(res: Response, file: { path: string; name: string; mimeType: string | null }) {
@@ -30,6 +31,7 @@ function sendFile(res: Response, file: { path: string; name: string; mimeType: s
   res.sendFile(file.path);
 }
 
+@Roles('owner', 'admin')
 @Controller('vehicles/:vehicleId')
 export class VehicleDetailsController {
   constructor(private readonly service: VehicleDetailsService) {}

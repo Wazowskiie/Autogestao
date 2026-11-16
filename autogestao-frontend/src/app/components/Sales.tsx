@@ -127,6 +127,8 @@ function Autocomplete<T extends { id: string }>({
 export function Sales() {
   const auth = useAuth();
   const canEdit = auth.user?.role === "owner" || auth.user?.role === "admin";
+  // Vendedor: vê só as próprias vendas e a própria comissão (sem custo, lucro e margem)
+  const isSeller = auth.user?.role === "seller";
 
   const [sales, setSales] = useState<api.Sale[]>([]);
   const [total, setTotal] = useState(0);
@@ -208,12 +210,16 @@ export function Sales() {
         </div>
 
         {summary && (
-          <div className="grid grid-cols-4 gap-4 mb-4">
+          <div className={`grid ${isSeller ? "grid-cols-3" : "grid-cols-4"} gap-4 mb-4`}>
             {[
-              { label: summary.canceledCount ? `Vendas · ${summary.canceledCount} cancelada${summary.canceledCount > 1 ? "s" : ""}` : "Vendas", value: String(summary.count), color: "#185FA5" },
-              { label: "Receita", value: currency(summary.totalRevenue), color: "#27500A" },
-              { label: "Lucro real", value: currency(summary.totalProfit), color: "#7C3AED" },
-              { label: "Margem média", value: `${summary.avgMargin.toFixed(1)}%`, color: "#D97706" },
+              { label: summary.canceledCount ? `${isSeller ? "Minhas vendas" : "Vendas"} · ${summary.canceledCount} cancelada${summary.canceledCount > 1 ? "s" : ""}` : isSeller ? "Minhas vendas" : "Vendas", value: String(summary.count), color: "#185FA5" },
+              { label: isSeller ? "Valor vendido" : "Receita", value: currency(summary.totalRevenue), color: "#27500A" },
+              ...(isSeller
+                ? [{ label: "Minha comissão", value: currency(Number(summary.totalCommission ?? 0)), color: "#7C3AED" }]
+                : [
+                    { label: "Lucro real", value: currency(summary.totalProfit), color: "#7C3AED" },
+                    { label: "Margem média", value: `${summary.avgMargin.toFixed(1)}%`, color: "#D97706" },
+                  ]),
             ].map(({ label, value, color }) => (
               <div key={label} className="p-4 rounded-xl" style={{ background: "#F4F6F9" }}>
                 <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>{label}</div>
@@ -269,14 +275,14 @@ export function Sales() {
           <table className="w-full" style={{ borderCollapse: "collapse" }}>
             <thead style={{ background: "#F9FAFB", borderBottom: "0.5px solid rgba(0,0,0,0.08)" }}>
               <tr>
-                {["Contrato", "Data", "Veículo", "Cliente", "Vendedor", "Pagamento", "Preço", "Lucro", "Margem", ...(canEdit ? ["Ações"] : [])].map(h => (
+                {["Contrato", "Data", "Veículo", "Cliente", "Vendedor", "Pagamento", "Preço", ...(isSeller ? [] : ["Lucro", "Margem"]), ...(canEdit ? ["Ações"] : [])].map(h => (
                   <th key={h} className="text-left px-4 py-3" style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {!loading && filtered.length === 0 && (
-                <tr><td colSpan={canEdit ? 10 : 9} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: "#9CA3AF" }}>Nenhuma venda encontrada.</td></tr>
+                <tr><td colSpan={canEdit ? 10 : isSeller ? 7 : 9} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: "#9CA3AF" }}>Nenhuma venda encontrada.</td></tr>
               )}
               {filtered.map((s, i) => {
                 const Icon = s.vehicle.type === "moto" ? Bike : s.vehicle.type === "truck" ? Truck : Car;
@@ -312,8 +318,8 @@ export function Sales() {
                       </span>
                     </td>
                     <td className="px-4 py-3" style={{ fontSize: 13, fontWeight: 500, textDecoration: canceled ? "line-through" : undefined }}>{currency(Number(s.price))}</td>
-                    <td className="px-4 py-3" style={{ fontSize: 13, color: Number(s.profit) >= 0 ? "#27500A" : "#DC2626", fontWeight: 500 }}>{currency(Number(s.profit))}</td>
-                    <td className="px-4 py-3" style={{ fontSize: 13, color: m > 20 ? "#27500A" : m > 10 ? "#374151" : "#DC2626", fontWeight: 500 }}>{m.toFixed(1)}%</td>
+                    {!isSeller && <td className="px-4 py-3" style={{ fontSize: 13, color: Number(s.profit) >= 0 ? "#27500A" : "#DC2626", fontWeight: 500 }}>{currency(Number(s.profit))}</td>}
+                    {!isSeller && <td className="px-4 py-3" style={{ fontSize: 13, color: m > 20 ? "#27500A" : m > 10 ? "#374151" : "#DC2626", fontWeight: 500 }}>{m.toFixed(1)}%</td>}
                     {canEdit && (
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
@@ -827,6 +833,8 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
   const auth = useAuth();
   const isOwner = auth.user?.role === "owner";
   const isManager = isOwner || auth.user?.role === "admin";
+  // Vendedor não vê nem informa o custo (o servidor usa o custo cadastrado no veículo)
+  const isSeller = auth.user?.role === "seller";
   // Entrada mínima da loja (Configurações → Juros das promissórias)
   const [minDownPct, setMinDownPct] = useState(0);
   useEffect(() => { getSettings().then((d) => setMinDownPct(Number(d.dealership.minDownPaymentPercent) || 0)).catch(() => {}); }, []);
@@ -1121,16 +1129,16 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
   // ---------- Confirmar ----------
   const handleSubmit = async () => {
     setError(null);
-    if (!vehicleId || !customerId || !price || !cost) {
+    if (!vehicleId || !customerId || !price || (!isSeller && !cost)) {
       setError(
         !customerId && customerQuery.trim()
           ? `Cliente "${customerQuery.trim()}" não está cadastrado. Clique em "Cadastrar como novo cliente" no campo Cliente.`
-          : "Preencha veículo, cliente, preço e custo",
+          : isSeller ? "Preencha veículo, cliente e preço" : "Preencha veículo, cliente, preço e custo",
       );
       return;
     }
     if (!Number.isFinite(priceNum) || priceNum <= 0) { setError("Preço de venda inválido. Ex: 28.000,00"); return; }
-    if (!Number.isFinite(costNum) || costNum < 0) { setError("Custo inválido. Ex: 25.000,00"); return; }
+    if (!isSeller && (!Number.isFinite(costNum) || costNum < 0)) { setError("Custo inválido. Ex: 25.000,00"); return; }
 
     for (const [i, t] of tradeIns.entries()) {
       const label = tradeIns.length > 1 ? ` (veículo ${i + 1})` : "";
@@ -1180,7 +1188,7 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
         customerId,
         sellerId: sellerId || undefined,
         price: round2(priceNum),
-        cost: round2(costNum),
+        cost: isSeller ? 0 : round2(costNum),
         soldAt: soldAt || undefined,
         notes: notes || undefined,
         allowBelowMinDownPayment: allowBelowMin || undefined,
@@ -1356,6 +1364,9 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Vendedor responsável</label>
+              {isSeller ? (
+                <div className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, background: "#F3F4F6", color: "#374151" }}>{auth.user?.name} (você)</div>
+              ) : (
               <Autocomplete
                 items={[{ id: "", name: "Usuário logado (padrão)" } as any, ...sellers]}
                 value={sellerId}
@@ -1363,6 +1374,7 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
                 getLabel={s => s.name}
                 placeholder="Usuário logado (padrão)"
               />
+              )}
             </div>
             <div>
               <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Data da venda</label>
@@ -1372,12 +1384,14 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
           </div>
 
           {/* Preços */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className={`grid ${isSeller ? "grid-cols-1" : "grid-cols-2"} gap-4`}>
+            {!isSeller && (
             <div>
               <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Custo *</label>
               <input placeholder="0,00" value={cost} onChange={(e) => setCost(e.target.value)} inputMode="decimal"
                 className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, background: "#FEF3C7" }} />
             </div>
+            )}
             <div>
               <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Preço de venda *</label>
               <input placeholder="0,00" value={price} onChange={(e) => setPrice(e.target.value)} inputMode="decimal"
@@ -1764,6 +1778,8 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
 
           {/* ================= Despesas, comissão e garantia ================= */}
           <div className="rounded-xl" style={{ border: "0.5px solid rgba(0,0,0,0.1)" }}>
+            {/* Despesas entram no Financeiro: só dono/admin lançam */}
+            {!isSeller && (<>
             <div className="flex items-center justify-between px-4 py-3" style={{ background: "#F9FAFB", borderRadius: "12px 12px 0 0" }}>
               <div className="flex items-center gap-2">
                 <FileText size={15} style={{ color: "#185FA5" }} />
@@ -1790,6 +1806,7 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
                 </div>
               ))}
             </div>
+            </>)}
             <div className="px-4 py-3 grid grid-cols-2 gap-4" style={{ borderTop: "0.5px solid rgba(0,0,0,0.08)" }}>
               <div>
                 <label style={smallLabel}>Comissão do vendedor{sellerForCommission ? ` (${sellerForCommission.name})` : ""}</label>
@@ -1855,7 +1872,7 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
             </div>
           )}
 
-          {liveMargin !== null && profit !== null && (
+          {!isSeller && liveMargin !== null && profit !== null && (
             <div className="px-3 py-2 rounded-lg" style={{ background: profit >= 0 ? "#EAF3DE" : "#FEE2E2", fontSize: 13, color: profit >= 0 ? "#27500A" : "#DC2626" }}>
               Margem: <strong>{liveMargin.toFixed(1)}%</strong> · Lucro real: {currency(profit)}
               {(feesTotal > 0 || expensesTotal > 0 || commissionAmount > 0 || returnsTotal > 0) && (

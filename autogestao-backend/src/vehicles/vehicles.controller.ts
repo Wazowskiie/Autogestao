@@ -26,7 +26,7 @@ export class VehiclesController {
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryVehicleDto) {
-    return this.vehiclesService.findAll(user.dealershipId, query);
+    return this.vehiclesService.findAll(user.dealershipId, query, user);
   }
 
   // Consulta os dados do veículo pela placa (API Placas, com cache no banco).
@@ -39,16 +39,17 @@ export class VehiclesController {
 
   @Get(':id')
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.vehiclesService.findOne(user.dealershipId, id);
+    return this.vehiclesService.findOne(user.dealershipId, id, user);
   }
 
-  @Roles('owner', 'admin', 'seller')
+  // Vendedor só consulta o estoque: cadastrar e editar é do dono/admin
+  @Roles('owner', 'admin')
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateVehicleDto) {
     return this.vehiclesService.create(user.dealershipId, user.userId, dto);
   }
 
-  @Roles('owner', 'admin', 'seller')
+  @Roles('owner', 'admin')
   @Patch(':id')
   update(
     @CurrentUser() user: AuthenticatedUser,

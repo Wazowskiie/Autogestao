@@ -12,7 +12,7 @@ export class PromissoryNotesController {
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryPromissoryNoteDto) {
-    return this.service.findAll(user.dealershipId, query);
+    return this.service.findAll(user.dealershipId, query, user);
   }
 
   /** Relatório: ?from=AAAA-MM-DD&to=AAAA-MM-DD (pelo vencimento das parcelas) */
@@ -25,10 +25,11 @@ export class PromissoryNotesController {
   @Roles('owner', 'admin', 'seller')
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePromissoryNoteDto) {
-    return this.service.create(user.dealershipId, dto);
+    return this.service.create(user.dealershipId, dto, user);
   }
 
-  @Roles('owner', 'admin', 'seller')
+  // Dar baixa (receber) é do dono/admin; o vendedor só consulta
+  @Roles('owner', 'admin')
   @Patch(':id/pay')
   pay(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.service.pay(user.dealershipId, id);

@@ -6,6 +6,7 @@ import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { QueryTransactionDto } from './dto/query-transaction.dto';
 import { FinancialService } from './financial.service';
 
+@Roles('owner', 'admin')
 @Controller('financial')
 export class FinancialController {
   constructor(private readonly financialService: FinancialService) {}
