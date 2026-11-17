@@ -369,6 +369,10 @@ async function publicRequest<T>(path: string): Promise<T> {
   if (!res.ok) throw new ApiError(data?.message ?? "Erro ao carregar dados da loja", res.status);
   return data as T;
 }
+// "Esqueci minha senha"
+export function getPasswordResetInfo() { return publicRequest<{ email: boolean }>("/auth/password-reset"); }
+export function forgotPassword(email: string) { return request<{ message: string }>("/auth/forgot-password", { method: "POST", body: { email }, skipAuthRetry: true }); }
+export function resetPassword(token: string, password: string) { return request<{ success: boolean }>("/auth/reset-password", { method: "POST", body: { token, password }, skipAuthRetry: true }); }
 export function getStorefrontDealership(slug: string) { return publicRequest<StorefrontDealership>(`/storefront/${slug}`); }
 export function listStorefrontVehicles(slug: string, params: StorefrontVehicleParams = {}) {
   const query = new URLSearchParams();

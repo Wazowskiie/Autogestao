@@ -2,6 +2,7 @@
   import { createRoot } from "react-dom/client";
   import App from "./app/App.tsx";
   import { PublicStorefront } from "./app/components/PublicStorefront";
+  import { ResetPassword } from "./app/components/Login";
   import { AuthProvider } from "./lib/auth-context";
   import { PlanProvider } from "./lib/plan-context";
   import "./styles/index.css";
@@ -15,6 +16,9 @@
 
   if (pathMatch) {
     root.render(<PublicStorefront slug={pathMatch[1]} />);
+  } else if (window.location.pathname.startsWith("/redefinir-senha")) {
+    // Link do e-mail "Esqueci minha senha": não depende de estar logado
+    root.render(<ResetPassword />);
   } else {
     root.render(
       <AuthProvider>

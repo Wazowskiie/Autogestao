@@ -1,8 +1,88 @@
-import { useState } from "react";
-import { Car, Eye, EyeOff, ArrowRight, Check, Upload, ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Bike, Car, Eye, EyeOff, ArrowRight, Check, Upload,
+  AlertCircle, ArrowLeft, Bookmark, FileCheck2, Info, Loader2, MailCheck, MessageCircle, PackagePlus, ShoppingBag, UserPlus,
+} from "lucide-react";
 import { useAuth } from "../../lib/auth-context";
+import * as api from "../../lib/api";
+import { ApiError } from "../../lib/api";
+import * as settingsApi from "../../lib/settings-api";
+import "./login.css";
 
 type PageProps = { onNavigate: (page: string) => void };
+
+// Exemplos do que acontece numa revenda durante o dia (ilustração, não são dados reais)
+const SHOP_MOMENTS = [
+  { icon: ShoppingBag, what: "Venda registrada", detail: "Honda CG 160 Fan por R$ 16.500" },
+  { icon: UserPlus, what: "Novo lead pelo site", detail: "Marcos quer saber da Biz 125" },
+  { icon: FileCheck2, what: "Promissória paga", detail: "Parcela 3 de 10, R$ 480" },
+  { icon: Bookmark, what: "Veículo reservado", detail: "Yamaha Fazer 250 com sinal de R$ 1.000" },
+  { icon: MessageCircle, what: "Mensagem no WhatsApp", detail: "“Ainda tem a Pop 110 vermelha?”" },
+  { icon: PackagePlus, what: "Entrada no estoque", detail: "Fiat Argo Drive 2024, 12.000 km" },
+];
+const MOMENT_AGES = ["agora", "há 4 min", "há 11 min", "há 26 min"];
+
+function ShopFeed() {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    // Quem pede menos animação no sistema vê a lista parada
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const id = window.setInterval(() => setTick((t) => t + 1), 3400);
+    return () => window.clearInterval(id);
+  }, []);
+  const n = SHOP_MOMENTS.length;
+  // O mais novo entra em cima; os outros descem uma posição
+  const visible = [0, 1, 2, 3].map((i) => SHOP_MOMENTS[(((tick - i) % n) + n) % n]);
+  return (
+    <div aria-hidden="true">
+      <div className="login-feed">
+        <div className="login-feed-list" key={tick}>
+          {visible.map(({ icon: Icon, what, detail }, i) => (
+            <div className="login-feed-item" key={what}>
+              <span className="login-feed-icon"><Icon size={18} /></span>
+              <span className="login-feed-text">
+                <span className="login-feed-what">{what}</span>
+                <span className="login-feed-detail">{detail}</span>
+              </span>
+              <span className="login-feed-when">{MOMENT_AGES[i]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className="login-feed-note">Exemplos do dia a dia de uma revenda.</p>
+    </div>
+  );
+}
+
+/** Lado escuro da tela (marca + cartões animados), usado no login e na senha nova */
+function LoginStage() {
+  return (
+    <aside className="login-stage">
+      <div className="login-brand">
+        <span className="login-brand-mark"><Car size={21} color="#fff" /></span>
+        <span className="login-brand-name">AutoGestão</span>
+      </div>
+      <div>
+        <h1 className="login-title">Sua revenda inteira em uma tela.</h1>
+        <p className="login-lede">Estoque, vendas, clientes, promissórias e o site da loja no mesmo lugar.</p>
+        <ShopFeed />
+      </div>
+      <div className="login-foot">© {new Date().getFullYear()} AutoGestão. Todos os direitos reservados.</div>
+    </aside>
+  );
+}
+
+function MobileBrand() {
+  return (
+    <div className="login-brand-mobile">
+      <span className="login-brand-mark"><Car size={21} color="#fff" /></span>
+      <span className="login-brand-name">AutoGestão</span>
+    </div>
+  );
+}
+
+const connectionError = (err: unknown) =>
+  err instanceof ApiError ? err.message : "Não foi possível conectar ao servidor. Confira sua internet e tente de novo.";
 
 export function Login({ onNavigate }: PageProps) {
   const auth = useAuth();
@@ -11,6 +91,14 @@ export function Login({ onNavigate }: PageProps) {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [view, setView] = useState<"login" | "forgot">("login");
+  // O link por e-mail só aparece se o envio de e-mail estiver configurado no servidor
+  const [emailReset, setEmailReset] = useState<boolean | null>(null);
+  const [forgotSent, setForgotSent] = useState(false);
+
+  useEffect(() => {
+    api.getPasswordResetInfo().then((r) => setEmailReset(r.email)).catch(() => setEmailReset(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,155 +108,213 @@ export function Login({ onNavigate }: PageProps) {
       await auth.login(email, password);
       onNavigate("dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível entrar");
+      setError(connectionError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await api.forgotPassword(email.trim());
+      setForgotSent(true);
+    } catch (err) {
+      setError(connectionError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const goTo = (v: "login" | "forgot") => { setView(v); setError(null); setForgotSent(false); };
+
+  return (
+    <div className="login">
+      <LoginStage />
+      <main className="login-panel">
+        <div className="login-form-wrap">
+          <MobileBrand />
+
+          {view === "login" ? (
+            <>
+              <h2 className="login-heading">Entrar</h2>
+              <p className="login-sub">Dono, administrador ou vendedor: use o e-mail e a senha do seu cadastro na loja.</p>
+
+              {error && (
+                <div className="login-alert login-alert-error" role="alert">
+                  <AlertCircle size={16} /> <span>{error}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit}>
+                <label className="login-field">
+                  <span className="login-label">E-mail</span>
+                  <input
+                    type="email" autoComplete="username" inputMode="email" placeholder="voce@sualoja.com.br"
+                    value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus
+                    className="login-input"
+                  />
+                </label>
+
+                <label className="login-field">
+                  <span className="login-label">Senha</span>
+                  <span className="login-input-box" style={{ display: "block" }}>
+                    <input
+                      type={showPass ? "text" : "password"} autoComplete="current-password" placeholder="Sua senha"
+                      value={password} onChange={(e) => setPassword(e.target.value)} required
+                      className="login-input login-input-pass"
+                    />
+                    <button type="button" onClick={() => setShowPass(!showPass)} className="login-eye"
+                      aria-label={showPass ? "Esconder senha" : "Mostrar senha"} title={showPass ? "Esconder senha" : "Mostrar senha"}>
+                      {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </span>
+                </label>
+
+                <div className="login-row">
+                  <button type="button" className="login-link" onClick={() => goTo("forgot")}>Esqueci minha senha</button>
+                </div>
+
+                <button type="submit" disabled={loading} className="login-submit">
+                  {loading ? <><Loader2 size={17} className="login-spin" /> Entrando</> : <>Entrar <ArrowRight size={17} /></>}
+                </button>
+              </form>
+
+              <p className="login-signup">
+                Ainda não usa o AutoGestão?{" "}
+                <button type="button" onClick={() => onNavigate("onboarding")} className="login-link" style={{ fontSize: 14 }}>
+                  Teste grátis por 30 dias
+                </button>
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="login-heading">Esqueci minha senha</h2>
+              {emailReset === false ? (
+                <>
+                  <p className="login-sub">O envio de link por e-mail ainda não está ligado neste sistema.</p>
+                  <div className="login-alert login-alert-info">
+                    <Info size={16} />
+                    <span>Peça ao dono ou administrador da sua loja: ele cadastra uma senha nova em Vendedores. Se você é o dono, fale com o suporte do AutoGestão.</span>
+                  </div>
+                </>
+              ) : forgotSent ? (
+                <>
+                  <p className="login-sub">Confira sua caixa de entrada.</p>
+                  <div className="login-alert login-alert-info" role="status">
+                    <MailCheck size={16} />
+                    <span>Se <b>{email.trim()}</b> estiver cadastrado, enviamos um link para criar uma senha nova. Ele vale por 1 hora. Não chegou? Olhe também a pasta de spam.</span>
+                  </div>
+                  <button type="button" className="login-link" style={{ fontSize: 14 }} disabled={loading}
+                    onClick={() => setForgotSent(false)}>Mandar de novo</button>
+                </>
+              ) : (
+                <>
+                  <p className="login-sub">Informe o e-mail do seu cadastro. Vamos mandar um link para você criar uma senha nova.</p>
+                  {error && (
+                    <div className="login-alert login-alert-error" role="alert">
+                      <AlertCircle size={16} /> <span>{error}</span>
+                    </div>
+                  )}
+                  <form onSubmit={handleForgot}>
+                    <label className="login-field">
+                      <span className="login-label">E-mail</span>
+                      <input type="email" autoComplete="username" inputMode="email" placeholder="voce@sualoja.com.br"
+                        value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus className="login-input" />
+                    </label>
+                    <button type="submit" disabled={loading || emailReset === null} className="login-submit">
+                      {loading ? <><Loader2 size={17} className="login-spin" /> Enviando</> : <>Enviar link <ArrowRight size={17} /></>}
+                    </button>
+                  </form>
+                </>
+              )}
+              <p className="login-signup">
+                <button type="button" onClick={() => goTo("login")} className="login-link" style={{ fontSize: 14 }}>
+                  <ArrowLeft size={14} style={{ display: "inline", verticalAlign: "-2px" }} /> Voltar para entrar
+                </button>
+              </p>
+            </>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+/** Página do link do e-mail: /redefinir-senha?token=... */
+export function ResetPassword() {
+  const token = new URLSearchParams(window.location.search).get("token") ?? "";
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState<string | null>(token ? null : "Este link está incompleto. Abra de novo o link do e-mail ou peça outro em \"Esqueci minha senha\".");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (password.length < 8) { setError("A senha precisa ter pelo menos 8 caracteres."); return; }
+    if (password !== confirm) { setError("As duas senhas não são iguais."); return; }
+    setLoading(true);
+    try {
+      await api.resetPassword(token, password);
+      setDone(true);
+    } catch (err) {
+      setError(connectionError(err));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex" style={{ background: "#F4F6F9" }}>
-      {/* Left panel */}
-      <div className="hidden lg:flex flex-col justify-between p-12 w-1/2" style={{ background: "#0F1923" }}>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center rounded-lg" style={{ width: 36, height: 36, background: "#185FA5" }}>
-            <Car size={20} color="#fff" />
-          </div>
-          <span style={{ color: "#fff", fontWeight: 600, fontSize: 16 }}>AutoGestão</span>
-        </div>
-
-        <div>
-          <h1 style={{ color: "#fff", fontSize: 32, marginBottom: 16, lineHeight: 1.3 }}>
-            A plataforma que<br />revendas modernas<br />precisam.
-          </h1>
-          <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 15, lineHeight: 1.7 }}>
-            Gerencie estoque, leads e financeiro em um só lugar.<br />
-            Site da loja gerado automaticamente.
-          </p>
-
-          <div className="mt-10 space-y-3">
-            {[
-              "Cadastro de veículos com fotos",
-              "CRM Kanban de leads",
-              "Site público automático",
-              "Relatórios financeiros em tempo real",
-            ].map((f) => (
-              <div key={f} className="flex items-center gap-3">
-                <div className="flex items-center justify-center rounded-full" style={{ width: 20, height: 20, background: "#27500A" }}>
-                  <Check size={11} color="#fff" />
+    <div className="login">
+      <LoginStage />
+      <main className="login-panel">
+        <div className="login-form-wrap">
+          <MobileBrand />
+          <h2 className="login-heading">{done ? "Senha trocada" : "Criar senha nova"}</h2>
+          {done ? (
+            <>
+              <p className="login-sub">Pronto. Use a senha nova para entrar. Por segurança, quem estava conectado com a senha antiga precisa entrar de novo.</p>
+              <a href="/" className="login-submit" style={{ textDecoration: "none" }}>Entrar <ArrowRight size={17} /></a>
+            </>
+          ) : (
+            <>
+              <p className="login-sub">Escolha uma senha com pelo menos 8 caracteres.</p>
+              {error && (
+                <div className="login-alert login-alert-error" role="alert">
+                  <AlertCircle size={16} /> <span>{error}</span>
                 </div>
-                <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 14 }}>{f}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>
-          © 2026 AutoGestão · Todos os direitos reservados
-        </div>
-      </div>
-
-      {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full" style={{ maxWidth: 380 }}>
-          <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="flex items-center justify-center rounded-lg" style={{ width: 32, height: 32, background: "#185FA5" }}>
-              <Car size={18} color="#fff" />
-            </div>
-            <span style={{ fontWeight: 600, fontSize: 15 }}>AutoGestão</span>
-          </div>
-
-          <h2 style={{ marginBottom: 4 }}>Entrar na sua conta</h2>
-          <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 24 }}>
-            Acesse o painel da sua revenda
-          </p>
-
-          <div className="space-y-3">
-            {error && (
-              <div
-                className="rounded-lg px-3 py-2"
-                style={{ background: "#FEE2E2", color: "#991B1B", fontSize: 13 }}
-              >
-                {error}
-              </div>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>E-mail</label>
-              <input
-                type="email"
-                placeholder="joao@autosilva.com.br"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full rounded-lg px-3 py-2.5"
-                style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13, outline: "none", background: "#fff" }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Senha</label>
-              <div className="relative">
-                <input
-                  type={showPass ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full rounded-lg px-3 py-2.5 pr-10"
-                  style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13, outline: "none", background: "#fff" }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPass(!showPass)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: "#9CA3AF" }}
-                >
-                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              )}
+              <form onSubmit={submit}>
+                <label className="login-field">
+                  <span className="login-label">Senha nova</span>
+                  <span className="login-input-box" style={{ display: "block" }}>
+                    <input type={showPass ? "text" : "password"} autoComplete="new-password" value={password}
+                      onChange={(e) => setPassword(e.target.value)} required minLength={8} autoFocus className="login-input login-input-pass" disabled={!token} />
+                    <button type="button" onClick={() => setShowPass(!showPass)} className="login-eye"
+                      aria-label={showPass ? "Esconder senha" : "Mostrar senha"} title={showPass ? "Esconder senha" : "Mostrar senha"}>
+                      {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </span>
+                </label>
+                <label className="login-field">
+                  <span className="login-label">Repita a senha nova</span>
+                  <input type={showPass ? "text" : "password"} autoComplete="new-password" value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)} required className="login-input" disabled={!token} />
+                </label>
+                <button type="submit" disabled={loading || !token} className="login-submit">
+                  {loading ? <><Loader2 size={17} className="login-spin" /> Salvando</> : <>Salvar senha nova <ArrowRight size={17} /></>}
                 </button>
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <button type="button" style={{ fontSize: 13, color: "#185FA5" }}>Esqueci minha senha</button>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 rounded-lg flex items-center justify-center gap-2"
-              style={{ background: "#185FA5", color: "#fff", fontSize: 14, fontWeight: 500, opacity: loading ? 0.7 : 1 }}
-            >
-              {loading ? "Entrando..." : "Entrar"} {!loading && <ArrowRight size={16} />}
-            </button>
-            </form>
-
-            <div className="flex items-center gap-3">
-              <div className="flex-1" style={{ height: 1, background: "rgba(0,0,0,0.08)" }} />
-              <span style={{ fontSize: 12, color: "#9CA3AF" }}>ou</span>
-              <div className="flex-1" style={{ height: 1, background: "rgba(0,0,0,0.08)" }} />
-            </div>
-
-            <button
-              type="button"
-              className="w-full py-2.5 rounded-lg flex items-center justify-center gap-2"
-              style={{ border: "0.5px solid rgba(0,0,0,0.12)", background: "#fff", fontSize: 13, color: "#374151" }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-              Entrar com Google
-            </button>
-          </div>
-
-          <p style={{ textAlign: "center", fontSize: 13, color: "#6B7280", marginTop: 24 }}>
-            Não tem conta?{" "}
-            <button
-              onClick={() => onNavigate("onboarding")}
-              style={{ color: "#185FA5", fontWeight: 500 }}
-            >
-              Criar conta grátis por 14 dias →
-            </button>
-          </p>
+              </form>
+              <p className="login-signup"><a href="/" className="login-link" style={{ fontSize: 14 }}>Voltar para entrar</a></p>
+            </>
+          )}
         </div>
-      </div>
+      </main>
     </div>
   );
 }
@@ -184,297 +330,303 @@ function slugify(value: string): string {
     .replace(/-+/g, "-");
 }
 
+/** Enquanto o cadastro (passos 2 e 3) não termina, o App não pula direto para o painel */
+export const onboardingFlow = { active: false };
+
+const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
+const COLORS = ["#185FA5", "#DC2626", "#059669", "#7C3AED", "#D97706", "#0F172A"];
+const digits = (v: string) => v.replace(/\D/g, "");
+const moneyToNumber = (v: string) => {
+  const t = v.replace(/[^\d,.]/g, "");
+  return Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t.replace(/\.(?=\d{3}(\D|$))/g, ""));
+};
+const phoneMask = (v: string) => {
+  const d = digits(v).slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, d.length - 4)}-${d.slice(-4)}`;
+};
+
 export function Onboarding({ onNavigate }: PageProps) {
   const auth = useAuth();
   const [step, setStep] = useState(1);
-  const [dealershipName, setDealershipName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [slugTouched, setSlugTouched] = useState(false);
-  const [ownerName, setOwnerName] = useState("");
-  const [ownerEmail, setOwnerEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleNameChange = (value: string) => {
-    setDealershipName(value);
-    if (!slugTouched) setSlug(slugify(value));
+  // Passo 1: loja e acesso
+  const [dealershipName, setDealershipName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [city, setCity] = useState("");
+  const [uf, setUf] = useState("");
+  const [phone, setPhone] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+
+  // Passo 2: site
+  const [color, setColor] = useState("#185FA5");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<"logo" | "cover" | null>(null);
+
+  // Passo 3: primeiro veículo
+  const [vType, setVType] = useState<"car" | "moto">("moto");
+  const [brand, setBrand] = useState("");
+  const [model, setModel] = useState("");
+  const [year, setYear] = useState("");
+  const [km, setKm] = useState("");
+  const [price, setPrice] = useState("");
+  const [cost, setCost] = useState("");
+
+  useEffect(() => () => { onboardingFlow.active = false; }, []);
+
+  const finish = () => { onboardingFlow.active = false; onNavigate("dashboard"); };
+
+  const createAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (dealershipName.trim().length < 2) return setError("Informe o nome da loja.");
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length < 3) return setError("O endereço do site precisa ter pelo menos 3 letras ou números (ex.: auto-silva).");
+    if (ownerName.trim().length < 2) return setError("Informe seu nome.");
+    if (password.length < 8) return setError("A senha precisa ter pelo menos 8 caracteres.");
+    setLoading(true);
+    onboardingFlow.active = true;
+    try {
+      await auth.register({ dealershipName: dealershipName.trim(), dealershipSlug: slug, ownerName: ownerName.trim(), ownerEmail: ownerEmail.trim(), password });
+      // Dados extras da loja: se falharem, a conta já existe e dá para completar em Configurações
+      await settingsApi.updateStore({ city: city.trim() || undefined, state: uf || undefined, phone: digits(phone) || undefined }).catch(() => {});
+      setStep(2);
+    } catch (err) {
+      onboardingFlow.active = false;
+      setError(connectionError(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleNext = async () => {
-    if (step === 1) {
-      setError(null);
-      if (!dealershipName || !slug || !ownerName || !ownerEmail || !password) {
-        setError("Preencha nome da loja, seu nome, e-mail e senha para continuar.");
-        return;
-      }
-      setLoading(true);
-      try {
-        await auth.register({ dealershipName, dealershipSlug: slug, ownerName, ownerEmail, password });
-        setStep(2);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Não foi possível criar a conta");
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-    if (step < 3) {
-      setStep(step + 1);
-      return;
-    }
-    onNavigate("dashboard");
+  const pickColor = async (c: string) => {
+    setColor(c);
+    await settingsApi.updateStore({ primaryColor: c }).catch(() => setError("Não foi possível salvar a cor. Você pode trocar depois em Configurações."));
   };
+
+  const uploadImage = async (kind: "logo" | "cover", file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setUploading(kind);
+    try {
+      const res = await settingsApi.uploadStoreImage(kind, file);
+      if (kind === "logo") setLogoUrl(res.dealership?.logoUrl ?? URL.createObjectURL(file));
+      else setCoverUrl(res.dealership?.coverUrl ?? URL.createObjectURL(file));
+    } catch (err) {
+      setError(connectionError(err));
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const createVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const y = Number(digits(year));
+    const p = moneyToNumber(price), c = cost ? moneyToNumber(cost) : 0;
+    if (!brand.trim() || !model.trim()) return setError("Informe a marca e o modelo.");
+    if (y < 1950 || y > new Date().getFullYear() + 1) return setError("Ano inválido.");
+    if (!Number.isFinite(p) || p <= 0) return setError("Informe o preço de venda, ex.: 28.000.");
+    if (!Number.isFinite(c) || c < 0) return setError("Preço de compra inválido.");
+    setLoading(true);
+    try {
+      await api.createVehicle({ type: vType, brand: brand.trim(), model: model.trim(), year: y, km: Number(digits(km)) || 0, price: p, cost: c });
+      finish();
+    } catch (err) {
+      setError(connectionError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const steps = ["Sua loja", "Seu site", "Primeiro veículo"];
+  const siteHost = window.location.host;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#F4F6F9" }}>
-      <div className="w-full" style={{ maxWidth: 520 }}>
-        {/* Logo */}
-        <div className="flex items-center gap-2 justify-center mb-8">
-          <div className="flex items-center justify-center rounded-lg" style={{ width: 32, height: 32, background: "#185FA5" }}>
-            <Car size={18} color="#fff" />
-          </div>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>AutoGestão</span>
-        </div>
+    <div className="login">
+      <LoginStage />
+      <main className="login-panel">
+        <div className="login-form-wrap" style={{ maxWidth: 440 }}>
+          <MobileBrand />
+          <ol className="onb-steps" aria-label="Etapas do cadastro">
+            {steps.map((label, i) => (
+              <li key={label} className={i + 1 < step ? "done" : i + 1 === step ? "current" : ""} aria-current={i + 1 === step ? "step" : undefined}>
+                <span className="onb-dot">{i + 1 < step ? <Check size={13} /> : i + 1}</span>
+                <span>{label}</span>
+              </li>
+            ))}
+          </ol>
 
-        {/* Step indicator */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          {[1, 2, 3].map((s) => (
-            <div key={s} className="flex items-center gap-2">
-              <div
-                className="flex items-center justify-center rounded-full"
-                style={{
-                  width: 28, height: 28,
-                  background: s < step ? "#27500A" : s === step ? "#185FA5" : "#E5E7EB",
-                  color: s <= step ? "#fff" : "#9CA3AF",
-                  fontSize: 12, fontWeight: 500,
-                }}
-              >
-                {s < step ? <Check size={13} /> : s}
-              </div>
-              <span style={{ fontSize: 12, color: s === step ? "#185FA5" : "#9CA3AF" }}>
-                {s === 1 ? "Sua loja" : s === 2 ? "Personalização" : "Primeiro veículo"}
-              </span>
-              {s < 3 && <ChevronRight size={14} style={{ color: "#CBD5E1" }} />}
-            </div>
-          ))}
-        </div>
-
-        <div className="rounded-2xl p-6" style={{ background: "#fff", border: "0.5px solid rgba(0,0,0,0.08)" }}>
-          {step === 1 && (
-            <div className="space-y-4">
-              <h3>Dados da sua loja</h3>
-              <p style={{ fontSize: 13, color: "#6B7280" }}>Configure as informações básicas da sua revenda</p>
-
-              {error && (
-                <div className="rounded-lg px-3 py-2" style={{ background: "#FEE2E2", color: "#991B1B", fontSize: 13 }}>
-                  {error}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Nome da loja</label>
-                  <input
-                    placeholder="Auto Silva Veículos"
-                    value={dealershipName}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    className="w-full rounded-lg px-3 py-2.5"
-                    style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13, outline: "none" }}
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>
-                    Endereço do seu site <span style={{ fontSize: 11, color: "#9CA3AF" }}>(pode editar)</span>
-                  </label>
-                  <div className="flex items-center rounded-lg" style={{ border: "0.5px solid rgba(0,0,0,0.12)", overflow: "hidden" }}>
-                    <span style={{ fontSize: 13, color: "#9CA3AF", padding: "10px 0 10px 12px", whiteSpace: "nowrap" }}>{window.location.host}/loja/</span>
-                    <input
-                      placeholder="auto-silva"
-                      value={slug}
-                      onChange={(e) => {
-                        setSlugTouched(true);
-                        setSlug(slugify(e.target.value));
-                      }}
-                      className="w-full px-1 py-2.5"
-                      style={{ border: "none", outline: "none", fontSize: 13 }}
-                    />
-                  </div>
-                </div>
-                {[
-                  { label: "CNPJ", placeholder: "00.000.000/0001-00" },
-                  { label: "Cidade", placeholder: "São Paulo" },
-                  { label: "Estado", placeholder: "SP" },
-                  { label: "Telefone / WhatsApp", placeholder: "(11) 9 9999-9999" },
-                ].map(({ label, placeholder }) => (
-                  <div key={label}>
-                    <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>{label}</label>
-                    <input
-                      placeholder={placeholder}
-                      className="w-full rounded-lg px-3 py-2.5"
-                      style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13, outline: "none" }}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ borderTop: "0.5px solid rgba(0,0,0,0.08)", paddingTop: 16 }}>
-                <p style={{ fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 12 }}>Seus dados de acesso</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Seu nome</label>
-                    <input
-                      placeholder="João Silva"
-                      value={ownerName}
-                      onChange={(e) => setOwnerName(e.target.value)}
-                      className="w-full rounded-lg px-3 py-2.5"
-                      style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13, outline: "none" }}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>E-mail</label>
-                    <input
-                      type="email"
-                      placeholder="joao@autosilva.com.br"
-                      value={ownerEmail}
-                      onChange={(e) => setOwnerEmail(e.target.value)}
-                      className="w-full rounded-lg px-3 py-2.5"
-                      style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13, outline: "none" }}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Senha</label>
-                    <input
-                      type="password"
-                      placeholder="Mínimo de 8 caracteres"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full rounded-lg px-3 py-2.5"
-                      style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13, outline: "none" }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 8 }}>Segmento</label>
-                <div className="flex gap-3">
-                  {["Carros", "Motos", "Ambos"].map((s) => (
-                    <button
-                      key={s}
-                      className="flex-1 py-2.5 rounded-lg"
-                      style={{
-                        border: s === "Ambos" ? "1.5px solid #185FA5" : "0.5px solid rgba(0,0,0,0.1)",
-                        background: s === "Ambos" ? "#EBF2FA" : "#FAFAFA",
-                        color: s === "Ambos" ? "#185FA5" : "#374151",
-                        fontSize: 13, fontWeight: 500,
-                      }}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          {error && (
+            <div className="login-alert login-alert-error" role="alert">
+              <AlertCircle size={16} /> <span>{error}</span>
             </div>
           )}
 
+          {step === 1 && (
+            <form onSubmit={createAccount}>
+              <h2 className="login-heading">Teste grátis por 30 dias</h2>
+              <p className="login-sub">Sem cartão. Seu site da loja fica pronto na hora.</p>
+
+              <label className="login-field">
+                <span className="login-label">Nome da loja</span>
+                <input className="login-input" placeholder="Auto Silva Veículos" value={dealershipName} autoFocus required
+                  onChange={(e) => { setDealershipName(e.target.value); if (!slugTouched) setSlug(slugify(e.target.value)); }} />
+              </label>
+              <label className="login-field">
+                <span className="login-label">Endereço do site</span>
+                <span className="onb-prefix">
+                  <span>{siteHost}/loja/</span>
+                  <input className="login-input" value={slug} required placeholder="auto-silva" aria-label="Endereço do site"
+                    onChange={(e) => { setSlugTouched(true); setSlug(slugify(e.target.value)); }} />
+                </span>
+              </label>
+              <div className="onb-row">
+                <label className="login-field" style={{ flex: 1 }}>
+                  <span className="login-label">Cidade</span>
+                  <input className="login-input" placeholder="Fortaleza" value={city} onChange={(e) => setCity(e.target.value)} />
+                </label>
+                <label className="login-field" style={{ width: 96 }}>
+                  <span className="login-label">UF</span>
+                  <select className="login-input" value={uf} onChange={(e) => setUf(e.target.value)}>
+                    <option value="">—</option>
+                    {UFS.map((u) => <option key={u}>{u}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="login-field">
+                <span className="login-label">WhatsApp da loja</span>
+                <input className="login-input" inputMode="tel" placeholder="(85) 99999-9999" value={phone} onChange={(e) => setPhone(phoneMask(e.target.value))} />
+              </label>
+
+              <p className="onb-section">Seu acesso</p>
+              <label className="login-field">
+                <span className="login-label">Seu nome</span>
+                <input className="login-input" autoComplete="name" placeholder="João Silva" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} required />
+              </label>
+              <label className="login-field">
+                <span className="login-label">E-mail</span>
+                <input className="login-input" type="email" autoComplete="username" placeholder="voce@sualoja.com.br" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} required />
+              </label>
+              <label className="login-field">
+                <span className="login-label">Senha</span>
+                <span className="login-input-box" style={{ display: "block" }}>
+                  <input className="login-input login-input-pass" type={showPass ? "text" : "password"} autoComplete="new-password" placeholder="Pelo menos 8 caracteres"
+                    value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+                  <button type="button" onClick={() => setShowPass(!showPass)} className="login-eye" aria-label={showPass ? "Esconder senha" : "Mostrar senha"}>
+                    {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </span>
+              </label>
+
+              <button type="submit" disabled={loading} className="login-submit">
+                {loading ? <><Loader2 size={17} className="login-spin" /> Criando sua conta</> : <>Criar conta <ArrowRight size={17} /></>}
+              </button>
+              <p className="login-signup">
+                Já tem conta?{" "}
+                <button type="button" className="login-link" style={{ fontSize: 14 }} onClick={() => onNavigate("login")}>Entrar</button>
+              </p>
+            </form>
+          )}
+
           {step === 2 && (
-            <div className="space-y-4">
-              <h3>Personalize seu site</h3>
-              <p style={{ fontSize: 13, color: "#6B7280" }}>Como seus clientes vão te ver online</p>
-              <div>
-                <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 8 }}>Logo da loja</label>
-                <div
-                  className="flex flex-col items-center gap-2 rounded-xl py-6"
-                  style={{ border: "1.5px dashed rgba(0,0,0,0.12)", background: "#FAFAFA", cursor: "pointer" }}
-                >
-                  <Upload size={20} style={{ color: "#9CA3AF" }} />
-                  <span style={{ fontSize: 13, color: "#374151" }}>Fazer upload da logo</span>
-                  <span style={{ fontSize: 12, color: "#9CA3AF" }}>PNG, SVG até 2MB</span>
-                </div>
+            <div>
+              <h2 className="login-heading">Deixe o site com a cara da loja</h2>
+              <p className="login-sub">Tudo aqui é opcional e pode ser trocado depois em Configurações.</p>
+
+              <p className="login-label">Logo</p>
+              <label className={`onb-drop${logoUrl ? " has" : ""}`}>
+                {logoUrl ? <img src={logoUrl} alt="Logo enviada" className="onb-logo" /> : <Upload size={20} />}
+                <span>{uploading === "logo" ? "Enviando..." : logoUrl ? "Trocar logo" : "Enviar a logo (PNG ou JPG)"}</span>
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={!!uploading}
+                  onChange={(e) => { uploadImage("logo", e.target.files?.[0]); e.target.value = ""; }} />
+              </label>
+
+              <p className="login-label" style={{ marginTop: 16 }}>Cor da loja</p>
+              <div className="onb-colors" role="radiogroup" aria-label="Cor da loja">
+                {COLORS.map((c) => (
+                  <button key={c} type="button" role="radio" aria-checked={color === c} aria-label={c} onClick={() => pickColor(c)}
+                    className="onb-swatch" style={{ background: c, outlineColor: color === c ? c : "transparent" }} />
+                ))}
+                <label className="onb-swatch onb-custom" title="Outra cor" style={{ background: COLORS.includes(color) ? undefined : color }}>
+                  <input type="color" value={color} onChange={(e) => setColor(e.target.value)} onBlur={(e) => pickColor(e.target.value)} aria-label="Outra cor" />
+                </label>
               </div>
-              <div>
-                <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 8 }}>Cor principal da loja</label>
-                <div className="flex items-center gap-3">
-                  {["#185FA5", "#DC2626", "#059669", "#7C3AED", "#D97706", "#0F172A"].map((c) => (
-                    <button
-                      key={c}
-                      className="rounded-full border-2"
-                      style={{
-                        width: 28, height: 28, background: c,
-                        borderColor: c === "#185FA5" ? "#185FA5" : "transparent",
-                        outline: c === "#185FA5" ? "2px solid #185FA5" : "none",
-                        outlineOffset: 2,
-                      }}
-                    />
-                  ))}
-                  <input type="color" style={{ width: 28, height: 28, borderRadius: "50%", cursor: "pointer", border: "none" }} />
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 8 }}>Foto de capa</label>
-                <div
-                  className="flex flex-col items-center gap-2 rounded-xl py-8"
-                  style={{ border: "1.5px dashed rgba(0,0,0,0.12)", background: "#FAFAFA", cursor: "pointer" }}
-                >
-                  <Upload size={20} style={{ color: "#9CA3AF" }} />
-                  <span style={{ fontSize: 13, color: "#374151" }}>Adicionar foto de capa</span>
-                  <span style={{ fontSize: 12, color: "#9CA3AF" }}>Recomendado: 1440 × 400px</span>
-                </div>
-              </div>
+
+              <p className="login-label" style={{ marginTop: 16 }}>Foto de capa do site</p>
+              <label className={`onb-drop onb-cover${coverUrl ? " has" : ""}`} style={coverUrl ? { backgroundImage: `url(${coverUrl})` } : undefined}>
+                {!coverUrl && <Upload size={20} />}
+                <span>{uploading === "cover" ? "Enviando..." : coverUrl ? "Trocar capa" : "Enviar uma foto da loja (larga, ex.: 1440 × 400)"}</span>
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={!!uploading}
+                  onChange={(e) => { uploadImage("cover", e.target.files?.[0]); e.target.value = ""; }} />
+              </label>
+
+              <button type="button" className="login-submit" style={{ marginTop: 20 }} disabled={!!uploading} onClick={() => { setError(null); setStep(3); }}>
+                Continuar <ArrowRight size={17} />
+              </button>
             </div>
           )}
 
           {step === 3 && (
-            <div className="space-y-4">
-              <h3>Cadastre seu primeiro veículo</h3>
-              <p style={{ fontSize: 13, color: "#6B7280" }}>Vamos popular seu site agora mesmo</p>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "Marca", placeholder: "Honda" },
-                  { label: "Modelo", placeholder: "Civic" },
-                  { label: "Ano", placeholder: "2022" },
-                  { label: "Quilometragem", placeholder: "28.000" },
-                  { label: "Preço de venda", placeholder: "R$ 142.900" },
-                ].map(({ label, placeholder }) => (
-                  <div key={label}>
-                    <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>{label}</label>
-                    <input
-                      placeholder={placeholder}
-                      className="w-full rounded-lg px-3 py-2.5"
-                      style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13, outline: "none" }}
-                    />
-                  </div>
+            <form onSubmit={createVehicle}>
+              <h2 className="login-heading">Cadastre o primeiro veículo</h2>
+              <p className="login-sub">Ele já aparece no seu site. Fotos e detalhes você completa depois no Estoque.</p>
+
+              <div className="onb-toggle" role="radiogroup" aria-label="Tipo">
+                {([["moto", "Moto", Bike], ["car", "Carro", Car]] as const).map(([t, label, Icon]) => (
+                  <button key={t} type="button" role="radio" aria-checked={vType === t} className={vType === t ? "on" : ""} onClick={() => setVType(t)}>
+                    <Icon size={16} /> {label}
+                  </button>
                 ))}
               </div>
-              <div className="rounded-xl p-4 flex items-center gap-3" style={{ background: "#EBF2FA", border: "0.5px solid #185FA5" }}>
-                <Car size={20} style={{ color: "#185FA5", flexShrink: 0 }} />
-                <div style={{ fontSize: 13 }}>
-                  <span style={{ color: "#185FA5", fontWeight: 500 }}>Preview ao vivo: </span>
-                  <span style={{ color: "#374151" }}>seu site já está sendo gerado em tempo real</span>
-                </div>
+              <div className="onb-row">
+                <label className="login-field" style={{ flex: 1 }}>
+                  <span className="login-label">Marca</span>
+                  <input className="login-input" placeholder={vType === "moto" ? "Honda" : "Fiat"} value={brand} onChange={(e) => setBrand(e.target.value)} required />
+                </label>
+                <label className="login-field" style={{ flex: 1 }}>
+                  <span className="login-label">Modelo</span>
+                  <input className="login-input" placeholder={vType === "moto" ? "CG 160" : "Argo"} value={model} onChange={(e) => setModel(e.target.value)} required />
+                </label>
               </div>
-            </div>
-          )}
+              <div className="onb-row">
+                <label className="login-field" style={{ flex: 1 }}>
+                  <span className="login-label">Ano</span>
+                  <input className="login-input" inputMode="numeric" placeholder="2024" value={year} onChange={(e) => setYear(digits(e.target.value).slice(0, 4))} required />
+                </label>
+                <label className="login-field" style={{ flex: 1 }}>
+                  <span className="login-label">Quilometragem</span>
+                  <input className="login-input" inputMode="numeric" placeholder="0" value={km} onChange={(e) => setKm(digits(e.target.value) ? Number(digits(e.target.value)).toLocaleString("pt-BR") : "")} />
+                </label>
+              </div>
+              <div className="onb-row">
+                <label className="login-field" style={{ flex: 1 }}>
+                  <span className="login-label">Preço de venda (R$)</span>
+                  <input className="login-input" inputMode="decimal" placeholder="28.000" value={price} onChange={(e) => setPrice(e.target.value)} required />
+                </label>
+                <label className="login-field" style={{ flex: 1 }}>
+                  <span className="login-label">Quanto pagou (R$)</span>
+                  <input className="login-input" inputMode="decimal" placeholder="Opcional" value={cost} onChange={(e) => setCost(e.target.value)} />
+                </label>
+              </div>
 
-          <div className="flex items-center justify-between mt-6">
-            <button
-              onClick={() => step > 1 ? setStep(step - 1) : onNavigate("login")}
-              style={{ fontSize: 13, color: "#6B7280" }}
-            >
-              {step > 1 ? "← Voltar" : "← Fazer login"}
-            </button>
-            <button
-              onClick={handleNext}
-              disabled={loading}
-              className="px-6 py-2.5 rounded-lg flex items-center gap-2"
-              style={{ background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500, opacity: loading ? 0.7 : 1 }}
-            >
-              {loading ? "Criando conta..." : step < 3 ? "Próximo" : "Acessar painel"} <ArrowRight size={15} />
-            </button>
-          </div>
+              <button type="submit" disabled={loading} className="login-submit">
+                {loading ? <><Loader2 size={17} className="login-spin" /> Salvando</> : <>Salvar e abrir o painel <ArrowRight size={17} /></>}
+              </button>
+              <p className="login-signup">
+                <button type="button" className="login-link" style={{ fontSize: 14 }} onClick={finish}>Pular e abrir o painel</button>
+              </p>
+            </form>
+          )}
         </div>
-      </div>
+      </main>
     </div>
   );
 }
