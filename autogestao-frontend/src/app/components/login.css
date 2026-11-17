@@ -48,8 +48,9 @@
 @keyframes login-feed-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---------- Lado claro: o formulário ---------- */
-.login-panel { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px 24px; }
-.login-form-wrap { width: 100%; max-width: 384px; }
+/* Margem automática centraliza sem cortar o topo quando o formulário é mais alto que a tela */
+.login-panel { flex: 1; display: flex; justify-content: center; padding: 32px 24px; }
+.login-form-wrap { width: 100%; max-width: 384px; margin: auto 0; }
 .login-brand-mobile { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; }
 .login-brand-mobile .login-brand-name { color: #0F1923; }
 @media (min-width: 1024px) { .login-brand-mobile { display: none; } }
@@ -99,3 +100,33 @@
 @media (prefers-reduced-motion: reduce) {
   .login-feed-list, .login-feed-item:first-child, .login-spin { animation: none; }
 }
+
+/* ---------- Cadastro (teste grátis) ---------- */
+.onb-steps { display: flex; gap: 6px; list-style: none; margin: 0 0 24px; padding: 0; }
+.onb-steps li { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8A94A3; padding-top: 10px; border-top: 3px solid #DCE2EA; }
+.onb-steps li.current { color: #185FA5; font-weight: 600; border-color: #185FA5; }
+.onb-steps li.done { color: #2F6B1A; border-color: #4C9A2A; }
+.onb-dot { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; font-size: 11px; background: #E7ECF2; flex-shrink: 0; }
+.onb-steps li.current .onb-dot { background: #185FA5; color: #fff; }
+.onb-steps li.done .onb-dot { background: #4C9A2A; color: #fff; }
+.onb-row { display: flex; gap: 12px; }
+.onb-section { margin: 22px 0 12px; padding-top: 18px; border-top: 1px solid #E2E7EE; font-size: 14px; font-weight: 600; color: #2B3440; }
+.onb-prefix { display: flex; align-items: center; border: 1px solid #D3DAE3; border-radius: 12px; background: #fff; overflow: hidden; }
+.onb-prefix:focus-within { border-color: #185FA5; box-shadow: 0 0 0 4px rgba(24, 95, 165, 0.16); }
+.onb-prefix > span { padding: 0 2px 0 14px; font-size: 14px; color: #7A8594; white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.onb-prefix .login-input { border: 0; box-shadow: none; padding-left: 2px; }
+select.login-input { appearance: auto; padding-right: 8px; }
+.onb-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 96px; padding: 16px; border: 1.5px dashed #C5CFDB; border-radius: 14px; background: #fff; color: #5B6675; font-size: 13px; cursor: pointer; text-align: center; transition: border-color 140ms, background 140ms; }
+.onb-drop:hover, .onb-drop:focus-within { border-color: #185FA5; background: #F5F9FD; }
+.onb-drop.has { border-style: solid; }
+.onb-logo { width: 64px; height: 64px; object-fit: cover; border-radius: 12px; }
+.onb-cover { min-height: 120px; background-size: cover; background-position: center; }
+.onb-cover.has span { background: rgba(15, 25, 35, 0.7); color: #fff; padding: 6px 12px; border-radius: 999px; }
+.onb-colors { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.onb-swatch { width: 32px; height: 32px; border-radius: 50%; outline: 2px solid transparent; outline-offset: 3px; cursor: pointer; position: relative; }
+.onb-custom { background: conic-gradient(#DC2626, #D97706, #059669, #185FA5, #7C3AED, #DC2626); overflow: hidden; }
+.onb-custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.onb-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+.onb-toggle button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border-radius: 12px; border: 1px solid #D3DAE3; background: #fff; font-size: 14px; font-weight: 500; color: #2B3440; }
+.onb-toggle button.on { border-color: #185FA5; background: #EAF2FB; color: #185FA5; }
+.onb-swatch:focus-visible, .onb-toggle button:focus-visible { outline: 2px solid #185FA5; outline-offset: 3px; }

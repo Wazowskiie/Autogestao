@@ -13,6 +13,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { LeadsModule } from './leads/leads.module';
 import { PartsModule } from './parts/parts.module';
+import { MailModule } from './mail/mail.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { PromissoryNotesModule } from './promissory-notes/promissory-notes.module';
 import { SalesModule } from './sales/sales.module';
@@ -57,6 +58,7 @@ import { PlansModule } from './plans/plans.module';
     FinancialModule,
     PromissoryNotesModule,
     PartsModule,
+    MailModule,
     StorefrontModule,
     // Cobrança (Asaas) e NF-e (Focus) ficam ligadas, a não ser que o .env diga "false"
     ...(process.env.ENABLE_BILLING !== 'false' ? [BillingModule] : []),

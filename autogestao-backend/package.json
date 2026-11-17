@@ -18,7 +18,7 @@
     "test:chat": "node --test test/chat.test.cjs",
     "prisma:deploy": "prisma migrate deploy",
     "test:crm": "node --test test/crm.test.cjs",
-    "test": "npm run build && node --test --test-concurrency=1 test/chat.test.cjs test/crm.test.cjs test/painel-vendas.test.cjs test/assistant.test.cjs test/vendedor.test.cjs"
+    "test": "npm run build && node --test --test-concurrency=1 test/chat.test.cjs test/crm.test.cjs test/painel-vendas.test.cjs test/assistant.test.cjs test/vendedor.test.cjs test/senha.test.cjs"
   },
   "dependencies": {
     "@nestjs/common": "11.1.27",

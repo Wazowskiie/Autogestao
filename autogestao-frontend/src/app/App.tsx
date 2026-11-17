@@ -8,7 +8,7 @@ import { Inventory } from "./components/Inventory";
 import { LeadsCRM } from "./components/LeadsCRMNext";
 import { Financial } from "./components/Financial";
 import { Plans } from "./components/Plans";
-import { Login, Onboarding } from "./components/Login";
+import { Login, Onboarding, onboardingFlow } from "./components/Login";
 import { PublicStorefront } from "./components/PublicStorefront";
 import { Sales } from "./components/Sales";
 import { Customers } from "./components/Customers";
@@ -60,7 +60,8 @@ export default function App() {
   // uma sessão válida (reload da página), pula direto pro dashboard; se a
   // sessão cair (ex.: logout, refresh token expirado), volta pro login.
   useEffect(() => {
-    if (auth.status === "authenticated" && (page === "login" || page === "onboarding")) {
+    // Durante o cadastro (passos 2 e 3) a pessoa continua na tela de cadastro
+    if (auth.status === "authenticated" && (page === "login" || (page === "onboarding" && !onboardingFlow.active))) {
       setPage("dashboard");
     }
     if (auth.status === "unauthenticated" && page !== "login" && page !== "onboarding") {

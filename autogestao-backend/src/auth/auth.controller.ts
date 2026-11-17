@@ -14,6 +14,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
+import { Throttle } from '@nestjs/throttler';
 import { AuthenticatedUser } from './types/jwt-payload.type';
 
 const REFRESH_COOKIE = 'refresh_token';
@@ -39,6 +41,29 @@ export class AuthController {
       user: result.user,
       dealership: result.dealership,
     };
+  }
+
+  /** A tela de login pergunta se o "Esqueci minha senha" manda e-mail */
+  @Public()
+  @Get('password-reset')
+  passwordResetInfo() {
+    return { email: this.authService.passwordResetAvailable() };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.authService.forgotPassword(dto.email);
+    // Mesma resposta exista ou não a conta
+    return { message: 'Se o e-mail estiver cadastrado, enviamos um link para criar uma senha nova.' };
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.password);
   }
 
   @Public()

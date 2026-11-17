@@ -1,8 +1,12 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
+import { MailService } from '../mail/mail.service';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Dealership, User, UserRole } from '../generated/prisma/client';
@@ -27,7 +31,70 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    @Optional() private readonly mail?: MailService,
   ) {}
+
+  private readonly log = new Logger('Senha');
+
+  /** O "Esqueci minha senha" só manda e-mail se o envio estiver configurado */
+  passwordResetAvailable() {
+    return !!this.mail?.isEnabled();
+  }
+
+  /**
+   * Gera um link de uso único (1 hora) e manda por e-mail.
+   * Responde igual exista ou não o e-mail, para não revelar quem tem conta.
+   */
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, active: true } });
+    if (!user || !this.mail?.isEnabled()) return;
+
+    // Evita enxurrada: no máximo um e-mail a cada 2 minutos por pessoa
+    const recent = await this.prisma.passwordResetToken.findFirst({
+      where: { userId: user.id, createdAt: { gt: new Date(Date.now() - 2 * 60_000) } },
+    });
+    if (recent) return;
+
+    const token = randomBytes(32).toString('base64url');
+    await this.prisma.$transaction([
+      // Um link novo invalida os anteriores
+      this.prisma.passwordResetToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } }),
+      this.prisma.passwordResetToken.create({
+        data: { userId: user.id, tokenHash: this.hashToken(token), expiresAt: new Date(Date.now() + 60 * 60_000) },
+      }),
+    ]);
+
+    const appUrl = (process.env.PUBLIC_APP_URL || (process.env.CORS_ORIGINS ?? '').split(',')[0] || 'http://localhost:5173').replace(/\/$/, '');
+    const link = `${appUrl}/redefinir-senha?token=${token}`;
+    const first = user.name.split(' ')[0];
+    const sent = await this.mail.send({
+      to: user.email,
+      subject: 'Criar uma senha nova no AutoGestão',
+      text: `Olá, ${first}.\n\nRecebemos um pedido para trocar a senha da sua conta no AutoGestão. Para criar uma senha nova, abra o link abaixo (vale por 1 hora):\n\n${link}\n\nSe não foi você, ignore este e-mail: sua senha continua a mesma.`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;color:#0F1923">
+<p>Olá, ${escapeHtml(first)}.</p>
+<p>Recebemos um pedido para trocar a senha da sua conta no AutoGestão.</p>
+<p><a href="${link}" style="display:inline-block;background:#185FA5;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-weight:bold">Criar senha nova</a></p>
+<p style="color:#5B6675;font-size:13px">O link vale por 1 hora e só pode ser usado uma vez. Se não foi você, ignore este e-mail: sua senha continua a mesma.</p>
+</div>`,
+    });
+    if (!sent) this.log.warn(`Não foi possível enviar o link de senha para o usuário ${user.id}`);
+  }
+
+  /** Troca a senha pelo link do e-mail e encerra as sessões abertas */
+  async resetPassword(token: string, password: string) {
+    const record = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash: this.hashToken(token) }, include: { user: true } });
+    if (!record || record.usedAt || record.expiresAt < new Date() || !record.user.active) {
+      throw new BadRequestException('Este link não vale mais. Peça um novo em "Esqueci minha senha".');
+    }
+    const passwordHash = await argon2.hash(password);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
+      this.prisma.passwordResetToken.updateMany({ where: { userId: record.userId, usedAt: null }, data: { usedAt: new Date() } }),
+      this.prisma.refreshToken.updateMany({ where: { userId: record.userId, revoked: false }, data: { revoked: true } }),
+    ]);
+    return { success: true };
+  }
 
   async register(dto: RegisterDto): Promise<TokenBundle> {
     const [existingEmail, existingSlug] = await Promise.all([
@@ -171,4 +238,8 @@ export class AuthService {
 
     return new Date(base.getTime() + value * multipliers[unit]);
   }
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
