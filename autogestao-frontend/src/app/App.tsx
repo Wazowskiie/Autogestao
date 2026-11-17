@@ -166,7 +166,8 @@ export default function App() {
             </div>
             <div className="flex-1 overflow-auto" style={{ background: "#F4F6F9" }}>
               <div style={{ height: "calc(100% - 0px)", border: "none" }}>
-                <PublicStorefront slug={storeSlug} onNavigate={navigate} />
+                {/* Prévia dentro do painel: o balão do chat sobe para não ficar embaixo do Assistente */}
+                <PublicStorefront slug={storeSlug} onNavigate={navigate} preview />
               </div>
             </div>
           </div>

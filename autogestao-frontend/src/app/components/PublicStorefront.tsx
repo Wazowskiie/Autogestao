@@ -91,7 +91,7 @@ function StoreLogo({ dealership, accent, size }: { dealership: api.StorefrontDea
   );
 }
 
-export function PublicStorefront({ slug }: { slug: string; onNavigate?: (page: string) => void }) {
+export function PublicStorefront({ slug, preview }: { slug: string; onNavigate?: (page: string) => void; preview?: boolean }) {
   const [dealership, setDealership] = useState<api.StorefrontDealership | null>(null);
   const [vehicles, setVehicles] = useState<api.StorefrontVehicle[]>([]);
   const [total, setTotal] = useState(0);
@@ -137,7 +137,10 @@ export function PublicStorefront({ slug }: { slug: string; onNavigate?: (page: s
 
   const primary = dealership?.primaryColor || "#DC2626";
   const accentText = useMemo(() => lighten(primary), [primary]);
-  const wa = whatsappLink(dealership);
+  const chatOn = !!dealership && dealership.chatEnabled !== false;
+  // Botão geral de WhatsApp só quando o chat da loja está desligado (o chat já faz esse papel).
+  // O WhatsApp de cada veículo (cartão e detalhes) continua.
+  const wa = chatOn ? null : whatsappLink(dealership);
   const place = [dealership?.city, dealership?.state].filter(Boolean).join(" - ");
 
   if (error && !dealership) {
@@ -260,7 +263,7 @@ export function PublicStorefront({ slug }: { slug: string; onNavigate?: (page: s
       {selected && (
         <VehicleDetailModal vehicle={selected} dealership={dealership} primary={primary} accentText={accentText} slug={slug} onClose={() => setSelected(null)} />
       )}
-      {dealership && dealership.chatEnabled !== false && <CustomerChat slug={slug} vehicles={vehicles} />}
+      {chatOn && <CustomerChat slug={slug} vehicles={vehicles} accent={primary} raised={preview} />}
     </div>
   );
 }
