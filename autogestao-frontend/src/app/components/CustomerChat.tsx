@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Conversation, publicChat } from '../../lib/chat-api';
 import { StorefrontVehicle } from '../../lib/api';
+import { MessageCircle } from 'lucide-react';
 import './chat.css';
 
-export function CustomerChat({ slug, vehicles }: { slug: string; vehicles: StorefrontVehicle[] }) {
+/** accent: cor da loja no balão e no topo da conversa; raised: sobe o balão (prévia no painel, onde o Assistente fica no canto) */
+export function CustomerChat({ slug, vehicles, accent, raised }: { slug: string; vehicles: StorefrontVehicle[]; accent?: string; raised?: boolean }) {
   const [open, setOpen] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [text, setText] = useState('');
@@ -67,8 +69,8 @@ export function CustomerChat({ slug, vehicles }: { slug: string; vehicles: Store
   };
   const restart = () => { try { sessionStorage.removeItem(storageKey); } catch {} token.current = null; setConversation(null); setOpen(false); };
 
-  return <div className="customer-chat">
-    {!open && <button className="chat-launch" onClick={() => setOpen(true)}>💬 Conversar com a loja</button>}
+  return <div className={`customer-chat${raised ? ' raised' : ''}`} style={accent ? ({ '--chat-accent': accent } as React.CSSProperties) : undefined}>
+    {!open && <button className="chat-launch" onClick={() => setOpen(true)}><MessageCircle size={18} aria-hidden="true" /> Conversar com a loja</button>}
     {open && <section className="chat-window" aria-label="Atendimento da loja">
       <header><div><strong>Atendimento da loja</strong><small>{conversation?.mode === 'human' ? 'Equipe • aguardando ou em atendimento' : conversation?.mode === 'closed' ? 'Conversa encerrada' : 'Assistente virtual'}</small></div><button aria-label="Fechar chat" onClick={() => setOpen(false)}>×</button></header>
       <div className="chat-transcript" role="log" aria-live="polite">
