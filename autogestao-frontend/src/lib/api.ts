@@ -89,10 +89,11 @@ export interface Vehicle {
   description: string | null; optionals: string[];
   createdById: string | null; createdAt: string; updatedAt: string;
   photos?: VehiclePhoto[];
+  unitId?: string | null; unit?: { id: string; name: string } | null;
 }
 
 export interface VehicleListResponse { items: Vehicle[]; total: number; page: number; pageSize: number; }
-export interface VehicleListParams { search?: string; status?: VehicleStatus | "all"; type?: VehicleType | "all"; page?: number; pageSize?: number; }
+export interface VehicleListParams { search?: string; status?: VehicleStatus | "all"; type?: VehicleType | "all"; unitId?: string | "none"; page?: number; pageSize?: number; }
 
 export interface VehicleInput {
   type: VehicleType; category?: string | null; status?: VehicleStatus;
@@ -107,6 +108,7 @@ export interface VehicleInput {
   docStatus?: import("./vehicle-doc-status").DocStatus | null;
   cost: number; price: number;
   description?: string | null; optionals?: string[];
+  unitId?: string | null;
 }
 
 export function listVehicles(params: VehicleListParams = {}) {
@@ -114,11 +116,19 @@ export function listVehicles(params: VehicleListParams = {}) {
   if (params.search) query.set("search", params.search);
   if (params.status && params.status !== "all") query.set("status", params.status);
   if (params.type && params.type !== "all") query.set("type", params.type);
+  if (params.unitId) query.set("unitId", params.unitId);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 50));
   return request<VehicleListResponse>(`/vehicles?${query.toString()}`);
 }
 export function getVehicle(id: string) { return request<Vehicle>(`/vehicles/${id}`); }
+
+// Filiais da revenda
+export interface StoreUnit { id: string; name: string; address: string | null; available: number; availableValue: number; }
+export function listUnits() { return request<StoreUnit[]>("/units"); }
+export function createUnit(input: { name: string; address?: string }) { return request<StoreUnit>("/units", { method: "POST", body: input }); }
+export function updateUnit(id: string, input: { name?: string; address?: string }) { return request<StoreUnit>(`/units/${id}`, { method: "PATCH", body: input }); }
+export function deleteUnit(id: string) { return request<{ success: boolean }>(`/units/${id}`, { method: "DELETE" }); }
 export function createVehicle(input: VehicleInput) { return request<Vehicle>("/vehicles", { method: "POST", body: input }); }
 export function updateVehicle(id: string, input: Partial<VehicleInput>) { return request<Vehicle>(`/vehicles/${id}`, { method: "PATCH", body: input }); }
 export function deleteVehicle(id: string) { return request<{ success: boolean }>(`/vehicles/${id}`, { method: "DELETE" }); }

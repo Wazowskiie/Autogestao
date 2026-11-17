@@ -1,10 +1,7 @@
 import { DOC_ITEMS, docProblems, type DocItem, type DocItemStatus, type DocKey, type DocStatus } from "../../lib/vehicle-doc-status";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Search, Car, Bike, Truck, Package, Edit2, Trash2, Globe, X, Loader2, CheckCircle2, AlertTriangle, Receipt, Bookmark } from "lucide-react";
-import { ReservationModal } from "./ReservationModal";
-import { useAuth } from "../../lib/auth-context";
-import { StatusBadge } from "./StatusBadge";
-import { VehicleDetailsModal, type VehicleDetails } from "./VehicleDetailsModal";
+import { Plus, Search, Car, Bike, Truck, Package, Trash2, X, Loader2, CheckCircle2, AlertTriangle, Receipt } from "lucide-react";
+import { InventoryBoard } from "./InventoryBoard";
 import * as api from "../../lib/api";
 import * as dv from "../../lib/vehicle-details-api";
 
@@ -16,7 +13,6 @@ const TYPE_OPTIONS = [
   { value: "other" as const, label: "Outros", icon: Package },
 ];
 
-const TYPE_ICON: Record<api.VehicleType, typeof Car> = { car: Car, moto: Bike, truck: Truck, other: Package };
 
 // Subtipos de "Outros"
 const OTHER_CATEGORIES = ["Bicicleta elétrica", "Bicicleta", "Patinete elétrico", "Scooter elétrica", "Triciclo", "Quadriciclo", "Outro"];
@@ -59,15 +55,6 @@ const TRANSMISSIONS_BY_TYPE: Record<api.VehicleType, string[]> = {
 };
 
 const ORIGINS = ["Nacional", "Importado"];
-
-function daysInStock(createdAt: string) {
-  return Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000));
-}
-
-function margin(cost: number, price: number) {
-  if (!cost) return 0;
-  return ((price - cost) / cost) * 100;
-}
 
 function currency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -121,202 +108,9 @@ function parseBRL(value: string) {
   return Number(s);
 }
 
+// Tela do Estoque: ver InventoryBoard (visual do catálogo); o cadastro continua aqui embaixo
 export function Inventory() {
-  const [vehicles, setVehicles] = useState<api.Vehicle[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<api.VehicleStatus | "all">("all");
-  const [typeFilter, setTypeFilter] = useState<api.VehicleType | "all">("all");
-  const [modalVehicle, setModalVehicle] = useState<api.Vehicle | "new" | null>(null);
-  // Veículo aberto no painel "Dados do veículo"
-  const [details, setDetails] = useState<api.Vehicle | null>(null);
-  const [reserving, setReserving] = useState<api.Vehicle | null>(null);
-  const auth = useAuth();
-  const canManage = auth.user?.role === "owner" || auth.user?.role === "admin";
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  const fetchVehicles = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await api.listVehicles({ search: debouncedSearch || undefined, status: statusFilter, type: typeFilter, pageSize: 100 });
-      setVehicles(res.items);
-      setTotal(res.total);
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Não foi possível carregar os veículos");
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedSearch, statusFilter, typeFilter]);
-
-  useEffect(() => { fetchVehicles(); }, [fetchVehicles]);
-
-  const handleDelete = async (vehicle: api.Vehicle) => {
-    if (!window.confirm(`Remover ${vehicle.brand} ${vehicle.model} do estoque?`)) return;
-    try {
-      await api.deleteVehicle(vehicle.id);
-      fetchVehicles();
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Não foi possível remover o veículo");
-    }
-  };
-
-  return (
-    <div className="flex flex-col h-full overflow-auto" style={{ background: "var(--background)" }}>
-      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
-        style={{ background: "#fff", borderBottom: "0.5px solid rgba(0,0,0,0.08)" }}>
-        <div className="flex items-center gap-3">
-          <h2>Estoque</h2>
-          <span className="px-2 py-0.5 rounded-full" style={{ background: "#EBF2FA", color: "#185FA5", fontSize: 12, fontWeight: 500 }}>
-            {total} veículos
-          </span>
-        </div>
-        <button onClick={() => setModalVehicle("new")} className="flex items-center gap-2 px-4 py-2 rounded-lg"
-          style={{ background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500 }}>
-          <Plus size={16} /> Adicionar veículo
-        </button>
-      </div>
-
-      <div className="flex items-center gap-3 px-6 py-3 flex-wrap" style={{ borderBottom: "0.5px solid rgba(0,0,0,0.08)", background: "#fff" }}>
-        <div className="flex items-center gap-2 rounded-lg px-3 py-2 flex-1 min-w-48" style={{ background: "#F4F6F9", border: "0.5px solid rgba(0,0,0,0.08)" }}>
-          <Search size={15} style={{ color: "#9CA3AF" }} />
-          <input placeholder="Buscar por marca, modelo ou placa..." value={search} onChange={(e) => setSearch(e.target.value)}
-            style={{ border: "none", outline: "none", fontSize: 13, background: "transparent", width: "100%" }} />
-        </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as api.VehicleStatus | "all")}
-          className="rounded-lg px-3 py-2" style={{ background: "#F4F6F9", border: "0.5px solid rgba(0,0,0,0.08)", fontSize: 13 }}>
-          <option value="all">Todos os status</option>
-          <option value="available">Disponível</option>
-          <option value="reserved">Reservado</option>
-          <option value="sold">Vendido</option>
-        </select>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as api.VehicleType | "all")}
-          className="rounded-lg px-3 py-2" style={{ background: "#F4F6F9", border: "0.5px solid rgba(0,0,0,0.08)", fontSize: 13 }}>
-          <option value="all">Todos os tipos</option>
-          <option value="car">Carros</option>
-          <option value="moto">Motos</option>
-          <option value="truck">Utilitários</option>
-          <option value="other">Outros</option>
-        </select>
-      </div>
-
-      {loadError && (
-        <div className="px-6 pt-4">
-          <div className="flex items-center justify-between rounded-lg px-4 py-3" style={{ background: "#FEE2E2", color: "#991B1B", fontSize: 13 }}>
-            <span>{loadError}</span>
-            <button onClick={fetchVehicles} style={{ fontWeight: 500 }}>Tentar novamente</button>
-          </div>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-auto px-6 py-4">
-        <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid rgba(0,0,0,0.08)", overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: "#FAFAFA", borderBottom: "0.5px solid rgba(0,0,0,0.08)" }}>
-                {["Veículo", "Placa", "Cor", "Câmbio", "Km", "Custo", "Venda", "Margem", "Status", "Dias", "Ações"].map((h) => (
-                  <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, color: "#6B7280", fontWeight: 500, whiteSpace: "nowrap" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {!loading && vehicles.length === 0 && (
-                <tr><td colSpan={11} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: "#9CA3AF" }}>Nenhum veículo encontrado.</td></tr>
-              )}
-              {vehicles.map((v, i) => {
-                const TypeIcon = TYPE_ICON[v.type] ?? Car;
-                const m = margin(Number(v.cost), Number(v.price));
-                // Foto de capa (a primeira), se o veículo tiver fotos
-                const photos = (v as unknown as { photos?: { url: string; order: number }[] }).photos ?? [];
-                const cover = [...photos].sort((a, b) => a.order - b.order)[0];
-                const subtitle = [
-                  v.type === "other" ? v.category : null,
-                  v.manufactureYear && v.manufactureYear !== v.year ? `${v.manufactureYear}/${v.year}` : String(v.year),
-                  v.engineCc ? `${v.engineCc} cc` : null,
-                  v.fuel,
-                ].filter(Boolean).join(" · ");
-                return (
-                  <tr key={v.id} onClick={() => setDetails(v)} className="hover:bg-gray-50"
-                    style={{ cursor: "pointer", borderBottom: i < vehicles.length - 1 ? "0.5px solid rgba(0,0,0,0.06)" : "none" }}>
-                    <td style={{ padding: "12px 16px" }}>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center rounded-lg flex-shrink-0 overflow-hidden" style={{ width: 44, height: 36, background: "#F4F6F9" }}>
-                          {cover ? (
-                            <img src={cover.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          ) : (
-                            <TypeIcon size={16} style={{ color: "#CBD5E1" }} />
-                          )}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 500 }}>{v.brand} {v.model} {v.version ?? ""}</div>
-                          <div style={{ fontSize: 12, color: "#6B7280" }}>{subtitle}</div>
-                          {docProblems(v.docStatus).length > 0 && (
-                            <div className="flex flex-wrap gap-1" style={{ marginTop: 3 }}>
-                              {docProblems(v.docStatus).map((p) => (
-                                <span key={p} className="px-1.5 py-0.5 rounded" style={{ fontSize: 10, fontWeight: 600, background: "#FEE2E2", color: "#B91C1C" }}>⚠ {p}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{v.plate ?? "—"}</td>
-                    <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{v.color ?? "—"}</td>
-                    <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{v.transmission ?? "—"}</td>
-                    <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{v.type === "other" ? "—" : `${v.km.toLocaleString("pt-BR")} km`}</td>
-                    <td style={{ padding: "12px 16px", fontSize: 13, color: "#6B7280" }}>{currency(Number(v.cost))}</td>
-                    <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 500 }}>{currency(Number(v.price))}</td>
-                    <td style={{ padding: "12px 16px" }}>
-                      <span style={{ fontSize: 13, color: m > 30 ? "#27500A" : m > 20 ? "#374151" : "#DC2626", fontWeight: 500 }}>{m.toFixed(1)}%</span>
-                    </td>
-                    <td style={{ padding: "12px 16px" }}><StatusBadge status={v.status} /></td>
-                    <td style={{ padding: "12px 16px" }}>
-                      <span style={{ fontSize: 13, color: daysInStock(v.createdAt) > 30 ? "#D97706" : "#374151" }}>{daysInStock(v.createdAt)}d</span>
-                    </td>
-                    <td style={{ padding: "12px 16px" }}>
-                      <div className="flex items-center gap-2">
-                        {v.status !== "sold" && (
-                          <button title={v.status === "reserved" ? "Ver reserva" : "Reservar (sinal)"} onClick={(e) => { e.stopPropagation(); setReserving(v); }} className="p-1.5 rounded"
-                            style={{ color: v.status === "reserved" ? "#fff" : "#7C3AED", background: v.status === "reserved" ? "#7C3AED" : "#F3E8FF" }}><Bookmark size={13} /></button>
-                        )}
-                        <button title="Editar" onClick={(e) => { e.stopPropagation(); setModalVehicle(v); }} className="p-1.5 rounded" style={{ color: "#6B7280", background: "#F4F6F9" }}><Edit2 size={13} /></button>
-                        <button title="Publicar no site" onClick={(e) => e.stopPropagation()} className="p-1.5 rounded" style={{ color: "#185FA5", background: "#EBF2FA" }}><Globe size={13} /></button>
-                        <button title="Excluir" onClick={(e) => { e.stopPropagation(); handleDelete(v); }} className="p-1.5 rounded" style={{ color: "#DC2626", background: "#FEE2E2" }}><Trash2 size={13} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <VehicleDetailsModal
-        vehicle={details as unknown as VehicleDetails | null}
-        onClose={() => setDetails(null)}
-        onChanged={fetchVehicles}
-        onEdit={(v) => { setDetails(null); setModalVehicle(v as unknown as api.Vehicle); }} />
-
-      {modalVehicle !== null && (
-        <VehicleFormModal key={modalVehicle === "new" ? "new" : modalVehicle.id}
-          initial={modalVehicle === "new" ? null : modalVehicle}
-          onClose={() => setModalVehicle(null)}
-          onSaved={() => { setModalVehicle(null); fetchVehicles(); }} />
-      )}
-      {reserving && (
-        <ReservationModal vehicle={reserving} canManage={canManage} onClose={() => setReserving(null)}
-          onChanged={() => { setReserving(null); fetchVehicles(); }} />
-      )}
-    </div>
-  );
+  return <InventoryBoard FormModal={VehicleFormModal} />;
 }
 
 function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
@@ -592,6 +386,10 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
   const [type, setType] = useState<api.VehicleType>(initial?.type ?? "car");
   const [category, setCategory] = useState(initial?.category ?? "");
   const [status, setStatus] = useState<api.VehicleStatus>(initial?.status ?? "available");
+  // Filial (só aparece se a loja tiver filiais cadastradas)
+  const [unitId, setUnitId] = useState(initial?.unitId ?? "");
+  const [units, setUnits] = useState<api.StoreUnit[]>([]);
+  useEffect(() => { api.listUnits().then(setUnits).catch(() => setUnits([])); }, []);
 
   // Identificação
   const [plate, setPlate] = useState(initial?.plate ?? "");
@@ -831,6 +629,7 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
         cost: costNum, price: priceNum,
         description: description.trim() || null,
         optionals: selectedOptionals.filter((o) => optionalsList.includes(o)),
+        ...(units.length || initial?.unitId ? { unitId: unitId || null } : {}),
       };
       // Se o veículo já foi criado numa tentativa anterior, só atualiza (não duplica)
       let vehicleId = savedId;
@@ -974,6 +773,15 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
                 </div>
               )}
             </div>
+          )}
+
+          {units.length > 0 && (
+            <Field label="Filial">
+              <select value={unitId} onChange={(e) => setUnitId(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={selectStyle}>
+                <option value="">Sem filial</option>
+                {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </Field>
           )}
 
           {/* Status (edição) */}

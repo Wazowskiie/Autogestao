@@ -55,4 +55,7 @@ export class CreateVehicleDto {
 
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString({ each: true }) optionals?: string[];
+
+  // Filial onde o veículo está (vazio = sem filial)
+  @IsOptional() @IsString() unitId?: string | null;
 }

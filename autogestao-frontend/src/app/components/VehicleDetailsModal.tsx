@@ -361,6 +361,7 @@ function VehicleTab({ v }: { v: VehicleFull }) {
       ["Última alteração", v.updatedAt ? dateBR(v.updatedAt) : ""],
       ["Tipo", v.type === "other" && v.category ? `Outros · ${v.category}` : TYPE_LABEL[v.type]],
       ["Status", STATUS_LABEL[v.status]?.text],
+      ...((v as { unit?: { name: string } | null }).unit ? [["Filial", (v as { unit?: { name: string } | null }).unit!.name] as [string, ReactNode]] : []),
     ] },
     { title: "Identificação", rows: [
       ["Marca", v.brand], ["Modelo", v.model], ["Versão", v.version],

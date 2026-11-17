@@ -15,6 +15,11 @@ export class QueryVehicleDto {
   @IsEnum(VehicleType)
   type?: VehicleType;
 
+  // id da filial, ou "none" para os veículos sem filial
+  @IsOptional()
+  @IsString()
+  unitId?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

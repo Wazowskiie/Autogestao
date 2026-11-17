@@ -25,8 +25,18 @@ function normalizePlate(plate?: string | null) {
 export class VehiclesService {
   constructor(private readonly prisma: PrismaService, @Optional() private readonly plans?: PlansService) {}
 
+  /** Filial informada precisa ser desta revenda; "" ou null = sem filial */
+  private async resolveUnit(dealershipId: string, unitId: string | null | undefined) {
+    if (unitId === undefined) return undefined;
+    if (!unitId) return null;
+    const unit = await this.prisma.storeUnit.findFirst({ where: { id: unitId, dealershipId }, select: { id: true } });
+    if (!unit) throw new BadRequestException('Filial não encontrada');
+    return unit.id;
+  }
+
   async create(dealershipId: string, userId: string, dto: CreateVehicleDto) {
     await this.assertWithinPlanLimit(dealershipId);
+    const unitId = await this.resolveUnit(dealershipId, dto.unitId);
 
     const type = dto.type ?? 'car';
 
@@ -70,6 +80,7 @@ export class VehiclesService {
         price: dto.price,
         description: dto.description ?? null,
         optionals: dto.optionals ?? [],
+        unitId: unitId ?? null,
       },
     });
     // Lista de desejos do CRM: avisa quem procurava um veículo assim
@@ -85,6 +96,7 @@ export class VehiclesService {
       dealershipId,
       ...(query.status ? { status: query.status } : {}),
       ...(query.type ? { type: query.type } : {}),
+      ...(query.unitId ? { unitId: query.unitId === 'none' ? null : query.unitId } : {}),
       ...(query.search
         ? {
             OR: [
@@ -100,7 +112,7 @@ export class VehiclesService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.vehicle.findMany({
         where,
-        include: { photos: true },
+        include: { photos: true, unit: { select: { id: true, name: true } } },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -120,6 +132,7 @@ export class VehiclesService {
       where: { id, dealershipId },
       include: {
         photos: true,
+        unit: { select: { id: true, name: true } },
         // Venda ativa (para os impressos de saída no "Dados do veículo")
         sales: { where: { status: 'active' }, select: { id: true, contractNumber: true }, orderBy: { soldAt: 'desc' }, take: 1 },
       },
@@ -135,8 +148,10 @@ export class VehiclesService {
   async update(dealershipId: string, id: string, dto: UpdateVehicleDto) {
     await this.findOne(dealershipId, id);
 
-    const { docStatus, ...rest } = dto;
+    const { docStatus, unitId: rawUnitId, ...rest } = dto;
     const data: Prisma.VehicleUpdateInput = { ...rest } as Prisma.VehicleUpdateInput;
+    const unitId = await this.resolveUnit(dealershipId, rawUnitId);
+    if (unitId !== undefined) data.unit = unitId ? { connect: { id: unitId } } : { disconnect: true };
     const doc = sanitizeDocStatus(docStatus);
     if (doc !== undefined) data.docStatus = doc === null ? Prisma.DbNull : (doc as Prisma.InputJsonValue);
     if (dto.plate !== undefined) data.plate = normalizePlate(dto.plate);

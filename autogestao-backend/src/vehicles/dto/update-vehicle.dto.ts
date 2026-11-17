@@ -44,4 +44,7 @@ export class UpdateVehicleDto {
 
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString({ each: true }) optionals?: string[];
+
+  // Filial onde o veículo está; "" ou null tira da filial
+  @IsOptional() @IsString() unitId?: string | null;
 }

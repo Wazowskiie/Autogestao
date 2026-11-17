@@ -85,6 +85,7 @@ model Dealership {
 
   users         User[]
   vehicles      Vehicle[]
+  units         StoreUnit[]
   customers     Customer[]
   leads         Lead[]
   sales         Sale[]
@@ -184,6 +185,8 @@ model Vehicle {
   optionals       String[]      @default([])
   createdById     String?       @map("created_by_id")
   tradeInSaleId   String?       @map("trade_in_sale_id")
+  // Filial onde o veículo está (opcional)
+  unitId          String?       @map("unit_id")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
   financialTransactions FinancialTransaction[]
@@ -206,9 +209,27 @@ model Vehicle {
   sales        Sale[]        @relation("SaleVehicle")
   reservations VehicleReservation[]
   tradeInSale  Sale?         @relation("SaleTradeIns", fields: [tradeInSaleId], references: [id], onDelete: SetNull)
+  unit         StoreUnit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
   @@index([dealershipId, status])
+  @@index([unitId])
   @@map("vehicles")
+}
+
+// Filiais da revenda (ex.: "Loja Centro", "Loja Zona Sul")
+model StoreUnit {
+  id           String   @id @default(uuid())
+  dealershipId String   @map("dealership_id")
+  name         String
+  address      String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  dealership Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  vehicles   Vehicle[]
+
+  @@unique([dealershipId, name])
+  @@map("store_units")
 }
 
 model VehiclePhoto {
