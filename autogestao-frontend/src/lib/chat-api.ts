@@ -1,5 +1,5 @@
 import { request } from './api';
-export interface ChatMessage { id: string; role: 'user' | 'assistant' | 'agent' | 'system'; content: string; createdAt: string; clientMessageId: string | null; }
+export interface ChatMessage { id: string; role: 'user' | 'assistant' | 'agent' | 'system'; content: string; createdAt: string; clientMessageId: string | null; authorName?: string | null; }
 export interface Conversation { id: string; mode: 'bot' | 'human' | 'closed'; updatedAt: string; messages: ChatMessage[]; leadId?: string | null; customer?: { name: string; phone: string | null } | null; assignedUser?: { id: string; name: string } | null; }
 export interface ConversationList { items: Conversation[]; total: number; page: number; pageSize: number; }
 const URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';

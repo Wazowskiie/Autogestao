@@ -74,7 +74,7 @@ export function CustomerChat({ slug, vehicles, accent, raised }: { slug: string;
     {open && <section className="chat-window" aria-label="Atendimento da loja">
       <header><div><strong>Atendimento da loja</strong><small>{conversation?.mode === 'human' ? 'Equipe • aguardando ou em atendimento' : conversation?.mode === 'closed' ? 'Conversa encerrada' : 'Assistente virtual'}</small></div><button aria-label="Fechar chat" onClick={() => setOpen(false)}>×</button></header>
       <div className="chat-transcript" role="log" aria-live="polite">
-        {conversation?.messages.map(m => <div key={m.id} className={`chat-bubble ${m.role}`}><small>{m.role === 'user' ? 'Você' : m.role === 'agent' ? 'Vendedor' : m.role === 'assistant' ? 'Assistente virtual' : ''}</small><div>{m.content}</div></div>)}
+        {conversation?.messages.map(m => <div key={m.id} className={`chat-bubble ${m.role}`}><small>{m.role === 'user' ? 'Você' : m.role === 'agent' ? (m.authorName ? `${m.authorName.trim().split(/\s+/)[0]} · Vendedor` : 'Vendedor') : m.role === 'assistant' ? 'Assistente virtual' : ''}</small><div>{m.content}</div></div>)}
         {busy && <p className="chat-note">Aguarde…</p>}<div ref={end} />
       </div>
       {error && <p className="chat-error" role="alert">{error}</p>}

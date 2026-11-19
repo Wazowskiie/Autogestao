@@ -84,3 +84,14 @@ test('Aviso no WhatsApp: só com conta conectada e modelo; vai para cada vendedo
   assert.equal(waNumber('(85) 98888-7777'), '5585988887777'); assert.equal(waNumber('123'), null);
   assert.equal(templateParam('a\n\nb     c'), 'a b   c');
 });
+
+test('Mensagem do vendedor leva o nome dele', async () => {
+  const s = await service.start('loja-fila');
+  await service.handover('loja-fila', s.token);
+  await service.setMode(shop.id, s.conversation.id, 'human', v1.id, seller(v1));
+  const d = await service.agentReply(shop.id, s.conversation.id, v1.id, { content: 'Boa tarde!', clientMessageId: require('node:crypto').randomUUID() }, seller(v1));
+  assert.equal(d.messages.find((m) => m.role === 'agent').authorName, 'Ana');
+  const pub = await service.read('loja-fila', s.token);
+  assert.equal(pub.messages.find((m) => m.role === 'agent').authorName, 'Ana');
+  assert(pub.messages.some((m) => m.role === 'system' && m.content.startsWith('Ana assumiu o atendimento')));
+});
