@@ -8,7 +8,16 @@ export interface StoreInfo {
   logoUrl: string | null; coverUrl: string | null; primaryColor: string | null;
   street: string | null; number: string | null; district: string | null; zip: string | null;
   minDownPaymentPercent: number | null;
+  /** Comissão igual para todos os vendedores (null = cada vendedor tem a sua) */
+  commissionRules?: CommissionRules | null;
   socialLinks?: SocialLinks;
+}
+/** Promissória: entrada a partir de promissoryHighMinDown% paga promissoryHigh; abaixo, promissoryLow */
+export interface CommissionRules { cash: number; financing: number; promissoryHigh: number; promissoryHighMinDown: number; promissoryLow: number }
+export function commissionRateByRules(r: CommissionRules, kind: "financing" | "promissory" | "cash", downPercent: number) {
+  if (kind === "financing") return r.financing;
+  if (kind === "promissory") return downPercent + 1e-9 >= r.promissoryHighMinDown ? r.promissoryHigh : r.promissoryLow;
+  return r.cash;
 }
 export interface SocialLinks { whatsapp?: string | null; instagram?: string | null; facebook?: string | null; tiktok?: string | null; youtube?: string | null; website?: string | null }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Search, Plus, Trophy, TrendingUp, DollarSign, X, User, Mail, Lock, Phone, Briefcase, Percent, Eye, EyeOff, ChevronDown, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import * as api from "../../lib/api";
+import { getSettings, type CommissionRules } from "../../lib/settings-api";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -328,6 +329,9 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
   const [commissionRate, setCommissionRate] = useState(String(seller?.commissionRate ?? 3));
   const [ratePromissory, setRatePromissory] = useState(String(seller?.commissionRatePromissory ?? seller?.commissionRate ?? 3));
   const [rateFinancing, setRateFinancing] = useState(String(seller?.commissionRateFinancing ?? seller?.commissionRate ?? 3));
+  // Se a loja definiu a comissão para todos (Configurações), o cadastro do vendedor só mostra a regra
+  const [shopCommission, setShopCommission] = useState<CommissionRules | null>(null);
+  useEffect(() => { getSettings().then((d) => setShopCommission(d.dealership.commissionRules ?? null)).catch(() => {}); }, []);
   const [cpf, setCpf] = useState(seller?.cpf ? formatCpf(seller.cpf) : "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -484,6 +488,12 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
               {errors.cpf && <p style={{ fontSize: 11, color: "#DC2626", marginTop: 4 }}>{errors.cpf}</p>}
             </div>
 
+            {shopCommission ? (
+              <div className="col-span-2 rounded-lg px-3 py-2.5" style={{ background: "#F5F9FD", border: "1px solid #DCE7F3", fontSize: 13, color: "#374151" }}>
+                <b>Comissão da loja (vale para todos):</b> à vista {shopCommission.cash}% · financiada {shopCommission.financing}% · promissória {shopCommission.promissoryHigh}% com entrada a partir de {shopCommission.promissoryHighMinDown}%, senão {shopCommission.promissoryLow}%.
+                <span style={{ display: "block", fontSize: 11, color: "#6B7280", marginTop: 2 }}>Para mudar, vá em Configurações → Promissórias e comissão.</span>
+              </div>
+            ) : (
             <div className="col-span-2">
               <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Comissão por venda (%)</label>
               <div className="grid grid-cols-3 gap-3">
@@ -507,6 +517,7 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
                 Venda com financiamento ou consórcio usa a de financiada; com promissórias, a de promissórias; o resto (dinheiro, PIX, cartão), a à vista.
               </p>
             </div>
+            )}
 
             <div className="col-span-2 sm:col-span-1">
               <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>

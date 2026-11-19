@@ -110,7 +110,7 @@ export function Settings({ onNavigate }: { onNavigate?: (page: string) => void }
 
   const tabs: { id: Tab; label: string; icon: typeof Store; managerOnly?: boolean }[] = [
     { id: "loja", label: "Loja", icon: Store, managerOnly: true },
-    { id: "juros", label: "Juros das promissórias", icon: Percent },
+    { id: "juros", label: "Promissórias e comissão", icon: Percent },
     { id: "fiscal", label: "Nota fiscal", icon: FileText, managerOnly: true },
     { id: "integracoes", label: "Integrações", icon: Plug, managerOnly: true },
     { id: "usuarios", label: "Usuários", icon: Users, managerOnly: true },
@@ -431,6 +431,7 @@ function InterestTab({ canEdit, store, onSaved }: { canEdit: boolean; store: s.S
     <div className="flex flex-col gap-4">
       {n.el}
       <MinDownPaymentCard canEdit={canEdit} store={store} onSaved={onSaved} />
+      <CommissionRulesCard canEdit={canEdit} store={store} onSaved={onSaved} />
       <div style={card}>
         <SectionTitle title="Juros das promissórias"
           subtitle="O juro é aplicado sobre o valor parcelado: total = valor × (1 + juros). O vendedor vê essa tabela na hora da venda." />
@@ -896,6 +897,62 @@ function UsersTab({ me, onNavigate }: { me: s.SettingsData["me"]; onNavigate?: (
           {" "}Usuários desativados não contam no limite do plano.
         </p>
       </div>
+    </div>
+  );
+}
+
+// Comissão igual para todos os vendedores
+function CommissionRulesCard({ canEdit, store, onSaved }: { canEdit: boolean; store: s.StoreInfo; onSaved: (d: s.SettingsData) => void }) {
+  const r = store.commissionRules;
+  const txt = (v?: number) => (v != null ? String(v).replace(".", ",") : "");
+  const [f, setF] = useState({ cash: txt(r?.cash), financing: txt(r?.financing), promissoryHigh: txt(r?.promissoryHigh), promissoryHighMinDown: txt(r?.promissoryHighMinDown ?? 65), promissoryLow: txt(r?.promissoryLow) });
+  const [saving, setSaving] = useState(false);
+  const n = useNotice();
+  const minDown = store.minDownPaymentPercent;
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value.replace(/[^\d,.]/g, "") });
+  const pctInput = (k: keyof typeof f, w = 80) => (
+    <span className="inline-flex items-center gap-1">
+      <input style={{ ...inputStyle, width: w, textAlign: "right" }} inputMode="decimal" disabled={!canEdit} value={f[k]} onChange={set(k)} placeholder="0" />
+      <span style={{ color: "#6B7280" }}>%</span>
+    </span>
+  );
+  const save = async (off = false) => {
+    let rules: s.CommissionRules | null = null;
+    if (!off) {
+      const v = Object.fromEntries(Object.entries(f).map(([k, x]) => [k, Number(x.replace(",", "."))])) as unknown as s.CommissionRules;
+      if (Object.entries(f).some(([, x]) => !x.trim()) || Object.values(v).some((x) => !Number.isFinite(x) || x < 0 || x > 100)) return n.show("error", "Preencha todas as porcentagens (de 0 a 100).");
+      rules = v;
+    }
+    setSaving(true);
+    try { onSaved(await s.updateStore({ commissionRules: rules })); n.show("ok", off ? "Cada vendedor volta a usar a comissão do próprio cadastro." : "Comissão da loja salva. Vale para as próximas vendas."); }
+    catch (e) { n.show("error", msg(e)); } finally { setSaving(false); }
+  };
+  const row = (label: React.ReactNode, input: React.ReactNode) => (
+    <div className="flex items-center justify-between gap-3 py-2" style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+      <span style={{ fontSize: 14, color: "#374151" }}>{label}</span>{input}
+    </div>
+  );
+  return (
+    <div style={card}>
+      <SectionTitle title="Comissão dos vendedores"
+        subtitle="Igual para todos os vendedores, calculada sobre o valor da venda conforme a forma de pagamento. Vale para as vendas registradas daqui em diante." />
+      {n.el && <div style={{ marginBottom: 12 }}>{n.el}</div>}
+      <div style={{ maxWidth: 560 }}>
+        {row("À vista (dinheiro, PIX, cartão, transferência)", pctInput("cash"))}
+        {row("Financiada ou consórcio", pctInput("financing"))}
+        {row(<>Promissória com entrada a partir de {pctInput("promissoryHighMinDown", 64)}</>, pctInput("promissoryHigh"))}
+        {row(<>Promissória com entrada menor{minDown ? ` (mínimo da loja: ${String(minDown).replace(".", ",")}%)` : ""}</>, pctInput("promissoryLow"))}
+      </div>
+      <p style={{ fontSize: 12, color: "#6B7280", marginTop: 8 }}>
+        Entrada = tudo que o cliente paga fora das promissórias (dinheiro, PIX, cartão, troca). Se a venda tiver financiamento, vale a comissão de financiada.
+        {!minDown && " Para bloquear vendas com entrada muito baixa, defina a Entrada mínima acima."}
+      </p>
+      {canEdit && (
+        <div className="flex gap-2 mt-3">
+          <button onClick={() => save()} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>{saving ? "Salvando..." : "Salvar comissão"}</button>
+          {r && <button onClick={() => save(true)} disabled={saving} style={ghostBtn}>Usar a comissão de cada vendedor</button>}
+        </div>
+      )}
     </div>
   );
 }

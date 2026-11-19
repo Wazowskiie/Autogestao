@@ -1,7 +1,16 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, IsObject } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength, IsObject, ValidateNested } from 'class-validator';
 
 const trim = () => Transform(({ value }) => (typeof value === 'string' ? value.trim() : value));
+
+// ---------- Comissão da loja (todos os vendedores) ----------
+export class CommissionRulesDto {
+  @IsNumber({}, { message: 'À vista: porcentagem inválida' }) @Min(0) @Max(100) @Type(() => Number) cash: number;
+  @IsNumber({}, { message: 'Financiada: porcentagem inválida' }) @Min(0) @Max(100) @Type(() => Number) financing: number;
+  @IsNumber({}, { message: 'Promissória (entrada maior): porcentagem inválida' }) @Min(0) @Max(100) @Type(() => Number) promissoryHigh: number;
+  @IsNumber({}, { message: 'Entrada da faixa maior inválida' }) @Min(0) @Max(100) @Type(() => Number) promissoryHighMinDown: number;
+  @IsNumber({}, { message: 'Promissória (entrada menor): porcentagem inválida' }) @Min(0) @Max(100) @Type(() => Number) promissoryLow: number;
+}
 
 // ---------- Dados da loja ----------
 export class UpdateDealershipDto {
@@ -22,6 +31,8 @@ export class UpdateDealershipDto {
   @IsOptional() @trim() @IsString() @MaxLength(10) zip?: string;
   // Entrada mínima nas promissórias (%); null remove o mínimo
   @IsOptional() @IsNumber({}, { message: 'Entrada mínima inválida' }) @Min(0) @Max(100, { message: 'A entrada mínima vai até 100%' }) @Type(() => Number) minDownPaymentPercent?: number | null;
+  // Comissão igual para todos os vendedores; null volta a usar a do cadastro de cada vendedor
+  @IsOptional() @ValidateNested() @Type(() => CommissionRulesDto) commissionRules?: CommissionRulesDto | null;
 }
 
 // ---------- Minha conta ----------
