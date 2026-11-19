@@ -1,5 +1,6 @@
 import { DOC_ITEMS, docItemText } from "../../lib/vehicle-doc-status";
 import { SalePrintsPanel } from "./SalePrintsPanel";
+import { openPurchaseContract, purchaseContractUnavailable, type PrintFormat } from "../../lib/sale-documents";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   X, Pencil, ImageOff, Car, Bike, Truck, Package, Upload, Trash2, Star, ChevronDown, ChevronRight,
@@ -1027,6 +1028,50 @@ function WebTab({ v }: { v: VehicleFull }) {
 // =====================================================================
 // Aba Entrada
 // =====================================================================
+/** Contrato de compra: registra que a loja comprou o veículo do fornecedor */
+function PurchaseContractBar({ v, a }: { v: VehicleFull; a: dv.Acquisition }) {
+  const [busy, setBusy] = useState<PrintFormat | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const reason = purchaseContractUnavailable({
+    ownershipType: a.ownershipType, purchaseValue: Number(a.purchaseValue), supplierName: a.supplierName ?? "",
+  });
+  const run = async (format: PrintFormat) => {
+    setError(null); setBusy(format);
+    try { await openPurchaseContract(v.id, format); }
+    catch (e) { setError(e instanceof Error ? e.message : "Erro ao gerar o contrato"); }
+    finally { setBusy(null); }
+  };
+  const formats: { id: PrintFormat; label: string; hint: string }[] = [
+    { id: "html", label: "Abrir", hint: "Abrir numa aba nova" },
+    { id: "pdf", label: "PDF", hint: "Abre já na tela de imprimir. Escolha \"Salvar como PDF\" no destino." },
+    { id: "doc", label: "Word", hint: "Baixar arquivo para editar no Word" },
+  ];
+  return (
+    <div style={{ border: "1px solid #DCE7F3", background: "#F5F9FD", borderRadius: 10, padding: "12px 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <FileText size={18} style={{ color: "#185FA5", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>Contrato de compra</div>
+          <div style={{ fontSize: 12, color: reason ? "#B45309" : "#6B7280" }}>
+            {reason ?? "Registra que a loja comprou este veículo do fornecedor. Imprima e colha as assinaturas."}
+          </div>
+        </div>
+        {!reason && (
+          <div style={{ display: "flex", gap: 6 }}>
+            {formats.map((f) => (
+              <button key={f.id} title={f.hint} disabled={!!busy} onClick={() => run(f.id)}
+                style={{ padding: "6px 12px", borderRadius: 7, border: "1px solid #B9D3EE", background: "#fff", color: "#185FA5", fontSize: 13, fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {busy === f.id ? <Loader2 size={13} className="animate-spin" /> : null}{f.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {error && <p style={{ fontSize: 12, color: "#DC2626", marginTop: 8 }}>{error}</p>}
+    </div>
+  );
+}
+
 function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
   const load = useCallback(() => dv.getAcquisition(v.id), [v.id]);
   const { data, setData, error, loading } = useTabData(load);
@@ -1082,6 +1127,7 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
     const netValue = Number(a.purchaseValue) - Number(a.payoffValue) - Number(a.debtsValue);
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+        <PurchaseContractBar v={v} a={a} />
         <SectionTitle action={<Btn variant="outline" onClick={() => setEditing(true)}><Pencil size={15} /> Editar entrada</Btn>}>Dados do fornecedor</SectionTitle>
         <div style={{ marginTop: -12 }}>
           <InfoRows rows={[["Data de entrada", dateBR(a.entryDate)], ["Nome", a.supplierName], ["CPF/CNPJ", formatDoc(a.supplierDocument)], ["Telefone", a.supplierPhone],

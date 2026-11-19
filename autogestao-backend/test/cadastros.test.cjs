@@ -71,3 +71,23 @@ test('Entrada do veículo: endereço e recado do fornecedor', async () => {
   const b = await details.upsertAcquisition(shop.id, v.id, { supplierAltPhone: '' });
   assert.equal(b.supplierAltPhone, null); assert.equal(b.supplierAddress, 'Rua B, 20, Fortaleza');
 });
+
+test('Contrato de compra: dados da loja, do fornecedor e do veículo', async () => {
+  const v = await prisma.vehicle.create({ data: { dealershipId: shop.id, brand: 'Yamaha', model: 'Fazer 250', year: 2021, type: 'moto', price: 18000, cost: 0, plate: 'ABC1D23' } });
+  await assert.rejects(details.purchaseDocument(shop.id, v.id), /Cadastre a entrada/);
+  // Fornecedor já cadastrado como cliente: RG vem de lá
+  await prisma.customer.create({ data: { dealershipId: shop.id, name: 'Pedro', document: '98765432100', rg: '2009123456' } });
+  await details.upsertAcquisition(shop.id, v.id, {
+    supplierName: 'Pedro', supplierDocument: '987.654.321-00', supplierPhone: '85911112222', supplierAddress: 'Rua C, 5',
+    purchaseValue: 14000, payoffValue: 3000, documentOwnerName: 'Ana', documentOwnerDocument: '11122233344',
+  });
+  const d = await details.purchaseDocument(shop.id, v.id);
+  assert.match(d.contractNumber, /^CP-\d{4}-[0-9A-F]{6}$/);
+  assert.equal((await details.purchaseDocument(shop.id, v.id)).contractNumber, d.contractNumber);
+  assert.deepEqual([d.supplier.name, d.supplier.rg, d.supplier.address], ['Pedro', '2009123456', 'Rua C, 5']);
+  assert.deepEqual([d.purchaseValue, d.payoffValue, d.vehicle.plate, d.dealership.name], [14000, 3000, 'ABC1D23', 'Loja']);
+  assert.deepEqual(d.documentOwner, { name: 'Ana', document: '11122233344' });
+  // Outra loja não acessa
+  const other = await prisma.dealership.create({ data: { name: 'Outra', slug: 'outra-c' } });
+  await assert.rejects(details.purchaseDocument(other.id, v.id), /Veículo não encontrado/);
+});

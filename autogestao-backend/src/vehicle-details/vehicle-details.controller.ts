@@ -193,6 +193,12 @@ export class VehicleDetailsController {
     return this.service.getAcquisition(user.dealershipId, vehicleId);
   }
 
+  /** Dados do contrato de compra (a loja comprando o veículo do fornecedor) */
+  @Get('acquisition/document')
+  purchaseDocument(@CurrentUser() user: AuthenticatedUser, @Param('vehicleId', id) vehicleId: string) {
+    return this.service.purchaseDocument(user.dealershipId, vehicleId);
+  }
+
   @Roles('owner', 'admin')
   @Put('acquisition')
   upsertAcquisition(@CurrentUser() user: AuthenticatedUser, @Param('vehicleId', id) vehicleId: string, @Body() dto: UpsertAcquisitionDto) {
