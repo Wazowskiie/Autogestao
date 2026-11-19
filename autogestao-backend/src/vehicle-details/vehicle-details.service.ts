@@ -402,6 +402,51 @@ export class VehicleDetailsService {
     return this.prisma.vehicleAcquisition.findUnique({ where: { vehicleId } });
   }
 
+  /**
+   * Dados do contrato de compra: a loja (compradora) adquire o veículo do fornecedor (vendedor).
+   * O número do contrato sai do id da entrada, então é sempre o mesmo para o mesmo veículo.
+   */
+  async purchaseDocument(dealershipId: string, vehicleId: string) {
+    const v = await this.vehicle(dealershipId, vehicleId);
+    const a = await this.prisma.vehicleAcquisition.findUnique({ where: { vehicleId } });
+    if (!a) throw new NotFoundException('Cadastre a entrada do veículo (fornecedor e valor) antes de gerar o contrato de compra');
+    const d = await this.prisma.dealership.findUniqueOrThrow({ where: { id: dealershipId } });
+    // Fornecedor cadastrado como cliente: aproveita RG e endereço de lá
+    const doc = (a.supplierDocument ?? '').replace(/\D/g, '');
+    const supplierCustomer = doc
+      ? await this.prisma.customer.findFirst({ where: { dealershipId, document: doc }, select: { rg: true, address: true, email: true } })
+      : null;
+    const entry = a.entryDate ?? a.createdAt;
+    return {
+      contractNumber: `CP-${entry.getUTCFullYear()}-${a.id.replace(/-/g, '').slice(0, 6).toUpperCase()}`,
+      entryDate: entry,
+      createdAt: a.createdAt,
+      ownershipType: a.ownershipType,
+      purchaseValue: num(a.purchaseValue),
+      payoffValue: num(a.payoffValue),
+      debtsValue: num(a.debtsValue),
+      debts: (Array.isArray(a.debts) ? a.debts : []) as { date?: string | null; description: string; amount: number }[],
+      intermediary: a.intermediary,
+      notes: a.notes,
+      dealership: {
+        name: d.name, cnpj: d.cnpj, phone: d.phone, logoUrl: d.logoUrl,
+        street: d.focusNfeLogradouro, number: d.focusNfeNumero, district: d.focusNfeBairro, zip: d.focusNfeCep,
+        city: d.focusNfeMunicipio || d.city, state: d.focusNfeUf || d.state,
+      },
+      supplier: {
+        name: a.supplierName ?? '', document: a.supplierDocument, rg: supplierCustomer?.rg ?? null,
+        phone: a.supplierPhone, address: a.supplierAddress || supplierCustomer?.address || null,
+        altContactName: a.supplierAltContactName, altPhone: a.supplierAltPhone,
+      },
+      documentOwner: a.documentOwnerName ? { name: a.documentOwnerName, document: a.documentOwnerDocument } : null,
+      vehicle: {
+        type: v.type, brand: v.brand, model: v.model, version: v.version, year: v.year, manufactureYear: v.manufactureYear,
+        color: v.color, plate: v.plate, chassis: v.chassis, renavam: v.renavam, km: v.km, fuel: v.fuel,
+        hasSpareKey: v.hasSpareKey, hasManual: v.hasManual,
+      },
+    };
+  }
+
   async upsertAcquisition(dealershipId: string, vehicleId: string, dto: UpsertAcquisitionDto) {
     const vehicle = await this.vehicle(dealershipId, vehicleId);
     const current = await this.prisma.vehicleAcquisition.findUnique({ where: { vehicleId } });
