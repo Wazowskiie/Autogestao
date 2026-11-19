@@ -1035,6 +1035,7 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
   const blank = useCallback((a: dv.Acquisition | null) => ({
     entryDate: toInputDate(a?.entryDate ?? v.createdAt), ownershipType: (a?.ownershipType ?? "own") as "own" | "consigned",
     supplierName: a?.supplierName ?? "", supplierDocument: a?.supplierDocument ?? "", supplierPhone: a?.supplierPhone ?? "",
+    supplierAddress: a?.supplierAddress ?? "", supplierAltContactName: a?.supplierAltContactName ?? "", supplierAltPhone: a?.supplierAltPhone ?? "",
     documentOwnerName: a?.documentOwnerName ?? "", documentOwnerDocument: a?.documentOwnerDocument ?? "",
     purchaseValue: moneyInput(a ? a.purchaseValue : v.cost), payoffValue: moneyInput(a?.payoffValue), debtsValue: moneyInput(a?.debtsValue),
     notes: a?.notes ?? "", intermediary: a?.intermediary ?? "",
@@ -1084,6 +1085,8 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
         <SectionTitle action={<Btn variant="outline" onClick={() => setEditing(true)}><Pencil size={15} /> Editar entrada</Btn>}>Dados do fornecedor</SectionTitle>
         <div style={{ marginTop: -12 }}>
           <InfoRows rows={[["Data de entrada", dateBR(a.entryDate)], ["Nome", a.supplierName], ["CPF/CNPJ", formatDoc(a.supplierDocument)], ["Telefone", a.supplierPhone],
+            ["Contato de recado", [a.supplierAltContactName, a.supplierAltPhone].filter(Boolean).join(" · ")],
+            ["Endereço", a.supplierAddress ?? ""],
             ["Intermediário", a.intermediary ?? ""], ["Canal da entrada", dv.entryChannelLabel(a.entryChannel)]]} />
         </div>
         <div><Label>Documento em nome de</Label><InfoRows rows={[["Nome", a.documentOwnerName], ["CPF/CNPJ", formatDoc(a.documentOwnerDocument)]]} /></div>
@@ -1116,6 +1119,9 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
           <Field label="Nome do fornecedor"><input value={f.supplierName} onChange={set("supplierName")} style={inputStyle} /></Field>
           <Field label="CPF/CNPJ"><input value={f.supplierDocument} onChange={set("supplierDocument")} style={inputStyle} /></Field>
           <Field label="Telefone"><input value={f.supplierPhone} onChange={set("supplierPhone")} style={inputStyle} /></Field>
+          <Field label="Contato de recado"><input value={f.supplierAltContactName} onChange={set("supplierAltContactName")} placeholder="Nome" style={inputStyle} /></Field>
+          <Field label="Telefone do recado"><input value={f.supplierAltPhone} onChange={set("supplierAltPhone")} style={inputStyle} /></Field>
+          <Field label="Endereço"><input value={f.supplierAddress} onChange={set("supplierAddress")} placeholder="Rua, número, bairro, cidade" style={inputStyle} /></Field>
           <Field label="Intermediário"><input value={f.intermediary} onChange={set("intermediary")} style={inputStyle} /></Field>
           <Field label="Canal da entrada">
             <select value={f.entryChannel} onChange={(e) => setF({ ...f, entryChannel: e.target.value as dv.EntryChannel | "" })} style={inputStyle}>

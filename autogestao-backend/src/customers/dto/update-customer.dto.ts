@@ -6,6 +6,9 @@ export class UpdateCustomerDto {
   @IsOptional() @IsString() rg?: string;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsEmail() email?: string;
+  // Contato de recado: nome e telefone de outra pessoa para falar com o cliente
+  @IsOptional() @IsString() altContactName?: string;
+  @IsOptional() @IsString() altPhone?: string;
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsDateString() birthDate?: string;
   @IsOptional() @IsString() gender?: string;

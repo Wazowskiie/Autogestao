@@ -418,8 +418,9 @@ type LookupState =
   | { status: "error"; message: string };
 
 // ---------- Fornecedor / Doc. em nome de ----------
-type Person = { name: string; document: string; phone: string };
-const emptyPerson: Person = { name: "", document: "", phone: "" };
+// Fornecedor também guarda endereço e contato de recado (opcionais)
+type Person = { name: string; document: string; phone: string; address?: string; altName?: string; altPhone?: string };
+const emptyPerson: Person = { name: "", document: "", phone: "", address: "", altName: "", altPhone: "" };
 
 function formatDocument(d: string) {
   const x = digitsOnly(d);
@@ -428,7 +429,7 @@ function formatDocument(d: string) {
   return d;
 }
 
-function PersonPicker({ label, value, onChange, required }: { label: string; value: Person; onChange: (p: Person) => void; required?: boolean }) {
+function PersonPicker({ label, value, onChange, required, extended }: { label: string; value: Person; onChange: (p: Person) => void; required?: boolean; /** Pede também endereço e contato de recado */ extended?: boolean }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<api.Customer[]>([]);
   const [open, setOpen] = useState(false);
@@ -452,14 +453,20 @@ function PersonPicker({ label, value, onChange, required }: { label: string; val
     return () => { alive = false; clearTimeout(t); };
   }, [query, open]);
 
-  const pick = (c: api.Customer) => { onChange({ name: c.name, document: c.document ?? "", phone: c.phone ?? "" }); setOpen(false); setQuery(""); };
+  const pick = (c: api.Customer) => {
+    onChange({ name: c.name, document: c.document ?? "", phone: c.phone ?? "", address: c.address ?? "", altName: c.altContactName ?? "", altPhone: c.altPhone ?? "" });
+    setOpen(false); setQuery("");
+  };
 
   const saveNew = async () => {
     setErr(null);
     if (!draft.name.trim()) { setErr("Informe o nome."); return; }
     setBusy(true);
     try {
-      const c = await api.createCustomer({ name: draft.name.trim(), document: digitsOnly(draft.document) || undefined, phone: draft.phone.trim() || undefined, tags: ["fornecedor"] });
+      const c = await api.createCustomer({
+        name: draft.name.trim(), document: digitsOnly(draft.document) || undefined, phone: draft.phone.trim() || undefined, tags: ["fornecedor"],
+        address: draft.address?.trim() || undefined, altContactName: draft.altName?.trim() || undefined, altPhone: draft.altPhone?.trim() || undefined,
+      });
       pick(c);
       setCreating(false);
       setDraft(emptyPerson);
@@ -483,6 +490,15 @@ function PersonPicker({ label, value, onChange, required }: { label: string; val
             <input placeholder="CPF/CNPJ" value={draft.document} onChange={(e) => setDraft({ ...draft, document: e.target.value })} className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
             <input placeholder="Telefone" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
           </div>
+          {extended && (
+            <>
+              <input placeholder="Endereço (rua, número, bairro, cidade)" value={draft.address ?? ""} onChange={(e) => setDraft({ ...draft, address: e.target.value })} className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+              <div className="grid grid-cols-2 gap-2">
+                <input placeholder="Contato de recado" value={draft.altName ?? ""} onChange={(e) => setDraft({ ...draft, altName: e.target.value })} className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                <input placeholder="Telefone do recado" value={draft.altPhone ?? ""} onChange={(e) => setDraft({ ...draft, altPhone: e.target.value })} className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+              </div>
+            </>
+          )}
           {err && <p style={{ fontSize: 12, color: "#DC2626" }}>{err}</p>}
           <div className="flex justify-end">
             <button type="button" onClick={saveNew} disabled={busy} className="px-4 py-1.5 rounded-lg" style={{ background: "#185FA5", color: "#fff", fontSize: 12, fontWeight: 500, opacity: busy ? 0.7 : 1 }}>
@@ -495,6 +511,8 @@ function PersonPicker({ label, value, onChange, required }: { label: string; val
           <div style={{ minWidth: 0 }}>
             <p style={{ fontSize: 13, fontWeight: 500, color: "#111827" }} className="truncate">{value.name}</p>
             {(value.document || value.phone) && <p style={{ fontSize: 11, color: "#6B7280" }}>{[value.document && formatDocument(value.document), value.phone].filter(Boolean).join(" · ")}</p>}
+            {extended && value.address && <p style={{ fontSize: 11, color: "#6B7280" }} className="truncate">{value.address}</p>}
+            {extended && value.altPhone && <p style={{ fontSize: 11, color: "#6B7280" }}>Recado: {[value.altName, value.altPhone].filter(Boolean).join(" · ")}</p>}
           </div>
           <button type="button" onClick={() => onChange(emptyPerson)} title="Trocar" style={{ color: "#6B7280" }}><X size={15} /></button>
         </div>
@@ -646,7 +664,10 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
     let alive = true;
     dv.getAcquisition(initial.id).then((a) => {
       if (!alive || !a) return;
-      const sup = { name: a.supplierName ?? "", document: a.supplierDocument ?? "", phone: a.supplierPhone ?? "" };
+      const sup = {
+        name: a.supplierName ?? "", document: a.supplierDocument ?? "", phone: a.supplierPhone ?? "",
+        address: a.supplierAddress ?? "", altName: a.supplierAltContactName ?? "", altPhone: a.supplierAltPhone ?? "",
+      };
       const own = { name: a.documentOwnerName ?? "", document: a.documentOwnerDocument ?? "", phone: "" };
       setSupplier(sup);
       const same = !own.name || (own.name === sup.name && digitsOnly(own.document) === digitsOnly(sup.document));
@@ -848,6 +869,7 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
             entryChannel: entryChannel || undefined,
             intermediary: intermediary.trim(),
             supplierName: supplier.name.trim(), supplierDocument: digitsOnly(supplier.document), supplierPhone: supplier.phone.trim(),
+            supplierAddress: supplier.address?.trim() ?? "", supplierAltContactName: supplier.altName?.trim() ?? "", supplierAltPhone: supplier.altPhone?.trim() ?? "",
             documentOwnerName: owner.name.trim(), documentOwnerDocument: digitsOnly(owner.document),
             purchaseValue: costNum, payoffValue: payoffNum,
             debts: debts.map((d) => ({ date: d.date || null, description: d.description.trim(), amount: parseBRL(d.amount) })),
@@ -1146,7 +1168,17 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <PersonPicker label="Fornecedor" required={!initial} value={supplier} onChange={setSupplier} />
+                  <PersonPicker label="Fornecedor" required={!initial} value={supplier} onChange={setSupplier} extended />
+                  {supplier.name && (
+                    <div className="grid grid-cols-3 gap-2" style={{ marginTop: 8 }}>
+                      <input placeholder="Endereço do fornecedor" aria-label="Endereço do fornecedor" value={supplier.address ?? ""} onChange={(e) => setSupplier({ ...supplier, address: e.target.value })}
+                        className="col-span-3 w-full rounded-lg px-3 py-2" style={inputStyle} />
+                      <input placeholder="Contato de recado" aria-label="Contato de recado do fornecedor" value={supplier.altName ?? ""} onChange={(e) => setSupplier({ ...supplier, altName: e.target.value })}
+                        className="col-span-2 w-full rounded-lg px-3 py-2" style={inputStyle} />
+                      <input placeholder="Telefone do recado" aria-label="Telefone do recado do fornecedor" value={supplier.altPhone ?? ""} onChange={(e) => setSupplier({ ...supplier, altPhone: e.target.value })}
+                        className="w-full rounded-lg px-3 py-2" style={inputStyle} />
+                    </div>
+                  )}
                   <div>
                     {sameOwner ? (
                       <div>

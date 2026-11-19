@@ -78,6 +78,7 @@ export interface ExpenseInput {
 export interface Acquisition {
   entryDate: string; ownershipType: "own" | "consigned";
   supplierName: string | null; supplierDocument: string | null; supplierPhone: string | null;
+  supplierAddress?: string | null; supplierAltContactName?: string | null; supplierAltPhone?: string | null;
   documentOwnerName: string | null; documentOwnerDocument: string | null;
   purchaseValue: Money; payoffValue: Money; debtsValue: Money; notes: string | null;
   intermediary?: string | null; entryChannel?: EntryChannel | null; debts?: AcquisitionDebt[] | null;
@@ -95,6 +96,7 @@ export interface AcquisitionDebt { date?: string | null; description: string; am
 export interface AcquisitionInput {
   entryDate?: string; ownershipType?: "own" | "consigned";
   supplierName?: string; supplierDocument?: string; supplierPhone?: string;
+  supplierAddress?: string; supplierAltContactName?: string; supplierAltPhone?: string;
   documentOwnerName?: string; documentOwnerDocument?: string;
   purchaseValue?: number; payoffValue?: number; debtsValue?: number; notes?: string;
   intermediary?: string; entryChannel?: EntryChannel; debts?: AcquisitionDebt[];

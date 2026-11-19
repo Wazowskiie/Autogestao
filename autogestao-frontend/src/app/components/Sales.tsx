@@ -21,6 +21,12 @@ function todayISO() {
   return new Date().toISOString().split("T")[0];
 }
 
+function formatCpfCnpj(v: string) {
+  const d = v.replace(/\D/g, "").slice(0, 14);
+  if (d.length <= 11) return d.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+  return d.replace(/^(\d{2})(\d)/, "$1.$2").replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2");
+}
+
 function formatPhone(v: string) {
   const d = v.replace(/\D/g, "").slice(0, 11);
   if (d.length <= 2) return d;
@@ -51,12 +57,14 @@ function paymentSummary(sale: api.Sale) {
 
 // Autocomplete genérico
 function Autocomplete<T extends { id: string }>({
-  items, value, onChange, getLabel, placeholder, onQueryChange, footer,
+  items, value, onChange, getLabel, getSubLabel, placeholder, onQueryChange, footer,
 }: {
   items: T[];
   value: string;
   onChange: (id: string) => void;
   getLabel: (item: T) => string;
+  /** Linha menor embaixo do nome (ex.: CPF), que também entra na busca */
+  getSubLabel?: (item: T) => string;
   placeholder: string;
   onQueryChange?: (query: string) => void;
   /** Renderizado no rodapé do dropdown, mesmo quando não há resultados. Útil para ações como "cadastrar novo". */
@@ -73,7 +81,12 @@ function Autocomplete<T extends { id: string }>({
   }, [value, !!selected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = query
-    ? items.filter(i => getLabel(i).toLowerCase().includes(query.toLowerCase()))
+    ? items.filter(i => {
+        const q = query.toLowerCase();
+        const qDigits = query.replace(/\D/g, "");
+        return getLabel(i).toLowerCase().includes(q)
+          || (!!getSubLabel && (getSubLabel(i).toLowerCase().includes(q) || (qDigits.length >= 3 && getSubLabel(i).replace(/\D/g, "").includes(qDigits))));
+      })
     : items;
 
   useEffect(() => {
@@ -112,6 +125,7 @@ function Autocomplete<T extends { id: string }>({
               className="w-full text-left px-3 py-2.5 hover:bg-blue-50"
               style={{ fontSize: 13, color: "#374151", borderBottom: "0.5px solid rgba(0,0,0,0.04)" }}>
               {getLabel(item)}
+              {getSubLabel && getSubLabel(item) && <span style={{ display: "block", fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>{getSubLabel(item)}</span>}
             </button>
           ))}
           {filtered.length === 0 && !footerNode && (
@@ -858,6 +872,10 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  const [newCustomerDocument, setNewCustomerDocument] = useState("");
+  const [newCustomerAddress, setNewCustomerAddress] = useState("");
+  const [newCustomerAltName, setNewCustomerAltName] = useState("");
+  const [newCustomerAltPhone, setNewCustomerAltPhone] = useState("");
   const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [newCustomerError, setNewCustomerError] = useState<string | null>(null);
 
@@ -958,6 +976,8 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
 
   async function handleCreateCustomer() {
     if (!newCustomerName.trim()) { setNewCustomerError("Informe o nome do cliente"); return; }
+    const doc = newCustomerDocument.replace(/\D/g, "");
+    if (doc && doc.length !== 11 && doc.length !== 14) { setNewCustomerError("CPF com 11 números ou CNPJ com 14"); return; }
     setCreatingCustomer(true);
     setNewCustomerError(null);
     try {
@@ -965,6 +985,10 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
         name: newCustomerName.trim(),
         phone: newCustomerPhone ? newCustomerPhone.replace(/\D/g, "") : undefined,
         email: newCustomerEmail || undefined,
+        document: doc || undefined,
+        address: newCustomerAddress.trim() || undefined,
+        altContactName: newCustomerAltName.trim() || undefined,
+        altPhone: newCustomerAltPhone ? newCustomerAltPhone.replace(/\D/g, "") : undefined,
       });
       setCustomers(prev => [...prev, customer]);
       setCustomerId(customer.id);
@@ -988,7 +1012,16 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
   const returnsTotal = round2(payments.reduce((s, p) => s + (isFinancing(p.method) ? num(p.returnAmount ?? "") : 0), 0));
   // Comissão: % do vendedor sobre o preço (o dono/admin pode mudar o valor)
   const sellerForCommission = sellers.find(x => x.id === (sellerId || auth.user?.id));
-  const commissionRate = Number(sellerForCommission?.commissionRate ?? 0);
+  // Mesma regra do servidor: financiamento/consórcio > promissórias > à vista
+  const saleKind: "financing" | "promissory" | "cash" =
+    payments.some(p => p.method === "financing" || p.method === "consortium") ? "financing"
+    : payments.some(p => p.method === "promissory") ? "promissory" : "cash";
+  const baseRate = Number(sellerForCommission?.commissionRate ?? 0);
+  const commissionRate = Number(
+    saleKind === "financing" ? sellerForCommission?.commissionRateFinancing ?? baseRate
+    : saleKind === "promissory" ? sellerForCommission?.commissionRatePromissory ?? baseRate
+    : baseRate);
+  const saleKindLabel = { financing: "venda financiada", promissory: "venda com promissórias", cash: "venda à vista" }[saleKind];
   const autoCommission = Number.isFinite(priceNum) ? round2((priceNum * commissionRate) / 100) : 0;
   const commissionAmount = commissionText !== null ? num(commissionText) : autoCommission;
   const profit = Number.isFinite(priceNum) && Number.isFinite(costNum)
@@ -1296,7 +1329,9 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
                   value={customerId}
                   onChange={setCustomerId}
                   getLabel={c => c.name}
-                  placeholder="Digite o nome para buscar ou cadastrar..."
+                  // CPF embaixo do nome: separa clientes com o mesmo nome e permite buscar pelo CPF
+                  getSubLabel={c => [c.document ? `CPF/CNPJ ${formatCpfCnpj(c.document)}` : "sem CPF", c.phone ? formatPhone(c.phone) : null].filter(Boolean).join(" · ")}
+                  placeholder="Digite o nome ou o CPF para buscar ou cadastrar..."
                   onQueryChange={setCustomerQuery}
                   footer={(query) => {
                     const trimmed = query.trim();
@@ -1311,9 +1346,15 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
                     );
                   }}
                 />
-                {selectedCustomer && (selectedCustomer.phone || selectedCustomer.email) && (
-                  <div className="mt-2 px-3 py-2 rounded-lg" style={{ background: "#F4F6F9", fontSize: 12, color: "#6B7280" }}>
-                    {[selectedCustomer.phone, selectedCustomer.email].filter(Boolean).join(" · ")}
+                {selectedCustomer && (
+                  <div className="mt-2 px-3 py-2 rounded-lg grid grid-cols-2 gap-x-4 gap-y-1" style={{ background: "#F4F6F9", fontSize: 12, color: "#4B5563" }}>
+                    <span><b style={{ color: "#6B7280", fontWeight: 500 }}>CPF/CNPJ:</b> {selectedCustomer.document ? formatCpfCnpj(selectedCustomer.document) : <span style={{ color: "#B45309" }}>não cadastrado</span>}</span>
+                    <span><b style={{ color: "#6B7280", fontWeight: 500 }}>Telefone:</b> {selectedCustomer.phone ? formatPhone(selectedCustomer.phone) : "—"}</span>
+                    <span><b style={{ color: "#6B7280", fontWeight: 500 }}>Recado:</b> {selectedCustomer.altPhone ? `${selectedCustomer.altContactName ? `${selectedCustomer.altContactName} · ` : ""}${formatPhone(selectedCustomer.altPhone)}` : "—"}</span>
+                    <span className="col-span-2"><b style={{ color: "#6B7280", fontWeight: 500 }}>Endereço:</b> {selectedCustomer.address || <span style={{ color: "#B45309" }}>não cadastrado</span>}</span>
+                    {(!selectedCustomer.document || !selectedCustomer.address) && (
+                      <span className="col-span-2" style={{ color: "#B45309" }}>Complete o CPF e o endereço em Clientes: eles saem no contrato.</span>
+                    )}
                   </div>
                 )}
                 {!customerId && trimmedCustomerQuery && !customerExists && (
@@ -1348,6 +1389,30 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
                     <div>
                       <label style={smallLabel}>E-mail</label>
                       <input value={newCustomerEmail} onChange={(e) => setNewCustomerEmail(e.target.value)} placeholder="cliente@email.com"
+                        className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label style={smallLabel}>CPF/CNPJ</label>
+                      <input value={newCustomerDocument} onChange={(e) => setNewCustomerDocument(formatCpfCnpj(e.target.value))} inputMode="numeric" placeholder="000.000.000-00"
+                        className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                    </div>
+                    <div>
+                      <label style={smallLabel}>Endereço</label>
+                      <input value={newCustomerAddress} onChange={(e) => setNewCustomerAddress(e.target.value)} placeholder="Rua, número, bairro, cidade"
+                        className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label style={smallLabel}>Contato de recado</label>
+                      <input value={newCustomerAltName} onChange={(e) => setNewCustomerAltName(e.target.value)} placeholder="Nome (ex.: Maria, esposa)"
+                        className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
+                    </div>
+                    <div>
+                      <label style={smallLabel}>Telefone do recado</label>
+                      <input value={newCustomerAltPhone} onChange={(e) => setNewCustomerAltPhone(formatPhone(e.target.value))} placeholder="(85) 99999-9999"
                         className="w-full rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
                     </div>
                   </div>
@@ -1818,7 +1883,7 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
                   <div className="rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#F3F4F6" }}>{currency(commissionAmount)}</div>
                 )}
                 <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
-                  {commissionText === null ? `${commissionRate.toLocaleString("pt-BR")}% do preço, cadastrado no vendedor.` : <>Valor alterado. <button type="button" onClick={() => setCommissionText(null)} style={{ color: "#185FA5", fontWeight: 600 }}>Voltar ao automático</button></>}
+                  {commissionText === null ? `${commissionRate.toLocaleString("pt-BR")}% do preço (${saleKindLabel}), cadastrado no vendedor.` : <>Valor alterado. <button type="button" onClick={() => setCommissionText(null)} style={{ color: "#185FA5", fontWeight: 600 }}>Voltar ao automático</button></>}
                 </p>
               </div>
               <div>

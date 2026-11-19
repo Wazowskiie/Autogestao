@@ -18,6 +18,8 @@ export class CustomersService {
         document: dto.document,
         rg: dto.rg,
         phone: dto.phone,
+        altContactName: dto.altContactName?.trim() || undefined,
+        altPhone: dto.altPhone ? dto.altPhone.replace(/\D/g, '') || undefined : undefined,
         email: dto.email,
         address: dto.address,
         birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
@@ -76,7 +78,13 @@ export class CustomersService {
 
   async update(dealershipId: string, id: string, dto: UpdateCustomerDto, user?: AuthenticatedUser) {
     await this.findOne(dealershipId, id, user);
-    return this.prisma.customer.update({ where: { id }, data: dto });
+    // Recado vazio apaga; telefone do recado guardado só com números
+    const data = {
+      ...dto,
+      ...(dto.altContactName !== undefined ? { altContactName: dto.altContactName.trim() || null } : {}),
+      ...(dto.altPhone !== undefined ? { altPhone: dto.altPhone.replace(/\D/g, '') || null } : {}),
+    };
+    return this.prisma.customer.update({ where: { id }, data });
   }
 
   async remove(dealershipId: string, id: string) {
