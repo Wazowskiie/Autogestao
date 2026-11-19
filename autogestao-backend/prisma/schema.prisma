@@ -549,6 +549,8 @@ model ChatMessage {
   role String
   content String
   clientMessageId String? @map("client_message_id")
+  // Nome do vendedor que respondeu (mostrado no chat em vez de só "Vendedor")
+  authorName String? @map("author_name")
   createdAt DateTime @default(now()) @map("created_at")
   conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   @@unique([conversationId, clientMessageId])

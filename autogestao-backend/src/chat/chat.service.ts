@@ -9,7 +9,7 @@ import { Prisma } from '../generated/prisma/client';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 
 const PUBLIC_SELECT = { id: true, mode: true, createdAt: true, updatedAt: true,
-  messages: { orderBy: { createdAt: 'asc' as const }, take: 200, select: { id: true, role: true, content: true, createdAt: true, clientMessageId: true } },
+  messages: { orderBy: { createdAt: 'asc' as const }, take: 200, select: { id: true, role: true, content: true, createdAt: true, clientMessageId: true, authorName: true } },
 } as const;
 const hash = (token: string) => createHash('sha256').update(token).digest('hex');
 
@@ -188,8 +188,9 @@ export class ChatService {
         await tx.lead.updateMany({ where: { id: c.leadId, assignedSellerId: null }, data: { assignedSellerId: userId } });
         await tx.crmActivity.create({data:{dealershipId,leadId:c.leadId,userId,kind:'chat_assignment',content:'Responsável assumiu o atendimento do chat',metadata:{conversationId:id}}});
       }
+      const who = mode === 'human' && userId ? (await tx.user.findUnique({ where: { id: userId }, select: { name: true } }))?.name?.trim().split(/\s+/)[0] : null;
       await tx.chatMessage.create({ data: { conversationId: id, role: 'system', content:
-        mode === 'human' ? (userId ? 'Um vendedor assumiu o atendimento.' : 'Atendimento encaminhado à equipe. Aguarde um vendedor.') : mode === 'closed' ? 'Atendimento encerrado.' : 'Assistente virtual reativado.' } });
+        mode === 'human' ? (userId ? (who ? `${who} assumiu o atendimento e já vai te responder.` : 'Um vendedor assumiu o atendimento.') : 'Atendimento encaminhado à equipe. Aguarde um vendedor.') : mode === 'closed' ? 'Atendimento encerrado.' : 'Assistente virtual reativado.' } });
     });
     return this.detail(dealershipId, id, actor);
   }
@@ -205,7 +206,8 @@ export class ChatService {
       const existing = await tx.chatMessage.findUnique({ where: { conversationId_clientMessageId: { conversationId: id, clientMessageId: dto.clientMessageId } } });
       if (existing) return;
       if (await tx.chatMessage.count({ where: { conversationId: id } }) >= 190) throw new ConflictException('Limite de mensagens atingido');
-      await tx.chatMessage.create({ data: { conversationId: id, role: 'agent', content, clientMessageId: dto.clientMessageId } });
+      const author = await tx.user.findUnique({ where: { id: userId }, select: { name: true } });
+      await tx.chatMessage.create({ data: { conversationId: id, role: 'agent', content, clientMessageId: dto.clientMessageId, authorName: author?.name ?? null } });
       await tx.chatConversation.update({ where: { id }, data: { updatedAt: new Date() } });
     });
     return this.detail(dealershipId, id, actor);
