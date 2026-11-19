@@ -1022,14 +1022,20 @@ function purchaseContractBody(doc: PurchaseDocuments) {
     ${field("Hora", fill(hour, 80))}
     ${doc.intermediary ? field("Intermediário", esc(doc.intermediary)) : ""}
   </table>
-  ${ownerDiffers ? `<p>O veículo encontra-se registrado em nome de <b>${esc(o!.name)}</b>${o!.document ? `, ${docLabel(o!.document)} ${esc(formatDoc(o!.document))}` : ""}, que assina este contrato como ANUENTE, concordando com a venda e comprometendo-se a assinar a transferência para a COMPRADORA.</p>` : ""}
+  ${o && !ownerDiffers ? `<p>O veículo acima descrito encontra-se em nome de: <b>${esc(o.name)}</b>${o.document ? `, ${docLabel(o.document)} ${esc(formatDoc(o.document))}` : ""}.</p>` : ""}
+  ${ownerDiffers ? `<p>O veículo acima descrito encontra-se em nome de <b>${esc(o!.name)}</b>${o!.document ? `, ${docLabel(o!.document)} ${esc(formatDoc(o!.document))}` : ""}, que assina este contrato como ANUENTE, concordando com a venda e comprometendo-se a assinar a transferência para a COMPRADORA.</p>` : ""}
 
   <h2>DO PREÇO E FORMA DE PAGAMENTO</h2>
-  <p>O preço ajustado para a compra é de <b>${brl(doc.purchaseValue)}</b> (${moneyInWords(doc.purchaseValue)}).</p>
-  ${doc.payoffValue > 0 ? `<p>Do preço será descontado o valor de ${brl(doc.payoffValue)} (${moneyInWords(doc.payoffValue)}), referente à quitação do financiamento/alienação que pesa sobre o veículo, que a COMPRADORA pagará diretamente à instituição credora.</p>` : ""}
-  ${doc.debtsValue > 0 ? `<p>Do preço será descontado também o valor de ${brl(doc.debtsValue)} (${moneyInWords(doc.debtsValue)}), referente aos débitos do veículo existentes nesta data, que a COMPRADORA pagará:</p>
-  ${doc.debts.length ? `<table><tr><th>Débito</th><th style="width:22%">Data</th><th style="width:22%">Valor</th></tr>${doc.debts.map((d) => `<tr><td>${esc(d.description)}</td><td>${d.date ? shortDate(d.date) : ""}</td><td>${brl(Number(d.amount) || 0)}</td></tr>`).join("")}</table>` : ""}` : ""}
-  ${doc.payoffValue > 0 || doc.debtsValue > 0 ? `<p>Valor líquido a ser pago ao(à) VENDEDOR(A): <b>${brl(net)}</b> (${moneyInWords(Math.max(net, 0))}).</p>` : ""}
+  <table style="width:70%">
+    <tr><td>Valor avaliado</td><td style="text-align:right">${brl(doc.purchaseValue)}</td></tr>
+    <tr><td>Valor de quitação</td><td style="text-align:right">${brl(doc.payoffValue)}</td></tr>
+    <tr><td>Valor dos débitos</td><td style="text-align:right">${brl(doc.debtsValue)}</td></tr>
+    <tr><th>Valor líquido a pagar</th><th style="text-align:right">${brl(net)}</th></tr>
+  </table>
+  <p>Valor líquido por extenso: ${moneyInWords(Math.max(net, 0))}.</p>
+  ${doc.payoffValue > 0 ? `<p>O valor de quitação refere-se ao financiamento/alienação que pesa sobre o veículo e será pago pela COMPRADORA diretamente à instituição credora, sendo descontado do valor avaliado.</p>` : ""}
+  ${doc.debtsValue > 0 ? `<p>Descrição dos débitos, pagos pela COMPRADORA e descontados do valor avaliado:</p>
+  ${doc.debts.length ? `<table><tr><th>Débito</th><th style="width:22%">Data</th><th style="width:22%">Valor</th></tr>${doc.debts.map((d) => `<tr><td>${esc(d.description)}</td><td>${d.date ? shortDate(d.date) : ""}</td><td>${brl(Number(d.amount) || 0)}</td></tr>`).join("")}</table>` : `<p>${blank(320)}</p>`}` : ""}
   <p>Forma de pagamento: ${blank(320)}</p>
   <p>Com o recebimento do valor acima, o(a) VENDEDOR(A) dá à COMPRADORA plena, geral e irrevogável quitação do preço.</p>
 
@@ -1038,27 +1044,34 @@ function purchaseContractBody(doc: PurchaseDocuments) {
   <h2>1ª CLÁUSULA – DA PROPRIEDADE E ORIGEM DO BEM</h2>
   <p>O(A) VENDEDOR(A) declara ser legítimo(a) proprietário(a) ou possuidor(a) do veículo, que o bem é de origem lícita, não possui adulteração de chassi, motor ou numeração, e que está livre de penhora, busca e apreensão, restrição judicial ou administrativa${doc.payoffValue > 0 ? ", com exceção da alienação fiduciária mencionada neste contrato" : ""}, respondendo pela evicção na forma da lei.</p>
 
-  <h2>2ª CLÁUSULA – DA RESPONSABILIDADE CIVIL E CRIMINAL</h2>
-  <p>Até a data e hora deste contrato, o(a) VENDEDOR(A) responde por quaisquer danos, no âmbito civil ou criminal, decorrentes da utilização do veículo, bem como por impostos, taxas e demais débitos gerados até este momento, ainda que lançados ou cobrados depois (as multas seguem a 3ª cláusula). A partir desta data e hora, a responsabilidade passa a ser da COMPRADORA.</p>
+  <h2>2ª CLÁUSULA – DA VISTORIA E AVALIAÇÃO DO VEÍCULO</h2>
+  <p>A COMPRADORA declara ter vistoriado e avaliado o estado em que se encontra o veículo ora negociado, e o valor avaliado leva em conta esse estado de conservação e funcionamento. Vícios ocultos, de origem ou de documentação não aparentes na vistoria continuam sob a responsabilidade do(a) VENDEDOR(A).</p>
 
+  <h2>3ª CLÁUSULA – DA RESPONSABILIDADE CIVIL E CRIMINAL</h2>
+  <p>Até a data ${shortDate(at)}${hour ? ` e hora ${hour}` : ""}, o(a) VENDEDOR(A) responde por quaisquer danos, no âmbito civil ou criminal, decorrentes da utilização do veículo, bem como por impostos (IPVA), licenciamento, taxas e demais débitos gerados até este momento, ainda que lançados ou cobrados depois (as multas seguem a 4ª cláusula). A partir desta data e hora, a responsabilidade passa a ser da COMPRADORA. O presente instrumento, firmado pelas partes e por duas testemunhas, é título executivo extrajudicial nos termos do artigo 784, III do CPC, podendo a COMPRADORA cobrar do(a) VENDEDOR(A) os valores que pagar referentes a esse período (multas de trânsito, IPVA, licenciamento e outros), cujo valor depende de simples cálculo a partir dos comprovantes.</p>
 
-  <h2>3ª CLÁUSULA – DAS MULTAS E INFRAÇÕES ANTERIORES À COMPRA</h2>
+  <h2>4ª CLÁUSULA – DAS MULTAS E INFRAÇÕES ANTERIORES À COMPRA</h2>
   <p>Toda multa, infração ou pontuação cuja data da infração seja anterior à data e hora deste contrato (${shortDate(at)}${hour ? `, às ${hour}` : ""}) é de responsabilidade exclusiva do(a) VENDEDOR(A), ainda que a notificação chegue depois da venda ou seja enviada em nome da COMPRADORA ou de terceiro. Para isso, as partes ajustam que:</p>
   <p>a) a data e a hora deste contrato servem como prova de quem estava com o veículo no momento da infração;</p>
   <p>b) o(a) VENDEDOR(A) autoriza a COMPRADORA a indicá-lo(a) como condutor(a) infrator(a) junto ao órgão de trânsito e se compromete a assinar o formulário de indicação de condutor e a fornecer cópia da CNH sempre que solicitado, dentro do prazo da notificação;</p>
   <p>c) se a COMPRADORA, ou quem dela adquirir o veículo, pagar qualquer multa, juros ou encargo referente a esse período, inclusive a multa por não indicação do condutor, o(a) VENDEDOR(A) fará o reembolso em até 10 (dez) dias após ser comunicado(a), com a apresentação do comprovante;</p>
   <p>d) o(a) VENDEDOR(A) mantém atualizados o endereço e os telefones informados neste contrato, para ser localizado(a) em caso de notificação.</p>
 
-  <h2>4ª CLÁUSULA – DA ENTREGA E DA TRANSFERÊNCIA</h2>
+  <h2>5ª CLÁUSULA – DA ENTREGA E DA TRANSFERÊNCIA</h2>
   <p>O(A) VENDEDOR(A) entrega neste ato o veículo, ${v.hasSpareKey ? "as chaves (inclusive a reserva)" : "a(s) chave(s)"}${v.hasManual ? ", o manual" : ""} e os documentos do bem, e se compromete a assinar a autorização de transferência (ATPV-e/CRV) em favor da COMPRADORA ou de quem ela indicar, comparecendo ao cartório quando necessário.</p>
 
-  <h2>5ª CLÁUSULA – LEI GERAL DE PROTEÇÃO DE DADOS</h2>
+  <h2>6ª CLÁUSULA – DO RASTREADOR</h2>
+  <p><b>O(A) VENDEDOR(A) comunicou no ato da venda que o veículo tem rastreador?</b> &nbsp; SIM ${box()} &nbsp; NÃO ${box()}</p>
+  <p>Caso o veículo tenha rastreador e o(a) VENDEDOR(A) não comunique, a COMPRADORA não se responsabiliza por nenhum dano financeiro decorrente dele (mensalidades, bloqueios ou cobranças), que ficam a cargo do(a) VENDEDOR(A).</p>
+
+  <h2>7ª CLÁUSULA – LEI GERAL DE PROTEÇÃO DE DADOS</h2>
   <p>A COMPRADORA está em conformidade com a Lei 13.709/2018 – LGPD. Os dados pessoais fornecidos pelo(a) VENDEDOR(A) serão usados somente para elaborar este documento e realizar a transferência do bem, com base no artigo 7º, inciso I e artigo 8º, § 1º da referida Lei.</p>
 
-  <h2>6ª CLÁUSULA – DO FORO</h2>
+  <h2>8ª CLÁUSULA – DO FORO</h2>
   <p>As partes elegem o foro da comarca de ${fill(cityState(s), 140)} para resolver qualquer questão referente a este contrato.</p>
 
-  <p style="margin-top:18px">${fill(s.city, 120)}, ${longDate(at)}.</p>
+  <p style="margin-top:18px">E, para que produza seus legais efeitos, firmam o presente termo com assinatura entre as partes e as testemunhas.</p>
+  <p>${fill(s.city, 120)}, ${longDate(at)}.</p>
 
   ${signs(
     [esc(f.name), `VENDEDOR(A)${f.document ? ` – ${docLabel(f.document)} ${esc(formatDoc(f.document))}` : ""}`],
