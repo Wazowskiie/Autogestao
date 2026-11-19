@@ -102,6 +102,8 @@ export class UpsertAcquisitionDto {
   @IsOptional() @IsString() documentOwnerName?: string;
   @IsOptional() @IsString() documentOwnerDocument?: string;
   @IsOptional() @IsNumber({}, { message: 'Valor de compra inválido' }) @Min(0) @Type(() => Number) purchaseValue?: number;
+  @IsOptional() @IsString() @MaxLength(60) paymentMethod?: string;
+  @IsOptional() @IsString() @MaxLength(300) paymentDetails?: string;
   @IsOptional() @IsNumber({}, { message: 'Valor de quitação inválido' }) @Min(0) @Type(() => Number) payoffValue?: number;
   @IsOptional() @IsNumber({}, { message: 'Valor de débitos inválido' }) @Min(0) @Type(() => Number) debtsValue?: number;
   @IsOptional() @IsString() notes?: string;

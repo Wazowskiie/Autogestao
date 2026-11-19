@@ -425,6 +425,8 @@ export class VehicleDetailsService {
       purchaseValue: num(a.purchaseValue),
       payoffValue: num(a.payoffValue),
       debtsValue: num(a.debtsValue),
+      paymentMethod: a.paymentMethod,
+      paymentDetails: a.paymentDetails,
       debts: (Array.isArray(a.debts) ? a.debts : []) as { date?: string | null; description: string; amount: number }[],
       intermediary: a.intermediary,
       notes: a.notes,
@@ -492,6 +494,8 @@ export class VehicleDetailsService {
         supplierAltPhone: dto.supplierAltPhone !== undefined ? dto.supplierAltPhone.replace(/\D/g, '') || null : undefined,
         documentOwnerName: dto.documentOwnerName, documentOwnerDocument: dto.documentOwnerDocument,
         purchaseValue, payoffValue: dto.payoffValue, debtsValue,
+        paymentMethod: dto.paymentMethod !== undefined ? dto.paymentMethod.trim() || null : undefined,
+        paymentDetails: dto.paymentDetails !== undefined ? dto.paymentDetails.trim() || null : undefined,
         notes: dto.notes, financialTransactionId,
       };
       await tx.vehicleAcquisition.upsert({

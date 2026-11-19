@@ -81,6 +81,7 @@ export interface Acquisition {
   supplierAddress?: string | null; supplierAltContactName?: string | null; supplierAltPhone?: string | null;
   documentOwnerName: string | null; documentOwnerDocument: string | null;
   purchaseValue: Money; payoffValue: Money; debtsValue: Money; notes: string | null;
+  paymentMethod?: string | null; paymentDetails?: string | null;
   intermediary?: string | null; entryChannel?: EntryChannel | null; debts?: AcquisitionDebt[] | null;
 }
 export type EntryChannel = "cliente" | "cliente_final" | "consignados" | "corretor" | "repasse";
@@ -99,6 +100,7 @@ export interface AcquisitionInput {
   supplierAddress?: string; supplierAltContactName?: string; supplierAltPhone?: string;
   documentOwnerName?: string; documentOwnerDocument?: string;
   purchaseValue?: number; payoffValue?: number; debtsValue?: number; notes?: string;
+  paymentMethod?: string; paymentDetails?: string;
   intermediary?: string; entryChannel?: EntryChannel; debts?: AcquisitionDebt[];
 }
 
@@ -257,3 +259,6 @@ export const saveWeb = (vehicleId: string, body: WebInput) =>
   request<WebInfo>(`${base(vehicleId)}/web`, { method: "PUT", body });
 export const listFinancial = (vehicleId: string) => request<FinancialItem[]>(`${base(vehicleId)}/financial`);
 export const getSummary = (vehicleId: string) => request<VehicleSummary>(`${base(vehicleId)}/summary`);
+
+/** Formas de pagamento ao fornecedor na entrada (sai no contrato de compra) */
+export const PURCHASE_PAYMENT_METHODS = ["PIX", "Dinheiro", "Transferência bancária", "Cheque", "Parte PIX, parte dinheiro", "Abatido em venda (troca)"] as const;

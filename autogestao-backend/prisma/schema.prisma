@@ -711,6 +711,9 @@ model VehicleAcquisition {
   // Contato de recado do fornecedor
   supplierAltContactName String?  @map("supplier_alt_contact_name")
   supplierAltPhone       String?  @map("supplier_alt_phone")
+  // Forma de pagamento ao fornecedor (ex.: PIX) e detalhes (chave, banco, divisão)
+  paymentMethod  String? @map("payment_method")
+  paymentDetails String? @map("payment_details")
   documentOwnerName      String?  @map("document_owner_name")
   documentOwnerDocument  String?  @map("document_owner_document")
   purchaseValue          Decimal  @default(0) @db.Decimal(12, 2) @map("purchase_value")
