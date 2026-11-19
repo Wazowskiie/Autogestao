@@ -20,7 +20,9 @@ const PUBLIC_DIR = join(ROOT, 'public');
 const PRIVATE_DIR = join(ROOT, 'private');
 
 // Endereço público das fotos. Em produção, coloque no .env o endereço real da API.
-const PUBLIC_BASE_URL = `${(process.env.PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '')}/files`;
+// Endereço público dos arquivos. Sem PUBLIC_API_URL, usa o endereço do site (PUBLIC_APP_URL),
+// que serve /files pelo mesmo domínio; localhost só no desenvolvimento.
+const PUBLIC_BASE_URL = `${(process.env.PUBLIC_API_URL || process.env.PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '')}/files`;
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const DOCUMENT_TYPES = [

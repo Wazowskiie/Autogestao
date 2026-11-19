@@ -54,7 +54,7 @@ export class WhatsappService {
   private dec(v: string) { if (!this.crypto) throw new Error('TOKEN_ENCRYPTION_KEY não configurada'); return this.crypto.decrypt(v); }
   private manager(u: AuthenticatedUser) { if (u.role === 'seller') throw new ForbiddenException('Só o dono ou o administrador pode configurar o WhatsApp.'); }
   webhookUrl() {
-    const base = (process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
+    const base = (process.env.PUBLIC_API_URL || process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
     return base ? `${base}/api/v1/whatsapp/webhook` : '/api/v1/whatsapp/webhook';
   }
 
