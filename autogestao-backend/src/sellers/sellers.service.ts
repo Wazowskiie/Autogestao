@@ -47,6 +47,25 @@ export class CreateSellerDto {
   @Max(100, { message: 'A comissão não pode ser maior que 100' })
   commissionRate?: number; // percentual, ex: 3 = 3%
 
+  // Comissão (%) quando a venda tem promissórias / financiamento. Vazio = usa a da venda à vista
+  @IsOptional()
+  @IsNumber({}, { message: 'A comissão deve ser um número' })
+  @Min(0, { message: 'A comissão não pode ser negativa' })
+  @Max(100, { message: 'A comissão não pode ser maior que 100' })
+  commissionRatePromissory?: number | null;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'A comissão deve ser um número' })
+  @Min(0, { message: 'A comissão não pode ser negativa' })
+  @Max(100, { message: 'A comissão não pode ser maior que 100' })
+  commissionRateFinancing?: number | null;
+
+  @IsOptional()
+  @IsString({ message: 'O CPF deve ser um texto' })
+  @MaxLength(20, { message: 'CPF inválido' })
+  cpf?: string;
+
+
   @IsOptional()
   @IsBoolean({ message: 'O campo ativo deve ser verdadeiro ou falso' })
   active?: boolean;
@@ -79,6 +98,24 @@ export class UpdateSellerDto {
   @Max(100, { message: 'A comissão não pode ser maior que 100' })
   commissionRate?: number;
 
+  // Comissão (%) quando a venda tem promissórias / financiamento. Vazio = usa a da venda à vista
+  @IsOptional()
+  @IsNumber({}, { message: 'A comissão deve ser um número' })
+  @Min(0, { message: 'A comissão não pode ser negativa' })
+  @Max(100, { message: 'A comissão não pode ser maior que 100' })
+  commissionRatePromissory?: number | null;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'A comissão deve ser um número' })
+  @Min(0, { message: 'A comissão não pode ser negativa' })
+  @Max(100, { message: 'A comissão não pode ser maior que 100' })
+  commissionRateFinancing?: number | null;
+
+  @IsOptional()
+  @IsString({ message: 'O CPF deve ser um texto' })
+  @MaxLength(20, { message: 'CPF inválido' })
+  cpf?: string;
+
   @IsOptional()
   @IsBoolean({ message: 'O campo ativo deve ser verdadeiro ou falso' })
   active?: boolean;
@@ -91,6 +128,9 @@ const SELLER_SELECT = {
   phone: true,
   jobTitle: true,
   commissionRate: true,
+  commissionRatePromissory: true,
+  commissionRateFinancing: true,
+  cpf: true,
   active: true,
   createdAt: true,
 } as const;
@@ -186,6 +226,9 @@ export class SellersService {
         phone: dto.phone,
         jobTitle: dto.jobTitle ?? 'Vendedor',
         commissionRate: dto.commissionRate ?? 0,
+        commissionRatePromissory: dto.commissionRatePromissory ?? null,
+        commissionRateFinancing: dto.commissionRateFinancing ?? null,
+        cpf: dto.cpf ? dto.cpf.replace(/\D/g, '') || null : null,
         active: dto.active ?? true,
         role: 'seller',
       },
@@ -208,6 +251,7 @@ export class SellersService {
     }
 
     const { password, ...data } = dto;
+    if (data.cpf !== undefined) data.cpf = data.cpf.replace(/\D/g, '') || (null as unknown as string);
     if (!password) return this.prisma.user.update({ where: { id }, data, select: SELLER_SELECT });
 
     // Senha nova: grava o hash e derruba as sessões abertas com a senha antiga

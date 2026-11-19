@@ -117,7 +117,11 @@ model User {
   updatedAt    DateTime @updatedAt @map("updated_at")
   phone           String?
   jobTitle        String?
+  // Comissão (%) da venda à vista; as de promissória e financiada, se vazias, usam esta
   commissionRate  Float?  @default(0)
+  commissionRatePromissory Float? @map("commission_rate_promissory")
+  commissionRateFinancing  Float? @map("commission_rate_financing")
+  cpf             String?
 
   dealership   Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
   vehiclesCreated Vehicle[] @relation("VehicleCreatedBy")
@@ -247,6 +251,9 @@ model Customer {
   // RG ou inscrição estadual (aparece no contrato e nas procurações)
   rg              String?
   phone           String?
+  // Contato de recado (outra pessoa/telefone para falar com o cliente)
+  altContactName  String?   @map("alt_contact_name")
+  altPhone        String?   @map("alt_phone")
   email           String?
   address         String?
   birthDate       DateTime? @map("birth_date")
@@ -698,6 +705,10 @@ model VehicleAcquisition {
   supplierName           String?  @map("supplier_name")
   supplierDocument       String?  @map("supplier_document")
   supplierPhone          String?  @map("supplier_phone")
+  supplierAddress        String?  @map("supplier_address")
+  // Contato de recado do fornecedor
+  supplierAltContactName String?  @map("supplier_alt_contact_name")
+  supplierAltPhone       String?  @map("supplier_alt_phone")
   documentOwnerName      String?  @map("document_owner_name")
   documentOwnerDocument  String?  @map("document_owner_document")
   purchaseValue          Decimal  @default(0) @db.Decimal(12, 2) @map("purchase_value")

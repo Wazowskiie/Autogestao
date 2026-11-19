@@ -31,6 +31,27 @@ const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', curren
 // Formas em que o dinheiro ainda vai entrar depois (ficam "pendentes" no Financeiro)
 const RECEIVED_LATER = ['financing', 'consortium', 'promissory'];
 
+/**
+ * Qual comissão do vendedor vale na venda: financiada (financiamento ou consórcio),
+ * promissórias, ou à vista (o resto: dinheiro, PIX, cartão, transferência, troca).
+ * Se a venda mistura, vale nesta ordem: financiada, promissórias, à vista.
+ */
+export type CommissionKind = 'financing' | 'promissory' | 'cash';
+export function commissionKind(methods: (string | null | undefined)[]): CommissionKind {
+  if (methods.some((m) => m === 'financing' || m === 'consortium')) return 'financing';
+  if (methods.includes('promissory')) return 'promissory';
+  return 'cash';
+}
+export function commissionRateFor(
+  seller: { commissionRate: number | null; commissionRatePromissory?: number | null; commissionRateFinancing?: number | null },
+  kind: CommissionKind,
+) {
+  const base = seller.commissionRate ?? 0;
+  if (kind === 'financing') return seller.commissionRateFinancing ?? base;
+  if (kind === 'promissory') return seller.commissionRatePromissory ?? base;
+  return base;
+}
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const DAY = 24 * 60 * 60 * 1000;
 // Prazo legal para o comprador transferir o veículo (CTB art. 123)
@@ -144,7 +165,7 @@ export class SalesService {
 
   async create(dealershipId: string, userId: string, dto: CreateSaleDto, actor?: AuthenticatedUser) {
     if(actor?.role==='seller' && dto.sellerId && dto.sellerId!==userId) throw new ForbiddenException('Vendedor pode registrar vendas somente para si');
-    const seller=await this.prisma.user.findFirst({where:{id:dto.sellerId??userId,dealershipId,active:true},select:{id:true,name:true,commissionRate:true}});
+    const seller=await this.prisma.user.findFirst({where:{id:dto.sellerId??userId,dealershipId,active:true},select:{id:true,name:true,commissionRate:true,commissionRatePromissory:true,commissionRateFinancing:true}});
     if(!seller) throw new NotFoundException('Vendedor não encontrado');
     const vehicle = await this.prisma.vehicle.findFirst({
       where: { id: dto.vehicleId, dealershipId },
@@ -253,7 +274,8 @@ export class SalesService {
       date: e.date ? parseDateOnly(e.date) : null, paid: e.paid ?? true,
     }));
     const expensesTotal = round2(expenses.reduce((t, e) => t + e.amount, 0));
-    const commissionRate = seller.commissionRate ?? 0;
+    // Percentual conforme a forma de pagamento (à vista, promissórias ou financiada)
+    const commissionRate = commissionRateFor(seller, commissionKind(payments.length ? payments.map((p) => p.method) : [dto.paymentMethod]));
     const commissionAmount = dto.commissionAmount != null
       ? round2(Number(dto.commissionAmount))
       : round2((dto.price * commissionRate) / 100);

@@ -139,6 +139,8 @@ export interface Customer {
   id: string; dealershipId: string;
   name: string; document: string | null; rg?: string | null;
   phone: string | null; email: string | null; address: string | null;
+  /** Contato de recado */
+  altContactName?: string | null; altPhone?: string | null;
   birthDate: string | null; gender: string | null;
   howMet: string | null; tags: string[]; notes: string | null;
   createdAt: string; updatedAt: string;
@@ -146,6 +148,7 @@ export interface Customer {
 export interface CustomerListResponse { items: Customer[]; total: number; page: number; pageSize: number; }
 export interface CustomerInput {
   name: string; document?: string; rg?: string; phone?: string; email?: string; address?: string;
+  altContactName?: string; altPhone?: string;
   birthDate?: string; gender?: string; howMet?: string; tags?: string[]; notes?: string;
 }
 
@@ -228,6 +231,10 @@ export interface Seller {
   phone?: string;
   jobTitle?: string;
   commissionRate?: number;
+  /** Vazio = usa a comissão da venda à vista */
+  commissionRatePromissory?: number | null;
+  commissionRateFinancing?: number | null;
+  cpf?: string | null;
   active?: boolean;
 }
 
@@ -238,6 +245,9 @@ export interface CreateSellerInput {
   phone?: string;
   jobTitle?: string;
   commissionRate?: number;
+  commissionRatePromissory?: number | null;
+  commissionRateFinancing?: number | null;
+  cpf?: string;
   active?: boolean;
 }
 
@@ -248,6 +258,9 @@ export interface UpdateSellerInput {
   phone?: string;
   jobTitle?: string;
   commissionRate?: number;
+  commissionRatePromissory?: number | null;
+  commissionRateFinancing?: number | null;
+  cpf?: string;
   active?: boolean;
 }
 

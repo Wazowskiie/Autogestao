@@ -95,6 +95,10 @@ export class UpsertAcquisitionDto {
   @IsOptional() @IsString() supplierName?: string;
   @IsOptional() @IsString() supplierDocument?: string;
   @IsOptional() @IsString() supplierPhone?: string;
+  @IsOptional() @IsString() @MaxLength(250) supplierAddress?: string;
+  // Contato de recado do fornecedor
+  @IsOptional() @IsString() @MaxLength(120) supplierAltContactName?: string;
+  @IsOptional() @IsString() supplierAltPhone?: string;
   @IsOptional() @IsString() documentOwnerName?: string;
   @IsOptional() @IsString() documentOwnerDocument?: string;
   @IsOptional() @IsNumber({}, { message: 'Valor de compra inválido' }) @Min(0) @Type(() => Number) purchaseValue?: number;

@@ -312,6 +312,11 @@ function generatePassword() {
  *  - senha é opcional (deixe em branco para manter a atual)
  *  - chama api.updateSeller(seller.id, dados) em vez de api.createSeller
  */
+function formatCpf(v: string) {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  return d.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
+
 function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClose: () => void; onSaved: () => void }) {
   const isEditing = !!seller;
   const [name, setName] = useState(seller?.name ?? "");
@@ -319,7 +324,11 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
   const [phone, setPhone] = useState(seller?.phone ? formatPhone(seller.phone) : "");
   const [jobTitle, setJobTitle] = useState(seller?.jobTitle ?? JOB_TITLES[0]);
   const [jobTitleOpen, setJobTitleOpen] = useState(false);
+  // Três comissões: venda à vista, com promissórias e financiada (vazia no cadastro = igual à à vista)
   const [commissionRate, setCommissionRate] = useState(String(seller?.commissionRate ?? 3));
+  const [ratePromissory, setRatePromissory] = useState(String(seller?.commissionRatePromissory ?? seller?.commissionRate ?? 3));
+  const [rateFinancing, setRateFinancing] = useState(String(seller?.commissionRateFinancing ?? seller?.commissionRate ?? 3));
+  const [cpf, setCpf] = useState(seller?.cpf ? formatCpf(seller.cpf) : "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [active, setActive] = useState(seller?.active ?? true);
@@ -347,8 +356,11 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
     // Na edição a senha é opcional: só valida se o usuário digitou algo
     if (!isEditing && password.length < 8) e.password = "Mínimo de 8 caracteres";
     if (isEditing && password && password.length < 8) e.password = "Mínimo de 8 caracteres";
-    const c = Number(commissionRate);
-    if (Number.isNaN(c) || c < 0 || c > 100) e.commissionRate = "Entre 0 e 100";
+    for (const [k, v] of [["commissionRate", commissionRate], ["ratePromissory", ratePromissory], ["rateFinancing", rateFinancing]] as const) {
+      const c = Number(v.replace(",", "."));
+      if (v.trim() === "" || Number.isNaN(c) || c < 0 || c > 100) e[k] = "Entre 0 e 100";
+    }
+    if (cpf && cpf.replace(/\D/g, "").length !== 11) e.cpf = "CPF com 11 números";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -363,7 +375,10 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
         email,
         phone: phone.replace(/\D/g, ""),
         jobTitle,
-        commissionRate: Number(commissionRate),
+        commissionRate: Number(commissionRate.replace(",", ".")),
+        commissionRatePromissory: Number(ratePromissory.replace(",", ".")),
+        commissionRateFinancing: Number(rateFinancing.replace(",", ".")),
+        cpf: cpf.replace(/\D/g, ""),
         active,
       };
       if (password) payload.password = password;
@@ -463,13 +478,34 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
             </div>
 
             <div className="col-span-2 sm:col-span-1">
+              <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>CPF</label>
+              <input value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))} inputMode="numeric" placeholder="000.000.000-00"
+                className="w-full rounded-lg px-3 py-2.5" style={fieldStyle(!!errors.cpf)} />
+              {errors.cpf && <p style={{ fontSize: 11, color: "#DC2626", marginTop: 4 }}>{errors.cpf}</p>}
+            </div>
+
+            <div className="col-span-2">
               <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Comissão por venda (%)</label>
-              <div className="relative">
-                <Percent size={15} className="absolute" style={{ left: 11, top: 11, color: "#9CA3AF" }} />
-                <input type="number" min="0" max="100" step="0.5" value={commissionRate} onChange={(e) => setCommissionRate(e.target.value)}
-                  className="w-full rounded-lg pl-9 pr-3 py-2.5" style={fieldStyle(!!errors.commissionRate)} />
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  ["À vista", commissionRate, setCommissionRate, "commissionRate"],
+                  ["Promissórias", ratePromissory, setRatePromissory, "ratePromissory"],
+                  ["Financiada", rateFinancing, setRateFinancing, "rateFinancing"],
+                ] as const).map(([label, value, setValue, key]) => (
+                  <div key={key}>
+                    <span style={{ fontSize: 12, color: "#6B7280", display: "block", marginBottom: 4 }}>{label}</span>
+                    <div className="relative">
+                      <Percent size={15} className="absolute" style={{ left: 11, top: 11, color: "#9CA3AF" }} />
+                      <input type="number" min="0" max="100" step="0.5" value={value} onChange={(e) => setValue(e.target.value)} aria-label={`Comissão ${label}`}
+                        className="w-full rounded-lg pl-9 pr-3 py-2.5" style={fieldStyle(!!errors[key])} />
+                    </div>
+                    {errors[key] && <p style={{ fontSize: 11, color: "#DC2626", marginTop: 4 }}>{errors[key]}</p>}
+                  </div>
+                ))}
               </div>
-              {errors.commissionRate && <p style={{ fontSize: 11, color: "#DC2626", marginTop: 4 }}>{errors.commissionRate}</p>}
+              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6 }}>
+                Venda com financiamento ou consórcio usa a de financiada; com promissórias, a de promissórias; o resto (dinheiro, PIX, cartão), a à vista.
+              </p>
             </div>
 
             <div className="col-span-2 sm:col-span-1">

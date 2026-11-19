@@ -181,6 +181,9 @@ function CustomerModal({ initial, onClose, onSaved }: { initial: api.Customer | 
   const [rg, setRg] = useState(initial?.rg ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
+  // Contato de recado: outra pessoa/telefone para falar com o cliente
+  const [altContactName, setAltContactName] = useState(initial?.altContactName ?? "");
+  const [altPhone, setAltPhone] = useState(initial?.altPhone ?? "");
   const [address, setAddress] = useState(initial?.address ?? "");
   const [birthDate, setBirthDate] = useState(
     initial?.birthDate ? initial.birthDate.split("T")[0] : ""
@@ -206,6 +209,9 @@ function CustomerModal({ initial, onClose, onSaved }: { initial: api.Customer | 
         rg: rg.trim() || undefined,
         phone: phone || undefined,
         email: email || undefined,
+        // Na edição manda "" para poder apagar o recado
+        altContactName: initial ? altContactName.trim() : altContactName.trim() || undefined,
+        altPhone: initial ? altPhone : altPhone || undefined,
         address: address || undefined,
         birthDate: birthDate || undefined,
         gender: gender || undefined,
@@ -286,6 +292,18 @@ function CustomerModal({ initial, onClose, onSaved }: { initial: api.Customer | 
                 <div>
                   <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>E-mail</label>
                   <input type="email" placeholder="nome@email.com" value={email} onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Contato de recado</label>
+                  <input placeholder="Nome (ex.: Maria, esposa)" value={altContactName} onChange={(e) => setAltContactName(e.target.value)}
+                    className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Telefone do recado</label>
+                  <input placeholder="(85) 9 9999-9999" value={altPhone} onChange={(e) => setAltPhone(e.target.value)} inputMode="tel"
                     className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
                 </div>
               </div>
