@@ -655,6 +655,8 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
   const [debts, setDebts] = useState<DebtRow[]>([]);
   const [debtsOpen, setDebtsOpen] = useState(false);
   const [entryNotes, setEntryNotes] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [paymentDetails, setPaymentDetails] = useState("");
   const [loadingEntry, setLoadingEntry] = useState(!!initial);
   const [savedId, setSavedId] = useState<string | null>(initial?.id ?? null);
 
@@ -681,6 +683,8 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
         ? a.debts.map((d) => ({ date: d.date ?? "", description: d.description, amount: String(d.amount).replace(".", ",") }))
         : Number(a.debtsValue) ? [{ date: "", description: "Débitos", amount: String(a.debtsValue).replace(".", ",") }] : []);
       setEntryNotes(a.notes ?? "");
+      setPaymentMethod(a.paymentMethod ?? "");
+      setPaymentDetails(a.paymentDetails ?? "");
     }).catch(() => { /* sem dados de entrada ainda */ }).finally(() => alive && setLoadingEntry(false));
     return () => { alive = false; };
   }, [initial]);
@@ -859,7 +863,7 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
       else vehicleId = (await api.createVehicle(payload)).id;
       setSavedId(vehicleId);
 
-      const hasEntry = supplier.name.trim() || entryChannel || intermediary.trim() || entryNotes.trim() || payoffNum > 0 || debts.length > 0;
+      const hasEntry = supplier.name.trim() || entryChannel || intermediary.trim() || entryNotes.trim() || payoffNum > 0 || debts.length > 0 || paymentMethod.trim();
       if (hasEntry && !loadingEntry) {
         const owner = sameOwner ? supplier : docOwner;
         try {
@@ -872,6 +876,7 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
             supplierAddress: supplier.address?.trim() ?? "", supplierAltContactName: supplier.altName?.trim() ?? "", supplierAltPhone: supplier.altPhone?.trim() ?? "",
             documentOwnerName: owner.name.trim(), documentOwnerDocument: digitsOnly(owner.document),
             purchaseValue: costNum, payoffValue: payoffNum,
+            paymentMethod: paymentMethod.trim(), paymentDetails: paymentDetails.trim(),
             debts: debts.map((d) => ({ date: d.date || null, description: d.description.trim(), amount: parseBRL(d.amount) })),
             notes: entryNotes.trim(),
           });
@@ -1236,6 +1241,22 @@ function VehicleFormModal({ initial, onClose, onSaved }: { initial: api.Vehicle 
               <Field label="Valor líquido">
                 <input readOnly value={currency(netValue)} title="Entrada − quitação − débitos" className="w-full rounded-lg px-3 py-2.5" style={{ ...inputStyle, background: "#F3F4F6", color: netValue < 0 ? "#DC2626" : "#111827" }} />
               </Field>
+              <Field label="Forma de pagamento ao fornecedor">
+                <select value={dv.PURCHASE_PAYMENT_METHODS.includes(paymentMethod as never) || !paymentMethod ? paymentMethod : "__outro"} disabled={loadingEntry}
+                  onChange={(e) => setPaymentMethod(e.target.value === "__outro" ? "Outro" : e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={selectStyle}>
+                  <option value="">Selecione</option>
+                  {dv.PURCHASE_PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                  <option value="__outro">Outra forma</option>
+                </select>
+              </Field>
+              <Field label="Detalhes do pagamento">
+                <input placeholder="Ex: PIX CPF 066.850.583-40, Nubank" value={paymentDetails} disabled={loadingEntry} onChange={(e) => setPaymentDetails(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+              </Field>
+              {paymentMethod && !dv.PURCHASE_PAYMENT_METHODS.includes(paymentMethod as never) && (
+                <Field label="Qual forma?">
+                  <input placeholder="Ex: Boleto" value={paymentMethod === "Outro" ? "" : paymentMethod} onChange={(e) => setPaymentMethod(e.target.value || "Outro")} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
+                </Field>
+              )}
               <Field label="Valor para venda *">
                 <input placeholder="Ex: 30.000,00" value={price} inputMode="decimal" onChange={(e) => setPrice(e.target.value)} className="w-full rounded-lg px-3 py-2.5" style={inputStyle} />
               </Field>

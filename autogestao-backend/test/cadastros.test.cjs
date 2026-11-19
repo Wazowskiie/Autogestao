@@ -80,6 +80,7 @@ test('Contrato de compra: dados da loja, do fornecedor e do veículo', async () 
   await details.upsertAcquisition(shop.id, v.id, {
     supplierName: 'Pedro', supplierDocument: '987.654.321-00', supplierPhone: '85911112222', supplierAddress: 'Rua C, 5',
     purchaseValue: 14000, payoffValue: 3000, documentOwnerName: 'Ana', documentOwnerDocument: '11122233344',
+    paymentMethod: ' PIX ', paymentDetails: 'Chave CPF, Nubank',
   });
   const d = await details.purchaseDocument(shop.id, v.id);
   assert.match(d.contractNumber, /^CP-\d{4}-[0-9A-F]{6}$/);
@@ -87,6 +88,7 @@ test('Contrato de compra: dados da loja, do fornecedor e do veículo', async () 
   assert.deepEqual([d.supplier.name, d.supplier.rg, d.supplier.address], ['Pedro', '2009123456', 'Rua C, 5']);
   assert.deepEqual([d.purchaseValue, d.payoffValue, d.vehicle.plate, d.dealership.name], [14000, 3000, 'ABC1D23', 'Loja']);
   assert.deepEqual(d.documentOwner, { name: 'Ana', document: '11122233344' });
+  assert.deepEqual([d.paymentMethod, d.paymentDetails], ['PIX', 'Chave CPF, Nubank']);
   // Outra loja não acessa
   const other = await prisma.dealership.create({ data: { name: 'Outra', slug: 'outra-c' } });
   await assert.rejects(details.purchaseDocument(other.id, v.id), /Veículo não encontrado/);

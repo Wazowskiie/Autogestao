@@ -964,6 +964,8 @@ export interface PurchaseDocuments {
   debts: { date?: string | null; description: string; amount: number }[];
   intermediary: string | null;
   notes: string | null;
+  paymentMethod?: string | null;
+  paymentDetails?: string | null;
   dealership: SaleDocuments["dealership"];
   supplier: { name: string; document: string | null; rg: string | null; phone: string | null; address: string | null; altContactName: string | null; altPhone: string | null };
   documentOwner: { name: string; document: string | null } | null;
@@ -1036,7 +1038,7 @@ function purchaseContractBody(doc: PurchaseDocuments) {
   ${doc.payoffValue > 0 ? `<p>O valor de quitação refere-se ao financiamento/alienação que pesa sobre o veículo e será pago pela COMPRADORA diretamente à instituição credora, sendo descontado do valor avaliado.</p>` : ""}
   ${doc.debtsValue > 0 ? `<p>Descrição dos débitos, pagos pela COMPRADORA e descontados do valor avaliado:</p>
   ${doc.debts.length ? `<table><tr><th>Débito</th><th style="width:22%">Data</th><th style="width:22%">Valor</th></tr>${doc.debts.map((d) => `<tr><td>${esc(d.description)}</td><td>${d.date ? shortDate(d.date) : ""}</td><td>${brl(Number(d.amount) || 0)}</td></tr>`).join("")}</table>` : `<p>${blank(320)}</p>`}` : ""}
-  <p>Forma de pagamento: ${blank(320)}</p>
+  <p>Forma de pagamento: ${doc.paymentMethod || doc.paymentDetails ? `<b>${esc([doc.paymentMethod, doc.paymentDetails].filter(Boolean).join(" — "))}</b>` : blank(320)}</p>
   <p>Com o recebimento do valor acima, o(a) VENDEDOR(A) dá à COMPRADORA plena, geral e irrevogável quitação do preço.</p>
 
   ${doc.notes ? `<h2>OBSERVAÇÕES</h2><p>${esc(doc.notes).replace(/\n/g, "<br>")}</p>` : ""}

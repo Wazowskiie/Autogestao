@@ -1084,6 +1084,7 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
     documentOwnerName: a?.documentOwnerName ?? "", documentOwnerDocument: a?.documentOwnerDocument ?? "",
     purchaseValue: moneyInput(a ? a.purchaseValue : v.cost), payoffValue: moneyInput(a?.payoffValue), debtsValue: moneyInput(a?.debtsValue),
     notes: a?.notes ?? "", intermediary: a?.intermediary ?? "",
+    paymentMethod: a?.paymentMethod ?? "", paymentDetails: a?.paymentDetails ?? "",
     entryChannel: (a?.entryChannel ?? (a?.ownershipType === "consigned" ? "consignados" : "")) as dv.EntryChannel | "",
     debts: (a?.debts?.length ? a.debts.map((d) => ({ date: d.date ?? "", description: d.description, amount: moneyInput(d.amount) }))
       : a && Number(a.debtsValue) ? [{ date: "", description: "Débitos", amount: moneyInput(a.debtsValue) }] : []) as { date: string; description: string; amount: string }[],
@@ -1146,6 +1147,7 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
             ["Valor de débitos", money(a.debtsValue)],
             ...(a.debts?.length ? a.debts.map((d) => [`  · ${d.description}${d.date ? ` (${dateBR(d.date)})` : ""}`, money(d.amount)] as [string, string]) : []),
             ["Valor líquido (pago ao fornecedor)", money(netValue)],
+            ["Forma de pagamento", [a.paymentMethod, a.paymentDetails].filter(Boolean).join(" — ")],
             ["Valor de venda", money(v.price)],
             ["Observação da entrada", a.notes ? <span style={{ whiteSpace: "pre-wrap" }}>{a.notes}</span> : ""],
           ]} />
@@ -1191,6 +1193,11 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
           <Field label="Valor de quitação (financiamento)"><input value={f.payoffValue} onChange={set("payoffValue")} placeholder="0,00" style={inputStyle} /></Field>
           <Field label="Valor de débitos (soma da lista)"><input value={money(debtsSum)} readOnly style={{ ...inputStyle, background: C.stripe }} /></Field>
           <Field label="Valor líquido (pago ao fornecedor)"><input value={Number.isNaN(net) ? "—" : money(net)} readOnly style={{ ...inputStyle, background: C.stripe }} /></Field>
+          <Field label="Forma de pagamento">
+            <input list="formas-pagamento-entrada" value={f.paymentMethod} onChange={set("paymentMethod")} placeholder="Ex: PIX" style={inputStyle} />
+            <datalist id="formas-pagamento-entrada">{dv.PURCHASE_PAYMENT_METHODS.map((m) => <option key={m} value={m} />)}</datalist>
+          </Field>
+          <Field label="Detalhes do pagamento"><input value={f.paymentDetails} onChange={set("paymentDetails")} placeholder="Ex: PIX CPF 066.850.583-40, Nubank" style={inputStyle} /></Field>
         </Grid>
         <div style={{ marginTop: 14 }}>
           <Label>Débitos</Label>
