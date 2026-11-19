@@ -52,6 +52,10 @@ export function commissionRateFor(
   return base;
 }
 
+export { parseCommissionRules, commissionRateByRules } from './commission-rules';
+export type { CommissionRules } from './commission-rules';
+import { parseCommissionRules, commissionRateByRules } from './commission-rules';
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const DAY = 24 * 60 * 60 * 1000;
 // Prazo legal para o comprador transferir o veículo (CTB art. 123)
@@ -274,8 +278,12 @@ export class SalesService {
       date: e.date ? parseDateOnly(e.date) : null, paid: e.paid ?? true,
     }));
     const expensesTotal = round2(expenses.reduce((t, e) => t + e.amount, 0));
-    // Percentual conforme a forma de pagamento (à vista, promissórias ou financiada)
-    const commissionRate = commissionRateFor(seller, commissionKind(payments.length ? payments.map((p) => p.method) : [dto.paymentMethod]));
+    // Percentual conforme a forma de pagamento (à vista, promissórias ou financiada).
+    // Se a loja definiu a comissão para todos, vale a regra da loja; senão, a do cadastro do vendedor.
+    const kind = commissionKind(payments.length ? payments.map((p) => p.method) : [dto.paymentMethod]);
+    const shopRules = parseCommissionRules((await this.prisma.dealership.findUnique({ where: { id: dealershipId }, select: { commissionRules: true } }))?.commissionRules);
+    const downPercent = promissory && dto.price > 0 ? ((dto.price - promissory.amount) / dto.price) * 100 : 100;
+    const commissionRate = shopRules ? commissionRateByRules(shopRules, kind, downPercent) : commissionRateFor(seller, kind);
     const commissionAmount = dto.commissionAmount != null
       ? round2(Number(dto.commissionAmount))
       : round2((dto.price * commissionRate) / 100);

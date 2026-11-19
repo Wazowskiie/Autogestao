@@ -91,3 +91,27 @@ test('Contrato de compra: dados da loja, do fornecedor e do veículo', async () 
   const other = await prisma.dealership.create({ data: { name: 'Outra', slug: 'outra-c' } });
   await assert.rejects(details.purchaseDocument(other.id, v.id), /Veículo não encontrado/);
 });
+
+test('Comissão da loja: à vista 9%, financiada 10%, promissória 7% (entrada ≥ 65%) ou 5%', async () => {
+  const { commissionRateByRules, parseCommissionRules } = require('../dist/src/sales/commission-rules');
+  const rules = { cash: 9, financing: 10, promissoryHigh: 7, promissoryHighMinDown: 65, promissoryLow: 5 };
+  assert.equal(parseCommissionRules({ cash: 9 }), null);
+  assert.equal(commissionRateByRules(rules, 'promissory', 65), 7);
+  assert.equal(commissionRateByRules(rules, 'promissory', 64.99), 5);
+  await prisma.dealership.update({ where: { id: shop.id }, data: { commissionRules: rules, minDownPaymentPercent: 60 } });
+  const beto = await prisma.user.create({ data: { dealershipId: shop.id, role: 'seller', name: 'Beto', email: 'beto@c.invalid', passwordHash: 'x', commissionRate: 2 } });
+  const asBeto = { userId: beto.id, dealershipId: shop.id, role: 'seller' };
+  const meuCliente = await prisma.customer.create({ data: { dealershipId: shop.id, name: 'Cliente do Beto', document: '52998224725', createdById: beto.id } });
+  const venda = async (payments) => {
+    const v = await prisma.vehicle.create({ data: { dealershipId: shop.id, brand: 'Honda', model: 'CG', year: 2022, type: 'moto', price: 10000, cost: 7000 } });
+    const s = await sales.create(shop.id, beto.id, { vehicleId: v.id, customerId: meuCliente.id, price: 10000, cost: 7000, payments }, asBeto);
+    return [Number(s.commissionRate), Number(s.commissionAmount)];
+  };
+  assert.deepEqual(await venda([{ method: 'pix', amount: 10000 }]), [9, 900]);
+  assert.deepEqual(await venda([{ method: 'financing', amount: 10000 }]), [10, 1000]);
+  assert.deepEqual(await venda([{ method: 'pix', amount: 6500 }, { method: 'promissory', amount: 3500 }]), [7, 700]);
+  assert.deepEqual(await venda([{ method: 'cash', amount: 6200 }, { method: 'promissory', amount: 3800 }]), [5, 500]);
+  // Entrada abaixo de 60%: vendedor não consegue registrar
+  await assert.rejects(venda([{ method: 'pix', amount: 5000 }, { method: 'promissory', amount: 5000 }]), /abaixo do mínimo de 60%/);
+  await prisma.dealership.update({ where: { id: shop.id }, data: { commissionRules: require('../dist/src/generated/prisma/client').Prisma.DbNull, minDownPaymentPercent: null } });
+});

@@ -1,3 +1,4 @@
+import { parseCommissionRules } from '../sales/commission-rules';
 import { Prisma } from '../generated/prisma/client';
 import { normalizeSocialLinks, SocialLinks } from './social-links';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
@@ -43,6 +44,7 @@ export class SettingsService {
         logoUrl: d.logoUrl, coverUrl: d.coverUrl, primaryColor: d.primaryColor,
         street: d.focusNfeLogradouro, number: d.focusNfeNumero, district: d.focusNfeBairro, zip: d.focusNfeCep,
         minDownPaymentPercent: d.minDownPaymentPercent != null ? Number(d.minDownPaymentPercent) : null,
+        commissionRules: parseCommissionRules(d.commissionRules),
         socialLinks: (d.socialLinks ?? {}) as SocialLinks,
       },
       // O token da NF-e nunca sai do servidor: só dizemos se ele existe
@@ -104,6 +106,7 @@ export class SettingsService {
         state: dto.state !== undefined ? dto.state.toUpperCase() || null : undefined,
         primaryColor: dto.primaryColor,
         minDownPaymentPercent: dto.minDownPaymentPercent === undefined ? undefined : dto.minDownPaymentPercent || null,
+        ...(dto.commissionRules !== undefined ? { commissionRules: dto.commissionRules ? ({ ...dto.commissionRules } as unknown as Prisma.InputJsonValue) : Prisma.DbNull } : {}),
         focusNfeLogradouro: dto.street !== undefined ? dto.street || null : undefined,
         focusNfeNumero: dto.number !== undefined ? dto.number || null : undefined,
         focusNfeBairro: dto.district !== undefined ? dto.district || null : undefined,

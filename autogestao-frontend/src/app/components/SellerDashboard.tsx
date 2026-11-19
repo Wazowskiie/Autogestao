@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { AlarmClock, Car, ChevronRight, HandCoins, MessageSquare, Plus, ShoppingBag, Users, Wallet } from "lucide-react";
 import * as api from "../../lib/api";
 import * as crm from "../../lib/crm-api";
+import { getSettings, type CommissionRules } from "../../lib/settings-api";
 import type { SaleFull } from "../../lib/sales-api";
 import { useAuth } from "../../lib/auth-context";
 import { usePlan } from "../../lib/plan-context";
@@ -35,6 +36,7 @@ export function SellerDashboard({ onNavigate }: { onNavigate: (page: string) => 
   const [summary, setSummary] = useState<api.SaleSummary | null>(null);
   const [pendingCommission, setPendingCommission] = useState<number | null>(null);
   const [commissionRate, setCommissionRate] = useState<number | null>(null);
+  const [shopCommission, setShopCommission] = useState<CommissionRules | null>(null);
   const [chart, setChart] = useState<{ month: string; vendas: number }[]>([]);
   const [recent, setRecent] = useState<SaleFull[]>([]);
   const [available, setAvailable] = useState<number | null>(null);
@@ -58,6 +60,7 @@ export function SellerDashboard({ onNavigate }: { onNavigate: (page: string) => 
         setCommissionRate(me?.commissionRate ?? null);
       }),
       api.listSales({ pageSize: 5 }).then((r) => setRecent(r.items as unknown as SaleFull[])),
+      getSettings().then((d) => setShopCommission(d.dealership.commissionRules ?? null)).catch(() => {}),
       api.listVehicles({ status: "available", pageSize: 1 }).then((r) => setAvailable(r.total)),
       hasCrm ? crm.getSummary({}).then(setLeads) : Promise.resolve(),
       hasCrm ? crm.getReminders().then((r) => setTasks(r.items.slice(0, 5))) : Promise.resolve(),
@@ -74,7 +77,7 @@ export function SellerDashboard({ onNavigate }: { onNavigate: (page: string) => 
   const stats = [
     { label: "Minhas vendas no mês", value: summary ? String(summary.count) : dash, hint: summary?.canceledCount ? `${summary.canceledCount} cancelada(s)` : "vendas ativas", icon: ShoppingBag, bg: "#EBF2FA", color: "#185FA5" },
     { label: "Valor vendido no mês", value: summary ? brl(summary.totalRevenue) : dash, hint: "soma das minhas vendas", icon: Wallet, bg: "#EAF3DE", color: "#27500A" },
-    { label: "Minha comissão no mês", value: summary ? brl(Number(summary.totalCommission ?? 0)) : dash, hint: commissionRate != null ? `${commissionRate.toLocaleString("pt-BR")}% por venda` : "sobre as minhas vendas", icon: HandCoins, bg: "#F3E8FF", color: "#7C3AED" },
+    { label: "Minha comissão no mês", value: summary ? brl(Number(summary.totalCommission ?? 0)) : dash, hint: shopCommission ? `${shopCommission.cash}% à vista · ${shopCommission.financing}% financiada · ${shopCommission.promissoryLow} a ${shopCommission.promissoryHigh}% promissória` : commissionRate != null ? `${commissionRate.toLocaleString("pt-BR")}% por venda` : "sobre as minhas vendas", icon: HandCoins, bg: "#F3E8FF", color: "#7C3AED" },
     { label: "Comissão a receber", value: pendingCommission != null ? brl(pendingCommission) : dash, hint: "ainda não paga pela loja", icon: AlarmClock, bg: "#FEF3C7", color: "#92400E" },
   ];
 

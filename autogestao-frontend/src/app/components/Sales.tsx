@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, Plus, Car, Bike, Truck, X, FileText, Edit2, Trash2, ChevronDown, UserPlus, RefreshCw, Wallet, Loader2, Printer, CheckCircle2 } from "lucide-react";
 import { openSaleDocument } from "../../lib/sale-documents";
 import { SalePrintsModal } from "./SalePrintsPanel";
-import { getSettings } from "../../lib/settings-api";
+import { getSettings, commissionRateByRules, type CommissionRules } from "../../lib/settings-api";
 import * as api from "../../lib/api";
 import * as sapi from "../../lib/sales-api";
 import { useAuth } from "../../lib/auth-context";
@@ -851,7 +851,8 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
   const isSeller = auth.user?.role === "seller";
   // Entrada mínima da loja (Configurações → Juros das promissórias)
   const [minDownPct, setMinDownPct] = useState(0);
-  useEffect(() => { getSettings().then((d) => setMinDownPct(Number(d.dealership.minDownPaymentPercent) || 0)).catch(() => {}); }, []);
+  const [shopCommission, setShopCommission] = useState<CommissionRules | null>(null);
+  useEffect(() => { getSettings().then((d) => { setMinDownPct(Number(d.dealership.minDownPaymentPercent) || 0); setShopCommission(d.dealership.commissionRules ?? null); }).catch(() => {}); }, []);
 
   const [vehicles, setVehicles] = useState<api.Vehicle[]>([]);
   const [customers, setCustomers] = useState<api.Customer[]>([]);
@@ -1017,7 +1018,10 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
     payments.some(p => p.method === "financing" || p.method === "consortium") ? "financing"
     : payments.some(p => p.method === "promissory") ? "promissory" : "cash";
   const baseRate = Number(sellerForCommission?.commissionRate ?? 0);
-  const commissionRate = Number(
+  // Entrada (tudo que não é promissória) em % do preço, para a faixa da comissão da loja
+  const promissoryForRate = num(payments.find(p => p.method === "promissory")?.amount ?? "");
+  const downPctForRate = Number.isFinite(priceNum) && priceNum > 0 ? ((priceNum - promissoryForRate) / priceNum) * 100 : 100;
+  const commissionRate = shopCommission ? commissionRateByRules(shopCommission, saleKind, downPctForRate) : Number(
     saleKind === "financing" ? sellerForCommission?.commissionRateFinancing ?? baseRate
     : saleKind === "promissory" ? sellerForCommission?.commissionRatePromissory ?? baseRate
     : baseRate);
@@ -1883,7 +1887,7 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
                   <div className="rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#F3F4F6" }}>{currency(commissionAmount)}</div>
                 )}
                 <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
-                  {commissionText === null ? `${commissionRate.toLocaleString("pt-BR")}% do preço (${saleKindLabel}), cadastrado no vendedor.` : <>Valor alterado. <button type="button" onClick={() => setCommissionText(null)} style={{ color: "#185FA5", fontWeight: 600 }}>Voltar ao automático</button></>}
+                  {commissionText === null ? `${commissionRate.toLocaleString("pt-BR")}% do preço (${saleKindLabel}${saleKind === "promissory" && shopCommission ? `, entrada de ${downPctForRate.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : ""}), ${shopCommission ? "pela regra da loja" : "cadastrado no vendedor"}.` : <>Valor alterado. <button type="button" onClick={() => setCommissionText(null)} style={{ color: "#185FA5", fontWeight: 600 }}>Voltar ao automático</button></>}
                 </p>
               </div>
               <div>

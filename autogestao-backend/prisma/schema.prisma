@@ -61,6 +61,8 @@ model Dealership {
   // Entrada mínima nas vendas com promissória (% do valor do veículo); vazio = sem mínimo
   // Configurações do CRM: rodízio de leads, prazo de resposta e pós-venda
   crmSettings           Json?    @map("crm_settings")
+  // Comissão da loja para todos os vendedores (ver CommissionRules em sales.service)
+  commissionRules       Json?    @map("commission_rules")
   // WhatsApp e redes sociais: { whatsapp, instagram, facebook, tiktok, youtube, website }
   socialLinks           Json?    @map("social_links")
   minDownPaymentPercent Decimal? @db.Decimal(5, 2) @map("min_down_payment_percent")
