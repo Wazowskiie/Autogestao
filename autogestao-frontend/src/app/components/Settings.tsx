@@ -696,6 +696,38 @@ function WhatsappCard() {
           <p style={{ fontSize: 12, color: "#6B7280", marginTop: 8 }}>Depois de salvar, clique em <b>Gerenciar</b> e marque o campo <b>messages</b>. Sem isso a Meta não manda as mensagens.</p>
         </div>
       )}
+      {a?.configured && <SellerAlertBox a={a} onSaved={setA} />}
+    </div>
+  );
+}
+
+/** Aviso no WhatsApp dos vendedores quando um cliente do chat do site pede vendedor */
+function SellerAlertBox({ a, onSaved }: { a: wa.WhatsappAccount; onSaved: (a: wa.WhatsappAccount) => void }) {
+  const [template, setTemplate] = useState(a.sellerAlertTemplate ?? "");
+  const [busy, setBusy] = useState(false);
+  const n = useNotice();
+  const save = async () => {
+    setBusy(true);
+    try { onSaved(await wa.saveSellerAlert(template.trim())); n.show("ok", template.trim() ? "Aviso dos vendedores ligado." : "Aviso dos vendedores desligado."); }
+    catch (e) { n.show("error", msg(e)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="rounded-lg p-3 mt-4" style={{ background: "#F9FAFB", border: "1px solid rgba(0,0,0,0.06)" }}>
+      {n.el}
+      <p style={{ fontSize: 13, fontWeight: 600 }}>Avisar os vendedores no WhatsApp</p>
+      <p style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>
+        Quando um cliente do chat do site clicar em “Falar com vendedor”, todos os vendedores ativos com telefone recebem um aviso.
+        A Meta só deixa a loja mandar esse tipo de mensagem usando um <b>modelo aprovado</b>. Crie no Gerenciador do WhatsApp (Modelos de mensagem → Criar, categoria <b>Utilidade</b>, idioma <b>Português (BR)</b>) com 3 variáveis, por exemplo:
+      </p>
+      <code style={{ display: "block", whiteSpace: "pre-wrap", fontSize: 12, background: "#fff", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, padding: "8px 10px", marginTop: 8 }}>
+        {"Cliente esperando atendimento no site: {{1}}.\nO que ele procura: {{2}}.\nAtenda pelo sistema: {{3}}"}
+      </code>
+      <div className="flex items-end gap-2 mt-3 flex-wrap">
+        <Field label="Nome do modelo aprovado" hint="Igual aparece na Meta. Em branco = desligado">
+          <input style={inputStyle} value={template} onChange={(e) => setTemplate(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"))} placeholder="aviso_vendedor" />
+        </Field>
+        <button onClick={save} disabled={busy} style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }}>{busy ? "Salvando..." : "Salvar"}</button>
+      </div>
     </div>
   );
 }

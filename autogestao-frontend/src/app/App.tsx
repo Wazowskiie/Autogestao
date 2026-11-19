@@ -21,6 +21,7 @@ import { usePlan, type PlanFeature } from "../lib/plan-context";
 import { Lock } from "lucide-react";
 import { Renave } from "./components/Renave";
 import { ChatInbox } from './components/ChatInbox';
+import { useWaitingChats, WaitingChatsToast } from './components/WaitingChatsAlert';
 import { AssistantPanel } from './components/AssistantPanel';
 import { Settings as SettingsPage } from './components/Settings';
 import { Ads } from './components/Ads';
@@ -52,6 +53,9 @@ export default function App() {
 
   // Vendedor entra pelo mesmo login, mas cai num painel próprio, só com as áreas dele
   const isSeller = auth.user?.role === "seller";
+  // Fila do chat: clientes que pediram vendedor e ninguém assumiu
+  const waiting = useWaitingChats(auth.status === "authenticated" && plan.has("chat"));
+  useEffect(() => { if (page === "chat") waiting.dismiss(); }, [page]);
   const sellerPages = sellerNavItems.map((i) => i.id) as Page[];
 
   const navigate = (p: string) => setPage(p as Page);
@@ -189,7 +193,12 @@ export default function App() {
         hiddenPages={hiddenPages}
         planName={plan.current?.plan.name}
         variant={isSeller ? "seller" : "manager"}
+        badges={{ chat: waiting.count }}
       />
+      {waiting.fresh && page !== "chat" && (
+        <WaitingChatsToast item={waiting.fresh} count={waiting.count}
+          onOpen={(id) => { setChatId(id); setPage("chat"); waiting.dismiss(); }} onClose={waiting.dismiss} />
+      )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top nav strip */}

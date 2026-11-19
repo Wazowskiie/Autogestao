@@ -30,6 +30,7 @@ export class AgentChatController {
     if (page < 1 || page > 100000) throw new BadRequestException('Página inválida');
     return this.service.list(user.dealershipId, page, user);
   }
+  @Get('waiting') waiting(@CurrentUser() user: AuthenticatedUser) { return this.service.waiting(user.dealershipId); }
   @Get(':id') detail(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) { return this.service.detail(user.dealershipId, id, user); }
   @Patch(':id/mode') mode(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: ChatModeDto) { return this.service.setMode(user.dealershipId, id, dto.mode, user.userId, user); }
   @Post(':id/messages') reply(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: SendChatDto) { return this.service.agentReply(user.dealershipId, id, user.userId, dto, user); }

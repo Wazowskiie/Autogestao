@@ -22,6 +22,8 @@ interface SidebarProps {
   planName?: string;
   /** Menu do vendedor: só as áreas dele, com nomes próprios e sem o botão de plano */
   variant?: "manager" | "seller";
+  /** Contadores ao lado do item do menu (ex.: clientes esperando em Atendimentos) */
+  badges?: Partial<Record<string, number>>;
 }
 
 const navItems = [
@@ -63,6 +65,7 @@ export function Sidebar({
   hiddenPages = [],
   planName,
   variant = "manager",
+  badges = {},
 }: SidebarProps) {
   const isSeller = variant === "seller";
   const items: readonly { id: string; label: string; icon: typeof Car }[] = isSeller ? sellerNavItems : navItems;
@@ -120,9 +123,17 @@ export function Sidebar({
                 color: active ? "#fff" : "rgba(255,255,255,0.65)",
               }}
             >
-              <Icon size={18} style={{ flexShrink: 0 }} />
+              <span style={{ position: "relative", display: "inline-flex" }}>
+                <Icon size={18} style={{ flexShrink: 0 }} />
+                {collapsed && !!badges[id] && <span aria-hidden style={{ position: "absolute", top: -4, right: -5, width: 9, height: 9, borderRadius: 9, background: "#F59E0B", boxShadow: "0 0 0 2px #0F1E33" }} />}
+              </span>
               {!collapsed && <span style={{ fontSize: 14 }}>{label}</span>}
-              {!collapsed && active && (
+              {!collapsed && !!badges[id] && (
+                <span title={`${badges[id]} cliente(s) esperando`} className="ml-auto" style={{ minWidth: 20, height: 20, padding: "0 6px", borderRadius: 10, background: "#F59E0B", color: "#1F1300", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                  {badges[id]}
+                </span>
+              )}
+              {!collapsed && active && !badges[id] && (
                 <ChevronRight size={14} className="ml-auto" style={{ opacity: 0.7 }} />
               )}
             </button>

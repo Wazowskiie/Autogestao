@@ -21,3 +21,9 @@ export class SaveWhatsappAccountDto {
 export class SendWhatsappDto {
   @IsString() @MinLength(1) @MaxLength(4096) text: string;
 }
+
+export class SellerAlertDto {
+  // Nome do modelo aprovado na Meta (ex.: aviso_vendedor). Vazio desliga o aviso
+  @IsOptional() @IsString() @MaxLength(512) template?: string | null;
+  @IsOptional() @IsString() @MaxLength(10) lang?: string;
+}
