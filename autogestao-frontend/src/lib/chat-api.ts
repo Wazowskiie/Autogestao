@@ -19,3 +19,5 @@ export const listChats = (page: number) => request<ConversationList>(`/chat?page
 export const getChat = (id: string) => request<Conversation>(`/chat/${id}`);
 export const setChatMode = (id: string, mode: Conversation['mode']) => request<Conversation>(`/chat/${id}/mode`, { method: 'PATCH', body: { mode } });
 export const sendAgentMessage = (id: string, content: string, clientMessageId: string) => request<Conversation>(`/chat/${id}/messages`, { method: 'POST', body: { content, clientMessageId } });
+export interface WaitingChats { count: number; items: { id: string; since: string; name: string; lastMessage: string | null }[] }
+export const getWaitingChats = () => request<WaitingChats>('/chat/waiting');

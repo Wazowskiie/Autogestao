@@ -3,6 +3,7 @@ import { PlansService } from '../plans/plans.service';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatAiService } from './chat-ai.service';
+import { SellerAlertService } from './seller-alert.service';
 import { ChatContactDto, SendChatDto } from './chat.dto';
 import { Prisma } from '../generated/prisma/client';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
@@ -14,7 +15,7 @@ const hash = (token: string) => createHash('sha256').update(token).digest('hex')
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService, private readonly ai: ChatAiService, @Optional() private readonly plans?: PlansService) {}
+  constructor(private readonly prisma: PrismaService, private readonly ai: ChatAiService, @Optional() private readonly plans?: PlansService, @Optional() private readonly alerts?: SellerAlertService) {}
 
   async start(slug: string) {
     const shop = await this.prisma.dealership.findUnique({ where: { slug }, select: { id: true, name: true } });
@@ -114,12 +115,28 @@ export class ChatService {
 
   async handover(slug: string, token?: string) {
     const c = await this.session(slug, token);
+    const before = await this.prisma.chatConversation.findUniqueOrThrow({ where: { id: c.id }, select: { mode: true } });
     await this.setMode(c.dealershipId, c.id, 'human');
+    // Cliente entrou na fila agora: avisa os vendedores no WhatsApp (sem travar a resposta ao cliente)
+    if (before.mode !== 'human') void this.alerts?.notify(c.dealershipId, c.id);
     return this.snapshot(c.id);
   }
 
+  /** Clientes esperando vendedor (para o alerta no painel) */
+  async waiting(dealershipId: string) {
+    const where = { dealershipId, mode: 'human', assignedUserId: null };
+    const [count, items] = await this.prisma.$transaction([
+      this.prisma.chatConversation.count({ where }),
+      this.prisma.chatConversation.findMany({ where, orderBy: { updatedAt: 'asc' }, take: 5,
+        select: { id: true, updatedAt: true, customer: { select: { name: true } },
+          messages: { where: { role: 'user' }, orderBy: { createdAt: 'desc' }, take: 1, select: { content: true } } } }),
+    ]);
+    return { count, items: items.map((c) => ({ id: c.id, since: c.updatedAt, name: c.customer?.name ?? 'Visitante', lastMessage: c.messages[0]?.content.slice(0, 120) ?? null })) };
+  }
+
   private access(actor?: AuthenticatedUser): Prisma.ChatConversationWhereInput {
-    return actor?.role==='seller'?{OR:[{lead:{assignedSellerId:actor.userId,archivedAt:null}},{leadId:null,assignedUserId:actor.userId}]}:{};
+    // Vendedor vê os dele e a fila aberta: clientes que pediram vendedor e ninguém assumiu ainda
+    return actor?.role==='seller'?{OR:[{lead:{assignedSellerId:actor.userId,archivedAt:null}},{leadId:null,assignedUserId:actor.userId},{assignedUserId:actor.userId},{mode:'human',assignedUserId:null}]}:{};
   }
   async list(dealershipId: string, page = 1, actor?: AuthenticatedUser) {
     const where = { dealershipId, ...this.access(actor) };
@@ -133,6 +150,11 @@ export class ChatService {
   }
   private async owned(dealershipId: string, id: string, actor?: AuthenticatedUser) {
     const c = await this.prisma.chatConversation.findFirst({ where: { dealershipId, id, ...this.access(actor) } });
+    if (!c && actor?.role === 'seller') {
+      // Saiu da fila porque outro vendedor assumiu: explica em vez de "não encontrada"
+      const taken = await this.prisma.chatConversation.findFirst({ where: { dealershipId, id, mode: 'human' }, select: { assignedUser: { select: { name: true } } } });
+      if (taken?.assignedUser) throw new ConflictException(`${taken.assignedUser.name} já assumiu este atendimento.`);
+    }
     if (!c) throw new NotFoundException('Conversa não encontrada');
     return c;
   }
@@ -151,10 +173,19 @@ export class ChatService {
         if(!permitted) throw new NotFoundException('Conversa não encontrada');
       }
       if (!userId && c.mode === 'closed') throw new ConflictException('Conversa encerrada');
+      // Fila aberta: o primeiro vendedor que assume fica com o cliente
+      if (actor?.role === 'seller' && c.assignedUserId && c.assignedUserId !== userId) {
+        throw new ConflictException('Outro vendedor já assumiu este atendimento.');
+      }
+      if (actor?.role === 'seller' && mode !== 'human' && c.assignedUserId !== userId) {
+        throw new ConflictException('Assuma o atendimento antes de encerrar ou reativar a IA.');
+      }
       if (c.mode === mode && (!userId || c.assignedUserId === userId)) return;
       await tx.chatConversation.update({ where: { id }, data: { mode, generationId: null, busyUntil: null,
         ...(mode === 'human' && userId ? { assignedUserId: userId } : {}) } });
-      if(c.leadId && mode==='human' && userId && actor?.role!=='seller') {
+      if(c.leadId && mode==='human' && userId) {
+        // Quem assume o chat também fica com o lead, se ninguém tinha
+        await tx.lead.updateMany({ where: { id: c.leadId, assignedSellerId: null }, data: { assignedSellerId: userId } });
         await tx.crmActivity.create({data:{dealershipId,leadId:c.leadId,userId,kind:'chat_assignment',content:'Responsável assumiu o atendimento do chat',metadata:{conversationId:id}}});
       }
       await tx.chatMessage.create({ data: { conversationId: id, role: 'system', content:

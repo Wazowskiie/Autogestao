@@ -6,7 +6,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequiresFeature } from '../plans/requires-feature.decorator';
-import { SaveWhatsappAccountDto, SendWhatsappDto } from './whatsapp.dto';
+import { SaveWhatsappAccountDto, SellerAlertDto, SendWhatsappDto } from './whatsapp.dto';
 import { WhatsappService } from './whatsapp.service';
 
 @Roles('owner', 'admin', 'seller')
@@ -18,6 +18,7 @@ export class WhatsappController {
   @Get('account') account(@CurrentUser() u: AuthenticatedUser) { return this.wa.account(u); }
   @Roles('owner', 'admin') @Put('account') save(@CurrentUser() u: AuthenticatedUser, @Body() dto: SaveWhatsappAccountDto) { return this.wa.saveAccount(u, dto); }
   @Roles('owner', 'admin') @Post('account/test') test(@CurrentUser() u: AuthenticatedUser) { return this.wa.test(u); }
+  @Roles('owner', 'admin') @Put('account/seller-alert') sellerAlert(@CurrentUser() u: AuthenticatedUser, @Body() dto: SellerAlertDto) { return this.wa.saveSellerAlert(u, dto.template, dto.lang); }
   @Roles('owner', 'admin') @Delete('account') remove(@CurrentUser() u: AuthenticatedUser) { return this.wa.removeAccount(u); }
 
   @Get('unread') unread(@CurrentUser() u: AuthenticatedUser) { return this.wa.unread(u); }

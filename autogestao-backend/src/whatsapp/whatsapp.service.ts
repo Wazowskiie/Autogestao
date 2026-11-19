@@ -64,7 +64,18 @@ export class WhatsappService {
     if (!a) return { configured: false, webhookUrl: this.webhookUrl() };
     const base = { configured: true, status: a.status, displayPhone: a.displayPhone, verifiedName: a.verifiedName, connectedAt: a.connectedAt, lastWebhookAt: a.lastWebhookAt, lastError: a.lastError };
     if (u.role === 'seller') return base;
-    return { ...base, phoneNumberId: a.phoneNumberId, wabaId: a.wabaId, verifyToken: a.verifyToken, webhookUrl: this.webhookUrl() };
+    return { ...base, phoneNumberId: a.phoneNumberId, wabaId: a.wabaId, verifyToken: a.verifyToken, webhookUrl: this.webhookUrl(), sellerAlertTemplate: a.sellerAlertTemplate, sellerAlertLang: a.sellerAlertLang };
+  }
+
+  /** Modelo aprovado na Meta para avisar os vendedores de cliente esperando no chat (vazio desliga) */
+  async saveSellerAlert(u: AuthenticatedUser, template: string | null | undefined, lang?: string) {
+    this.manager(u);
+    const a = await this.prisma.whatsappAccount.findUnique({ where: { dealershipId: u.dealershipId } });
+    if (!a) throw new BadRequestException('Conecte o WhatsApp oficial da loja primeiro.');
+    const name = (template ?? '').trim().toLowerCase();
+    if (name && !/^[a-z0-9_]{1,512}$/.test(name)) throw new BadRequestException('Nome do modelo inválido: use só letras minúsculas, números e _ (igual aparece na Meta).');
+    await this.prisma.whatsappAccount.update({ where: { id: a.id }, data: { sellerAlertTemplate: name || null, sellerAlertLang: (lang ?? '').trim() || 'pt_BR' } });
+    return this.account(u);
   }
 
   async saveAccount(u: AuthenticatedUser, dto: SaveWhatsappAccountDto) {
