@@ -1039,15 +1039,23 @@ function purchaseContractBody(doc: PurchaseDocuments) {
   <p>O(A) VENDEDOR(A) declara ser legítimo(a) proprietário(a) ou possuidor(a) do veículo, que o bem é de origem lícita, não possui adulteração de chassi, motor ou numeração, e que está livre de penhora, busca e apreensão, restrição judicial ou administrativa${doc.payoffValue > 0 ? ", com exceção da alienação fiduciária mencionada neste contrato" : ""}, respondendo pela evicção na forma da lei.</p>
 
   <h2>2ª CLÁUSULA – DA RESPONSABILIDADE CIVIL E CRIMINAL</h2>
-  <p>Até a data e hora deste contrato, o(a) VENDEDOR(A) responde por quaisquer danos, no âmbito civil ou criminal, decorrentes da utilização do veículo, bem como por multas, pontuações na CNH, impostos, taxas e demais débitos gerados até este momento, ainda que lançados ou cobrados depois. A partir desta data e hora, a responsabilidade passa a ser da COMPRADORA.</p>
+  <p>Até a data e hora deste contrato, o(a) VENDEDOR(A) responde por quaisquer danos, no âmbito civil ou criminal, decorrentes da utilização do veículo, bem como por impostos, taxas e demais débitos gerados até este momento, ainda que lançados ou cobrados depois (as multas seguem a 3ª cláusula). A partir desta data e hora, a responsabilidade passa a ser da COMPRADORA.</p>
 
-  <h2>3ª CLÁUSULA – DA ENTREGA E DA TRANSFERÊNCIA</h2>
+
+  <h2>3ª CLÁUSULA – DAS MULTAS E INFRAÇÕES ANTERIORES À COMPRA</h2>
+  <p>Toda multa, infração ou pontuação cuja data da infração seja anterior à data e hora deste contrato (${shortDate(at)}${hour ? `, às ${hour}` : ""}) é de responsabilidade exclusiva do(a) VENDEDOR(A), ainda que a notificação chegue depois da venda ou seja enviada em nome da COMPRADORA ou de terceiro. Para isso, as partes ajustam que:</p>
+  <p>a) a data e a hora deste contrato servem como prova de quem estava com o veículo no momento da infração;</p>
+  <p>b) o(a) VENDEDOR(A) autoriza a COMPRADORA a indicá-lo(a) como condutor(a) infrator(a) junto ao órgão de trânsito e se compromete a assinar o formulário de indicação de condutor e a fornecer cópia da CNH sempre que solicitado, dentro do prazo da notificação;</p>
+  <p>c) se a COMPRADORA, ou quem dela adquirir o veículo, pagar qualquer multa, juros ou encargo referente a esse período, inclusive a multa por não indicação do condutor, o(a) VENDEDOR(A) fará o reembolso em até 10 (dez) dias após ser comunicado(a), com a apresentação do comprovante;</p>
+  <p>d) o(a) VENDEDOR(A) mantém atualizados o endereço e os telefones informados neste contrato, para ser localizado(a) em caso de notificação.</p>
+
+  <h2>4ª CLÁUSULA – DA ENTREGA E DA TRANSFERÊNCIA</h2>
   <p>O(A) VENDEDOR(A) entrega neste ato o veículo, ${v.hasSpareKey ? "as chaves (inclusive a reserva)" : "a(s) chave(s)"}${v.hasManual ? ", o manual" : ""} e os documentos do bem, e se compromete a assinar a autorização de transferência (ATPV-e/CRV) em favor da COMPRADORA ou de quem ela indicar, comparecendo ao cartório quando necessário.</p>
 
-  <h2>4ª CLÁUSULA – LEI GERAL DE PROTEÇÃO DE DADOS</h2>
+  <h2>5ª CLÁUSULA – LEI GERAL DE PROTEÇÃO DE DADOS</h2>
   <p>A COMPRADORA está em conformidade com a Lei 13.709/2018 – LGPD. Os dados pessoais fornecidos pelo(a) VENDEDOR(A) serão usados somente para elaborar este documento e realizar a transferência do bem, com base no artigo 7º, inciso I e artigo 8º, § 1º da referida Lei.</p>
 
-  <h2>5ª CLÁUSULA – DO FORO</h2>
+  <h2>6ª CLÁUSULA – DO FORO</h2>
   <p>As partes elegem o foro da comarca de ${fill(cityState(s), 140)} para resolver qualquer questão referente a este contrato.</p>
 
   <p style="margin-top:18px">${fill(s.city, 120)}, ${longDate(at)}.</p>
