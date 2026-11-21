@@ -10,6 +10,9 @@ import { PromissoryNotesService } from './promissory-notes.service';
 export class PromissoryNotesController {
   constructor(private readonly service: PromissoryNotesService) {}
 
+  // A tela de Promissórias é só do dono/admin. O vendedor continua podendo
+  // gerar as promissórias da própria venda (POST abaixo), mas não consulta a lista.
+  @Roles('owner', 'admin')
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryPromissoryNoteDto) {
     return this.service.findAll(user.dealershipId, query, user);
@@ -28,7 +31,7 @@ export class PromissoryNotesController {
     return this.service.create(user.dealershipId, dto, user);
   }
 
-  // Dar baixa (receber) é do dono/admin; o vendedor só consulta
+  // Dar baixa (receber) é do dono/admin
   @Roles('owner', 'admin')
   @Patch(':id/pay')
   pay(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
