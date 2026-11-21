@@ -51,7 +51,6 @@ export const sellerNavItems = [
   { id: "chat", label: "Atendimentos", icon: MessageSquare },
   { id: "sales", label: "Minhas vendas", icon: ShoppingBag },
   { id: "customers", label: "Meus clientes", icon: UserCheck },
-  { id: "promissory", label: "Promissórias", icon: FileText },
   { id: "settings", label: "Minha conta", icon: Settings },
 ] as const;
 
