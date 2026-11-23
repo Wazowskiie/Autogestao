@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, TrendingUp, TrendingDown, DollarSign, Trash2, X, Calendar, FileText, ChevronDown, Check, Clock, Car, Repeat } from "lucide-react";
 import * as api from "../../lib/api";
-import { MonthPicker } from "./MonthPicker";
+import { PeriodPicker, monthPeriod, type Period } from "./PeriodPicker";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -36,12 +36,16 @@ const CATEGORIES_EXPENSE = ["Estoque", "Preparação", "Manutenção", "Document
 // Categorias em que normalmente o lançamento é de um veículo específico
 const VEHICLE_CATEGORIES = ["Venda de veículo", "Estoque", "Preparação", "Manutenção", "Documentação", "Comissão"];
 
+const PAGE = 200;
+
 export function Financial() {
   const [transactions, setTransactions] = useState<api.FinancialTransaction[]>([]);
   const [summary, setSummary] = useState<api.FinancialSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [month, setMonth] = useState(currentMonth());
+  const [period, setPeriod] = useState<Period>(() => monthPeriod(currentMonth()));
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [typeFilter, setTypeFilter] = useState<api.TransactionType | "all">("all");
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -51,19 +55,29 @@ export function Financial() {
     setError(null);
     try {
       const [res, sum] = await Promise.all([
-        api.listTransactions({ month, type: typeFilter === "all" ? undefined : typeFilter, pageSize: 100 }),
-        api.getFinancialSummary(month),
+        api.listTransactions({ from: period.from, to: period.to, type: typeFilter === "all" ? undefined : typeFilter, pageSize: PAGE }),
+        api.getFinancialSummary(period),
       ]);
       setTransactions(res.items);
+      setTotal(res.total);
       setSummary(sum);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar lançamentos");
     } finally {
       setLoading(false);
     }
-  }, [month, typeFilter]);
+  }, [period, typeFilter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const res = await api.listTransactions({ from: period.from, to: period.to, type: typeFilter === "all" ? undefined : typeFilter, pageSize: PAGE, page: Math.floor(transactions.length / PAGE) + 1 });
+      setTransactions((prev) => [...prev, ...res.items.filter((x) => !prev.some((p) => p.id === x.id))]);
+    } catch (e) { window.alert(e instanceof Error ? e.message : "Erro ao carregar mais lançamentos"); }
+    finally { setLoadingMore(false); }
+  };
 
   const visible = onlyOpen ? transactions.filter(t => !t.paid) : transactions;
 
@@ -95,10 +109,10 @@ export function Financial() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <h2>Financeiro</h2>
-            <span className="px-2 py-0.5 rounded-full" style={{ background: "#EBF2FA", color: "#185FA5", fontSize: 12, fontWeight: 500 }}>{transactions.length} lançamentos</span>
+            <span className="px-2 py-0.5 rounded-full" style={{ background: "#EBF2FA", color: "#185FA5", fontSize: 12, fontWeight: 500 }}>{total || transactions.length} lançamentos</span>
           </div>
           <div className="flex items-center gap-3">
-            <MonthPicker value={month} onChange={setMonth} />
+            <PeriodPicker value={period} onChange={(p) => p && setPeriod(p)} />
             <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg flex items-center gap-2" style={{ background: "var(--primary)", color: "#fff", fontSize: 13 }}>
               <Plus size={16} /> Lançamento
             </button>
@@ -227,6 +241,14 @@ export function Financial() {
               })}
             </tbody>
           </table>
+          {!loading && transactions.length < total && (
+            <div className="flex items-center justify-center gap-3 py-4" style={{ borderTop: "0.5px solid rgba(0,0,0,0.06)" }}>
+              <span style={{ fontSize: 12, color: "#6B7280" }}>Mostrando {transactions.length} de {total} lançamentos</span>
+              <button onClick={loadMore} disabled={loadingMore} className="px-3 py-1.5 rounded-lg" style={{ fontSize: 13, fontWeight: 500, color: "#185FA5", border: "1px solid #185FA5", background: "#fff" }}>
+                {loadingMore ? "Carregando..." : "Carregar mais"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { periodBounds, periodRange } from '../common/period';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -12,11 +13,6 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const n = (v: unknown) => Number(v ?? 0);
 const r2 = (v: number) => Math.round(v * 100) / 100;
-
-function monthRange(month: string) {
-  const [year, m] = month.split('-').map(Number);
-  return { gte: new Date(Date.UTC(year, m - 1, 1)), lt: new Date(Date.UTC(year, m, 1)) };
-}
 
 function currentMonthBR() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }).slice(0, 7);
@@ -34,10 +30,11 @@ const vehicleName = (v: { brand: string; model: string; year: number; plate?: st
 export class ClosingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async monthClosing(dealershipId: string, monthParam?: string) {
-    const month = monthParam ?? currentMonthBR();
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new BadRequestException('Mês inválido. Use AAAA-MM.');
-    const range = monthRange(month);
+  async monthClosing(dealershipId: string, period: { month?: string; from?: string; to?: string } = {}) {
+    const p = period.month || period.from || period.to ? period : { month: currentMonthBR() };
+    const bounds = periodBounds(p)!;
+    const range = periodRange(p)!;
+    const month = bounds.from === bounds.to ? bounds.from : `${bounds.from}..${bounds.to}`;
     const today = startOfTodayBrazil();
 
     const [activeSellers, sales, canceledSales, transactions, notesPaidInMonth, notesDueInMonth, notesOverdue, notesFuture, financingOpen, stock, parts, entries] =
@@ -221,6 +218,8 @@ export class ClosingService {
 
     return {
       month,
+      from: bounds.from,
+      to: bounds.to,
       generatedAt: new Date().toISOString(),
       sales: {
         count: sales.length,

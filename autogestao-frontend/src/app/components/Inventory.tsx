@@ -4,6 +4,7 @@ import { Plus, Search, Car, Bike, Truck, Package, Edit2, Trash2, Globe, X, Loade
 import { ReservationModal } from "./ReservationModal";
 import { useAuth } from "../../lib/auth-context";
 import { StatusBadge } from "./StatusBadge";
+import { PeriodPicker, type Period } from "./PeriodPicker";
 import { VehicleDetailsModal, type VehicleDetails, type Tab as DetailsTab } from "./VehicleDetailsModal";
 import * as api from "../../lib/api";
 import * as dv from "../../lib/vehicle-details-api";
@@ -121,6 +122,8 @@ function parseBRL(value: string) {
   return Number(s);
 }
 
+const PAGE = 200;
+
 export function Inventory() {
   const [vehicles, setVehicles] = useState<api.Vehicle[]>([]);
   const [total, setTotal] = useState(0);
@@ -128,7 +131,11 @@ export function Inventory() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<api.VehicleStatus | "all">("all");
+  // Padrão: só o que está na loja (o histórico de vendidas fica em "Vendido" / "Todos os status")
+  const [statusFilter, setStatusFilter] = useState<api.VehicleStatus | "all" | "stock">("stock");
+  // Período de entrada no estoque (null = todo o período)
+  const [period, setPeriod] = useState<Period | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [typeFilter, setTypeFilter] = useState<api.VehicleType | "all">("all");
   const [modalVehicle, setModalVehicle] = useState<api.Vehicle | "new" | null>(null);
   // Veículo aberto no painel "Dados do veículo"
@@ -148,7 +155,7 @@ export function Inventory() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await api.listVehicles({ search: debouncedSearch || undefined, status: statusFilter, type: typeFilter, pageSize: 100 });
+      const res = await api.listVehicles({ search: debouncedSearch || undefined, status: statusFilter, type: typeFilter, pageSize: PAGE, from: period?.from, to: period?.to });
       setVehicles(res.items);
       setTotal(res.total);
     } catch (err) {
@@ -156,7 +163,16 @@ export function Inventory() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, statusFilter, typeFilter]);
+  }, [debouncedSearch, statusFilter, typeFilter, period]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const res = await api.listVehicles({ search: debouncedSearch || undefined, status: statusFilter, type: typeFilter, pageSize: PAGE, page: Math.floor(vehicles.length / PAGE) + 1, from: period?.from, to: period?.to });
+      setVehicles((prev) => [...prev, ...res.items.filter((x) => !prev.some((p) => p.id === x.id))]);
+    } catch (e) { window.alert(e instanceof Error ? e.message : "Erro ao carregar mais veículos"); }
+    finally { setLoadingMore(false); }
+  };
 
   useEffect(() => { fetchVehicles(); }, [fetchVehicles]);
 
@@ -192,8 +208,9 @@ export function Inventory() {
           <input placeholder="Buscar por marca, modelo ou placa..." value={search} onChange={(e) => setSearch(e.target.value)}
             style={{ border: "none", outline: "none", fontSize: 13, background: "transparent", width: "100%" }} />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as api.VehicleStatus | "all")}
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as api.VehicleStatus | "all" | "stock")}
           className="rounded-lg px-3 py-2" style={{ background: "#F4F6F9", border: "0.5px solid rgba(0,0,0,0.08)", fontSize: 13 }}>
+          <option value="stock">Em estoque</option>
           <option value="all">Todos os status</option>
           <option value="available">Disponível</option>
           <option value="reserved">Reservado</option>
@@ -207,6 +224,10 @@ export function Inventory() {
           <option value="truck">Utilitários</option>
           <option value="other">Outros</option>
         </select>
+        <div className="flex items-center gap-2">
+          <span style={{ fontSize: 12, color: "#6B7280" }}>Entrada:</span>
+          <PeriodPicker value={period} onChange={setPeriod} allowAll />
+        </div>
       </div>
 
       {loadError && (
@@ -303,6 +324,14 @@ export function Inventory() {
               })}
             </tbody>
           </table>
+          {!loading && vehicles.length < total && (
+            <div className="flex items-center justify-center gap-3 py-4" style={{ borderTop: "0.5px solid rgba(0,0,0,0.06)" }}>
+              <span style={{ fontSize: 12, color: "#6B7280" }}>Mostrando {vehicles.length} de {total} veículos</span>
+              <button onClick={loadMore} disabled={loadingMore} className="px-3 py-1.5 rounded-lg" style={{ fontSize: 13, fontWeight: 500, color: "#185FA5", border: "1px solid #185FA5", background: "#fff" }}>
+                {loadingMore ? "Carregando..." : "Carregar mais"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

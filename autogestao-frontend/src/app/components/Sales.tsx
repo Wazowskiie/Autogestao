@@ -9,7 +9,7 @@ import { useAuth } from "../../lib/auth-context";
 import { CancelSaleModal, SaleAfterPanel } from "./SaleAfterPanel";
 import { VehicleDetailsModal } from "./VehicleDetailsModal";
 import * as dv from "../../lib/vehicle-details-api";
-import { MonthPicker } from "./MonthPicker";
+import { PeriodPicker, monthPeriod, type Period } from "./PeriodPicker";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -141,6 +141,8 @@ function Autocomplete<T extends { id: string }>({
   );
 }
 
+const PAGE = 200;
+
 export function Sales() {
   const auth = useAuth();
   const canEdit = auth.user?.role === "owner" || auth.user?.role === "admin";
@@ -153,7 +155,8 @@ export function Sales() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [month, setMonth] = useState(currentMonth());
+  const [period, setPeriod] = useState<Period>(() => monthPeriod(currentMonth()));
+  const [loadingMore, setLoadingMore] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -170,8 +173,8 @@ export function Sales() {
     setError(null);
     try {
       const [res, sum] = await Promise.all([
-        api.listSales({ month, pageSize: 100 }),
-        api.getSaleSummary(month),
+        api.listSales({ from: period.from, to: period.to, pageSize: PAGE }),
+        api.getSaleSummary(period),
       ]);
       setSales(res.items);
       setTotal(res.total);
@@ -183,9 +186,19 @@ export function Sales() {
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [period]);
 
   useEffect(() => { fetchSales(); }, [fetchSales]);
+
+  // Período grande (ex.: um ano): carrega as vendas em partes
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const res = await api.listSales({ from: period.from, to: period.to, pageSize: PAGE, page: Math.floor(sales.length / PAGE) + 1 });
+      setSales((prev) => [...prev, ...res.items.filter((x) => !prev.some((p) => p.id === x.id))]);
+    } catch (e) { window.alert(e instanceof Error ? e.message : "Erro ao carregar mais vendas"); }
+    finally { setLoadingMore(false); }
+  };
 
   const filtered = sales.filter((s) => {
     const q = search.toLowerCase();
@@ -217,7 +230,7 @@ export function Sales() {
             <span className="px-2 py-0.5 rounded-full" style={{ background: "#EBF2FA", color: "#185FA5", fontSize: 12, fontWeight: 500 }}>{total}</span>
           </div>
           <div className="flex items-center gap-3">
-            <MonthPicker value={month} onChange={setMonth} />
+            <PeriodPicker value={period} onChange={(p) => p && setPeriod(p)} />
             <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg flex items-center gap-2"
               style={{ background: "#185FA5", color: "#fff", fontSize: 13 }}>
               <Plus size={16} /> Registrar venda
@@ -355,6 +368,14 @@ export function Sales() {
               })}
             </tbody>
           </table>
+          {!loading && sales.length < total && (
+            <div className="flex items-center justify-center gap-3 py-4" style={{ borderTop: "0.5px solid rgba(0,0,0,0.06)" }}>
+              <span style={{ fontSize: 12, color: "#6B7280" }}>Mostrando {sales.length} de {total} vendas{search ? " (a busca procura só nas que já carregaram)" : ""}</span>
+              <button onClick={loadMore} disabled={loadingMore} className="px-3 py-1.5 rounded-lg" style={{ fontSize: 13, fontWeight: 500, color: "#185FA5", border: "1px solid #185FA5", background: "#fff" }}>
+                {loadingMore ? "Carregando..." : "Carregar mais"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

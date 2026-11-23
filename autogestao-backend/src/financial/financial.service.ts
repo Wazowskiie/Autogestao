@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { periodRange } from '../common/period';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { QueryTransactionDto } from './dto/query-transaction.dto';
@@ -28,11 +29,6 @@ function addMonthsUtc(base: Date, months: number) {
 }
 
 // Intervalo do mês "AAAA-MM" em UTC
-function monthRange(month: string) {
-  const [year, m] = month.split('-').map(Number);
-  return { gte: new Date(Date.UTC(year, m - 1, 1)), lt: new Date(Date.UTC(year, m, 1)) };
-}
-
 // Início do dia de hoje no horário de Brasília
 function startOfTodayBrazil() {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -105,7 +101,8 @@ export class FinancialService {
 
     const where: any = { dealershipId };
 
-    if (query.month) where.date = monthRange(query.month);
+    const range = periodRange(query);
+    if (range) where.date = range;
     if (query.type) where.type = query.type;
     if (query.category) where.category = { contains: query.category, mode: 'insensitive' };
 
@@ -123,9 +120,10 @@ export class FinancialService {
     return { items, total, page, pageSize };
   }
 
-  async summary(dealershipId: string, month?: string) {
+  async summary(dealershipId: string, period?: string | { month?: string; from?: string; to?: string }) {
     const where: any = { dealershipId };
-    if (month) where.date = monthRange(month);
+    const range = periodRange(typeof period === 'string' ? { month: period } : period ?? {});
+    if (range) where.date = range;
 
     const transactions = await this.prisma.financialTransaction.findMany({ where });
 
