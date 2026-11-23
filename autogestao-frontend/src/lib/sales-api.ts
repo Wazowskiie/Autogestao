@@ -52,6 +52,8 @@ export interface SalePaymentItem {
   id: string; method: SalePaymentMethod; amount: number | string;
   installments: number | null; feePercent: number | string | null; feeAmount: number | string;
   bank?: string | null; financingStatus?: FinancingStatus | null; receivedAt?: string | null; returnAmount?: number | string;
+  /** Data em que o pagamento foi feito e a descrição (ex.: "PIX Santander") */
+  paymentDate?: string | null; notes?: string | null;
 }
 
 export interface SaleExpenseItem { id: string; description: string; amount: number | string; date: string; paid: boolean }
@@ -69,6 +71,7 @@ export type Checklist = Partial<Record<ChecklistKey, { done: boolean; at: string
 
 export interface SaleTradeInItem {
   id: string; brand: string; model: string; year: number; plate: string | null; cost: number | string; status: string;
+  manufactureYear?: number | null; color?: string | null; chassis?: string | null; renavam?: string | null; km?: number | null; createdAt?: string;
 }
 
 /** Venda com as formas de pagamento e os veículos da troca */

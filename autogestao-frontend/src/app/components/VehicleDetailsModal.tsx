@@ -7,6 +7,7 @@ import {
   FileText, Link2, ExternalLink, Plus, Loader2, Check, FileCode2, AlertTriangle, CheckCircle2,
 } from "lucide-react";
 import * as dv from "../../lib/vehicle-details-api";
+import * as sapi from "../../lib/sales-api";
 import type { VehicleFull } from "../../lib/vehicle-details-api";
 
 // =====================================================================
@@ -21,6 +22,8 @@ interface Props {
   onEdit?: (vehicle: VehicleFull) => void;
   /** Chamado quando algo muda (fotos, custo...) para atualizar a lista do estoque */
   onChanged?: () => void;
+  /** Aba que abre primeiro (ex.: "exit" quando vem da tela de Vendas) */
+  initialTab?: Tab;
 }
 
 // ---------- Cores e estilos do sistema ----------
@@ -74,7 +77,7 @@ const STATUS_LABEL: Record<string, { text: string; bg: string; fg: string }> = {
 };
 
 // ---------- Abas ----------
-type Tab = "vehicle" | "files" | "nfe" | "media" | "expenses" | "summary" | "web" | "entry" | "pendencies" | "financial" | "prints";
+export type Tab = "vehicle" | "files" | "nfe" | "media" | "expenses" | "summary" | "web" | "entry" | "exit" | "pendencies" | "financial";
 const TABS: { id: Tab; label: string }[] = [
   { id: "vehicle", label: "Veículo" },
   { id: "files", label: "Arquivos" },
@@ -84,19 +87,20 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "summary", label: "Resumo" },
   { id: "web", label: "Web" },
   { id: "entry", label: "Entrada" },
+  { id: "exit", label: "Saída" },
   { id: "pendencies", label: "Pendências" },
   { id: "financial", label: "Financeiro" },
 ];
 
-export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChanged }: Props) {
-  const [tab, setTab] = useState<Tab>("vehicle");
+export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChanged, initialTab = "vehicle" }: Props) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [vehicle, setVehicle] = useState<VehicleFull | null>(initial);
 
   // Ao abrir: começa na aba Veículo e busca os dados mais recentes
   useEffect(() => {
     setVehicle(initial);
     if (!initial) return;
-    setTab("vehicle");
+    setTab(initialTab);
     dv.getVehicle(initial.id).then(setVehicle).catch(() => undefined);
   }, [initial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -112,6 +116,12 @@ export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChang
     try { setVehicle(await dv.getVehicle(initial.id)); } catch { /* mantém o que já tem */ }
     onChanged?.();
   }, [initial, onChanged]);
+
+  // Abre a ficha de outro veículo na mesma janela (ex.: a moto que entrou na troca)
+  const openOther = async (id: string) => {
+    try { setVehicle(await dv.getVehicle(id)); setTab("entry"); }
+    catch (e) { window.alert(errMsg(e)); }
+  };
 
   if (!initial || !vehicle) return null;
   const v = vehicle;
@@ -153,7 +163,7 @@ export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChang
 
         {/* Abas (rolam para o lado em telas pequenas) */}
         <div style={{ flexShrink: 0, display: "flex", gap: 2, padding: "0 16px", borderBottom: `1px solid ${C.border}`, overflowX: "auto", overflowY: "hidden" }}>
-          {[...TABS, ...(v.sales?.[0] ? [{ id: "prints" as Tab, label: "Impressos de saída" }] : [])].map((t) => (
+          {TABS.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
               flexShrink: 0, padding: "13px 14px", border: 0, background: "transparent", cursor: "pointer",
               fontSize: 14, fontWeight: 500, whiteSpace: "nowrap",
@@ -175,9 +185,9 @@ export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChang
           {tab === "summary" && <SummaryTab v={v} />}
           {tab === "web" && <WebTab v={v} />}
           {tab === "entry" && <EntryTab v={v} onChanged={refresh} />}
+          {tab === "exit" && <ExitTab v={v} onOpenVehicle={openOther} />}
           {tab === "pendencies" && <PendenciesTab v={v} />}
           {tab === "financial" && <FinancialTab v={v} />}
-          {tab === "prints" && v.sales?.[0] && <SalePrintsPanel saleId={v.sales[0].id} />}
         </div>
 
         {/* Rodapé */}
@@ -1234,6 +1244,153 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
 // =====================================================================
 // Aba Pendências
 // =====================================================================
+// ---------- Aba Saída: para quem o veículo foi vendido, por quanto e como foi pago ----------
+const PAY_NAMES: Record<string, string> = {
+  pix: "PIX", cash: "Dinheiro", transfer: "Transferência", card_credit: "Cartão de crédito", card_debit: "Cartão de débito",
+  financing: "Financiamento", consortium: "Consórcio", promissory: "Promissórias", deposit: "Sinal / depósito", card: "Cartão", mixed: "Várias formas",
+};
+
+type SaleOut = sapi.SaleFull & {
+  transferInfo?: string | null;
+  customer: sapi.SaleFull["customer"] & { document?: string | null; rg?: string | null; address?: string | null };
+};
+
+function ExitTab({ v, onOpenVehicle }: { v: VehicleFull; onOpenVehicle: (id: string) => void }) {
+  const saleId = v.sales?.[0]?.id;
+  const load = useCallback(() => (saleId ? (sapi.getSaleFull(saleId) as Promise<SaleOut>) : Promise.resolve(null)), [saleId]);
+  const { data: sale, error, loading } = useTabData(load);
+
+  if (!saleId) return <Empty>Este veículo ainda não foi vendido. Quando a venda for registrada, os dados da saída aparecem aqui.</Empty>;
+  if (loading && !sale) return <Loading />;
+  if (error && !sale) return <Alert>{error}</Alert>;
+  if (!sale) return null;
+
+  const payments = sale.payments ?? [];
+  const notes = sale.promissoryNotes ?? [];
+  const tradeIns = sale.tradeIns ?? [];
+  const expenses = sale.expenses ?? [];
+  const notesPaid = notes.filter((x) => x.paid).length;
+  const notesTotal = notes.reduce((t, x) => t + Number(x.amount), 0);
+  const tradeInTotal = Number(sale.tradeInValue ?? 0);
+  const c = sale.customer;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      {sale.status === "canceled" && <Alert>Esta venda foi cancelada (distrato){sale.cancelReason ? `: ${sale.cancelReason}` : "."}</Alert>}
+
+      <div>
+        <SectionTitle>Dados do comprador</SectionTitle>
+        <InfoRows rows={[
+          ["Data da venda", dateBR(sale.soldAt)],
+          ["Nome", c.name],
+          ["CPF/CNPJ", formatDoc(c.document)],
+          ["RG", c.rg ?? ""],
+          ["Telefone", c.phone ?? ""],
+          ["E-mail", c.email ?? ""],
+          ["Endereço", c.address ?? ""],
+        ]} />
+      </div>
+
+      <div>
+        <SectionTitle>Dados da venda</SectionTitle>
+        <InfoRows rows={[
+          ["Contrato", sale.contractNumber ?? ""],
+          ["Vendedor", sale.seller?.name ?? ""],
+          ["Valor da venda", <b key="p">{money(sale.price)}</b>],
+          ["Veículo na troca", tradeIns.length
+            ? tradeIns.map((t) => `${t.brand} ${t.model} ${t.year}${t.plate ? ` (${t.plate})` : ""} por ${money(t.cost)}`).join(" · ")
+            : ""],
+          ["Dados da transferência", sale.transferInfo ?? ""],
+          ["Garantia", sale.warrantyDays ? `${sale.warrantyDays} dias${sale.warrantyCoverage ? ` · ${sale.warrantyCoverage}` : ""}` : ""],
+          ["Observações", sale.notes ?? ""],
+        ]} />
+      </div>
+
+      <div>
+        <SectionTitle>Formas de pagamento</SectionTitle>
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+          {[
+            ...payments.map((p) => {
+              const isNotes = p.method === "promissory" && notes.length > 0;
+              const lines: ReactNode[] = [<b key="v">{money(p.amount)}{isNotes ? ` em ${notes.length} parcela${notes.length === 1 ? "" : "s"}` : p.installments && p.installments > 1 ? ` em ${p.installments}x` : ""}</b>];
+              if (p.paymentDate) lines.push(<span key="d"><b>Data:</b> {dateBR(p.paymentDate)}</span>);
+              if (p.bank) lines.push(<span key="b"><b>Banco:</b> {p.bank}{p.financingStatus ? ` · ${sapi.FINANCING_STATUS_LABELS[p.financingStatus]}` : ""}</span>);
+              if (Number(p.feeAmount) > 0) lines.push(<span key="f"><b>Taxa:</b> {money(p.feeAmount)}</span>);
+              if (Number(p.returnAmount) > 0) lines.push(<span key="r"><b>Retorno:</b> {money(p.returnAmount)}</span>);
+              if (isNotes) {
+                [...notes].sort((a, b) => a.installmentNumber - b.installmentNumber).forEach((x) => lines.push(
+                  <span key={x.id} style={{ color: x.paid ? C.green : C.text }}>
+                    {money(x.amount)} - {x.installmentNumber}/{x.totalInstallments} - Vencimento {dateBR(x.dueDate)}{x.paid ? ` · paga${x.paidAt ? ` em ${dateBR(x.paidAt)}` : ""}` : ""}
+                  </span>,
+                ));
+              }
+              if (p.notes) lines.push(<span key="n"><b>Descrição:</b> {p.notes}</span>);
+              return { key: p.id, label: PAY_NAMES[p.method] ?? p.method, lines };
+            }),
+            ...tradeIns.map((t) => ({
+              key: `t-${t.id}`,
+              label: "Veículo na troca",
+              lines: [
+                <span key="v">
+                  <b>{money(t.cost)}</b> - {t.brand} {t.model}{t.color ? `, ${t.color}` : ""}, ano fab/mod: {t.manufactureYear ? `${t.manufactureYear}/` : ""}{t.year}
+                  {t.plate ? `, placa: ${t.plate}` : ""}{t.renavam ? `, Renavam: ${t.renavam}` : ""}{t.chassis ? `, chassi: ${t.chassis}` : ""}{t.km != null ? `, km: ${Number(t.km).toLocaleString("pt-BR")}` : ""}
+                  {" - "}<button onClick={() => onOpenVehicle(t.id)} style={{ border: 0, background: "transparent", color: C.blue, cursor: "pointer", padding: 0, fontSize: 14, textDecoration: "underline" }}>Ver veículo</button>
+                </span>,
+                <span key="e"><b>Valor de entrada:</b> {money(t.cost)}</span>,
+                <span key="n"><b>Nome de:</b> {c.name}</span>,
+                <span key="d"><b>Data:</b> {dateBR(sale.soldAt)}</span>,
+              ],
+            })),
+            ...(!payments.length && !tradeIns.length && sale.paymentMethod
+              ? [{ key: "legado", label: PAY_NAMES[sale.paymentMethod] ?? sale.paymentMethod, lines: [<b key="v">{money(sale.price)}</b>] }]
+              : []),
+          ].map((row, i) => (
+            <div key={row.key} style={{ display: "grid", gridTemplateColumns: "minmax(130px, 220px) 1fr", gap: 16, padding: "10px 16px", fontSize: 14, background: i % 2 === 0 ? C.stripe : "#fff", alignItems: "center" }}>
+              <span style={{ color: C.muted }}>{row.label}</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, color: C.text }}>{row.lines}</div>
+            </div>
+          ))}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(130px, 220px) 1fr", gap: 16, padding: "10px 16px", fontSize: 14, borderTop: `1px solid ${C.border}` }}>
+            <span style={{ color: C.muted }}>Total</span>
+            <b>{money(payments.reduce((t, p) => t + Number(p.amount), 0) + tradeInTotal || Number(sale.price))}</b>
+          </div>
+        </div>
+        {notes.length > 0 && (
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
+            Promissórias: {notesPaid} de {notes.length} paga{notes.length === 1 ? "" : "s"} · total {money(notesTotal)}
+          </div>
+        )}
+      </div>
+
+      {expenses.length > 0 && (
+        <div>
+          <SectionTitle>Despesas da venda</SectionTitle>
+          <Table head={["Data", "Descrição", "Valor", "Situação"]}>
+            {expenses.map((e) => (
+              <tr key={e.id}><td style={td}>{dateBR(e.date)}</td><td style={td}>{e.description}</td><td style={td}>{money(e.amount)}</td><td style={td}>{e.paid ? "Paga" : "A pagar"}</td></tr>
+            ))}
+          </Table>
+        </div>
+      )}
+
+      <div>
+        <SectionTitle>Resultado</SectionTitle>
+        <InfoRows rows={[
+          ["Valor da venda", money(sale.price)],
+          ["Custo do veículo", money(sale.cost)],
+          ["Comissão do vendedor", sale.commissionAmount != null ? `${money(sale.commissionAmount)}${sale.commissionRate != null ? ` (${Number(sale.commissionRate).toLocaleString("pt-BR")}%)` : ""}${sale.commissionPaidAt ? " · paga" : ""}` : ""],
+          ["Lucro", <b key="l" style={{ color: Number(sale.profit) >= 0 ? C.green : C.red }}>{money(sale.profit)}</b>],
+        ]} />
+      </div>
+
+      <div>
+        <SalePrintsPanel saleId={sale.id} />
+      </div>
+    </div>
+  );
+}
+
+
 function PendenciesTab({ v }: { v: VehicleFull }) {
   const load = useCallback(() => dv.listPendencies(v.id), [v.id]);
   const { data, setData, error, loading } = useTabData(load);

@@ -13,7 +13,7 @@ const SALE_INCLUDE = {
   customer: true,
   seller: { select: { id: true, name: true } },
   // Veículos que entraram como parte do pagamento
-  tradeIns: { select: { id: true, brand: true, model: true, year: true, plate: true, cost: true, status: true } },
+  tradeIns: { select: { id: true, brand: true, model: true, year: true, manufactureYear: true, plate: true, color: true, chassis: true, renavam: true, km: true, cost: true, status: true, createdAt: true } },
   // Formas de pagamento (PIX, dinheiro, cartão...)
   payments: { orderBy: { createdAt: 'asc' } },
   expenses: { orderBy: { date: 'asc' } },
