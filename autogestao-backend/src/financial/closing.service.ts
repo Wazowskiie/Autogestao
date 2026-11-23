@@ -40,15 +40,19 @@ export class ClosingService {
     const range = monthRange(month);
     const today = startOfTodayBrazil();
 
-    const [sales, canceledSales, transactions, notesPaidInMonth, notesDueInMonth, notesOverdue, notesFuture, financingOpen, stock, parts, entries] =
+    const [activeSellers, sales, canceledSales, transactions, notesPaidInMonth, notesDueInMonth, notesOverdue, notesFuture, financingOpen, stock, parts, entries] =
       await Promise.all([
+        this.prisma.user.findMany({
+          where: { dealershipId, role: 'seller', active: true },
+          select: { id: true, name: true, salary: true },
+        }),
         this.prisma.sale.findMany({
           where: { dealershipId, status: 'active', soldAt: range },
           orderBy: { soldAt: 'asc' },
           include: {
-            vehicle: { select: { brand: true, model: true, year: true, plate: true } },
+            vehicle: { select: { brand: true, model: true, year: true, plate: true, type: true, expenses: { select: { amount: true } } } },
             customer: { select: { name: true } },
-            seller: { select: { id: true, name: true } },
+            seller: { select: { id: true, name: true, salary: true } },
             payments: { select: { method: true, amount: true, feeAmount: true, returnAmount: true } },
             expenses: { select: { amount: true } },
           },
@@ -119,22 +123,70 @@ export class ClosingService {
       if (n(s.tradeInValue) > 0) byMethod.trade_in = (byMethod.trade_in ?? 0) + n(s.tradeInValue);
     }
 
-    // ---- Comissões por vendedor ----
-    const sellers = new Map<string, { sellerId: string; name: string; count: number; revenue: number; profit: number; commission: number; commissionPaid: number }>();
+    // ---- Vendedores: vendas, despesas das motos, comissão por tipo e salário ----
+    type Kind = 'cash' | 'financing' | 'promissory';
+    // Mesma regra da tela de venda: financiamento/consórcio > promissórias > à vista
+    const kindOf = (s: (typeof sales)[number]): Kind =>
+      s.payments.some((p) => p.method === 'financing' || p.method === 'consortium') ? 'financing'
+        : s.payments.some((p) => p.method === 'promissory') || s.paymentMethod === 'promissory' ? 'promissory'
+        : s.paymentMethod === 'financing' || s.paymentMethod === 'consortium' ? 'financing' : 'cash';
+    const expensesOf = (s: (typeof sales)[number]) =>
+      s.vehicle.expenses.reduce((a, e) => a + n(e.amount), 0) + s.expenses.reduce((a, e) => a + n(e.amount), 0);
+
+    type KindTotals = { count: number; value: number; commission: number };
+    const emptyKinds = (): Record<Kind, KindTotals> => ({
+      cash: { count: 0, value: 0, commission: 0 },
+      financing: { count: 0, value: 0, commission: 0 },
+      promissory: { count: 0, value: 0, commission: 0 },
+    });
+    type SellerRow = {
+      sellerId: string; name: string; salary: number; count: number; revenue: number; expenses: number; profit: number;
+      commission: number; commissionPaid: number; byKind: Record<Kind, KindTotals>;
+      sales: { id: string; soldAt: string; contractNumber: string | null; vehicle: string; customer: string; kind: Kind; price: number; expenses: number; total: number; rate: number | null; commission: number; paid: boolean }[];
+    };
+    const sellers = new Map<string, SellerRow>();
+    const rowFor = (id: string, name: string, salary: unknown) => {
+      let row = sellers.get(id);
+      if (!row) {
+        row = { sellerId: id, name, salary: n(salary), count: 0, revenue: 0, expenses: 0, profit: 0, commission: 0, commissionPaid: 0, byKind: emptyKinds(), sales: [] };
+        sellers.set(id, row);
+      }
+      return row;
+    };
+    for (const u of activeSellers) rowFor(u.id, u.name, u.salary);
     for (const s of sales) {
-      const row = sellers.get(s.seller.id) ?? { sellerId: s.seller.id, name: s.seller.name, count: 0, revenue: 0, profit: 0, commission: 0, commissionPaid: 0 };
+      const row = rowFor(s.seller.id, s.seller.name, s.seller.salary);
+      const kind = kindOf(s);
+      const exp = expensesOf(s);
       row.count += 1;
       row.revenue += n(s.price);
+      row.expenses += exp;
       row.profit += n(s.profit);
       row.commission += n(s.commissionAmount);
       if (s.commissionPaidAt) row.commissionPaid += n(s.commissionAmount);
-      sellers.set(s.seller.id, row);
+      row.byKind[kind].count += 1;
+      row.byKind[kind].value += n(s.price);
+      row.byKind[kind].commission += n(s.commissionAmount);
+      row.sales.push({
+        id: s.id, soldAt: s.soldAt.toISOString(), contractNumber: s.contractNumber, vehicle: vehicleName(s.vehicle), customer: s.customer.name,
+        kind, price: r2(n(s.price)), expenses: r2(exp), total: r2(n(s.price) + exp),
+        rate: s.commissionRate != null ? n(s.commissionRate) : null, commission: r2(n(s.commissionAmount)), paid: !!s.commissionPaidAt,
+      });
     }
+    const roundKinds = (k: Record<Kind, KindTotals>) =>
+      Object.fromEntries(Object.entries(k).map(([key, v]) => [key, { count: v.count, value: r2(v.value), commission: r2(v.commission) }])) as Record<Kind, KindTotals>;
     const bySeller = [...sellers.values()]
-      .map((x) => ({ ...x, revenue: r2(x.revenue), profit: r2(x.profit), commission: r2(x.commission), commissionPaid: r2(x.commissionPaid), commissionPending: r2(x.commission - x.commissionPaid) }))
-      .sort((a, b) => b.revenue - a.revenue);
+      .map((x) => ({
+        sellerId: x.sellerId, name: x.name, count: x.count,
+        revenue: r2(x.revenue), expenses: r2(x.expenses), total: r2(x.revenue + x.expenses), profit: r2(x.profit),
+        commission: r2(x.commission), commissionPaid: r2(x.commissionPaid), commissionPending: r2(x.commission - x.commissionPaid),
+        salary: r2(x.salary), toReceive: r2(x.salary + x.commission),
+        byKind: roundKinds(x.byKind), sales: x.sales,
+      }))
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
     const commissionTotal = bySeller.reduce((t, x) => t + x.commission, 0);
     const commissionPaid = bySeller.reduce((t, x) => t + x.commissionPaid, 0);
+    const salaryTotal = bySeller.reduce((t, x) => t + x.salary, 0);
 
     // ---- Caixa (Financeiro): só o que foi pago/recebido de verdade ----
     const paid = transactions.filter((t) => t.paid);
@@ -200,6 +252,8 @@ export class ClosingService {
         total: r2(commissionTotal),
         paid: r2(commissionPaid),
         pending: r2(commissionTotal - commissionPaid),
+        salaries: r2(salaryTotal),
+        payroll: r2(salaryTotal + commissionTotal),
         bySeller,
       },
       cash: {
