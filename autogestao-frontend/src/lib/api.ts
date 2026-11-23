@@ -234,6 +234,8 @@ export interface Seller {
   /** Vazio = usa a comissão da venda à vista */
   commissionRatePromissory?: number | null;
   commissionRateFinancing?: number | null;
+  /** Salário fixo mensal (vem como texto do servidor) */
+  salary?: number | string | null;
   cpf?: string | null;
   active?: boolean;
 }
@@ -247,6 +249,7 @@ export interface CreateSellerInput {
   commissionRate?: number;
   commissionRatePromissory?: number | null;
   commissionRateFinancing?: number | null;
+  salary?: number | null;
   cpf?: string;
   active?: boolean;
 }
@@ -260,6 +263,7 @@ export interface UpdateSellerInput {
   commissionRate?: number;
   commissionRatePromissory?: number | null;
   commissionRateFinancing?: number | null;
+  salary?: number | null;
   cpf?: string;
   active?: boolean;
 }
@@ -307,6 +311,15 @@ export function listTransactions(params: { month?: string; type?: TransactionTyp
   query.set("pageSize", String(params.pageSize ?? 50));
   return request<FinancialListResponse>(`/financial?${query.toString()}`);
 }
+export type SaleKind = "cash" | "financing" | "promissory";
+export interface ClosingSeller {
+  sellerId: string; name: string; count: number;
+  revenue: number; expenses: number; total: number; profit: number;
+  commission: number; commissionPaid: number; commissionPending: number;
+  salary: number; toReceive: number;
+  byKind: Record<SaleKind, { count: number; value: number; commission: number }>;
+  sales: { id: string; soldAt: string; contractNumber: string | null; vehicle: string; customer: string; kind: SaleKind; price: number; expenses: number; total: number; rate: number | null; commission: number; paid: boolean }[];
+}
 export interface MonthClosing {
   month: string; generatedAt: string;
   sales: {
@@ -316,8 +329,8 @@ export interface MonthClosing {
     list: { id: string; contractNumber: string | null; soldAt: string; vehicle: string; customer: string; seller: string; price: number; cost: number; profit: number; commission: number }[];
   };
   commissions: {
-    total: number; paid: number; pending: number;
-    bySeller: { sellerId: string; name: string; count: number; revenue: number; profit: number; commission: number; commissionPaid: number; commissionPending: number }[];
+    total: number; paid: number; pending: number; salaries: number; payroll: number;
+    bySeller: ClosingSeller[];
   };
   cash: { in: number; out: number; balance: number; revenueByCategory: { category: string; amount: number }[]; expensesByCategory: { category: string; amount: number }[] };
   open: { payable: number; payableCount: number; payableOverdue: number; receivable: number; receivableCount: number; financingWaiting: number; financingWaitingCount: number };

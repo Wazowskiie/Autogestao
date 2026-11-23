@@ -60,6 +60,12 @@ export class CreateSellerDto {
   @Max(100, { message: 'A comissão não pode ser maior que 100' })
   commissionRateFinancing?: number | null;
 
+  // Salário fixo mensal em reais (vazio = só comissão)
+  @IsOptional()
+  @IsNumber({}, { message: 'O salário deve ser um número' })
+  @Min(0, { message: 'O salário não pode ser negativo' })
+  salary?: number | null;
+
   @IsOptional()
   @IsString({ message: 'O CPF deve ser um texto' })
   @MaxLength(20, { message: 'CPF inválido' })
@@ -111,6 +117,12 @@ export class UpdateSellerDto {
   @Max(100, { message: 'A comissão não pode ser maior que 100' })
   commissionRateFinancing?: number | null;
 
+  // Salário fixo mensal em reais (vazio = só comissão)
+  @IsOptional()
+  @IsNumber({}, { message: 'O salário deve ser um número' })
+  @Min(0, { message: 'O salário não pode ser negativo' })
+  salary?: number | null;
+
   @IsOptional()
   @IsString({ message: 'O CPF deve ser um texto' })
   @MaxLength(20, { message: 'CPF inválido' })
@@ -130,6 +142,7 @@ const SELLER_SELECT = {
   commissionRate: true,
   commissionRatePromissory: true,
   commissionRateFinancing: true,
+  salary: true,
   cpf: true,
   active: true,
   createdAt: true,
@@ -228,6 +241,7 @@ export class SellersService {
         commissionRate: dto.commissionRate ?? 0,
         commissionRatePromissory: dto.commissionRatePromissory ?? null,
         commissionRateFinancing: dto.commissionRateFinancing ?? null,
+        salary: dto.salary ?? null,
         cpf: dto.cpf ? dto.cpf.replace(/\D/g, '') || null : null,
         active: dto.active ?? true,
         role: 'seller',

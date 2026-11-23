@@ -123,6 +123,8 @@ model User {
   commissionRate  Float?  @default(0)
   commissionRatePromissory Float? @map("commission_rate_promissory")
   commissionRateFinancing  Float? @map("commission_rate_financing")
+  // Salário fixo mensal (vazio = só comissão)
+  salary          Decimal? @db.Decimal(12, 2)
   cpf             String?
 
   dealership   Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
