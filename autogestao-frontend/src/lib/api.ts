@@ -307,6 +307,28 @@ export function listTransactions(params: { month?: string; type?: TransactionTyp
   query.set("pageSize", String(params.pageSize ?? 50));
   return request<FinancialListResponse>(`/financial?${query.toString()}`);
 }
+export interface MonthClosing {
+  month: string; generatedAt: string;
+  sales: {
+    count: number; revenue: number; cost: number; profit: number; avgMargin: number; avgTicket: number;
+    cardFees: number; bankReturn: number; saleExpenses: number; canceledCount: number; refunds: number;
+    byMethod: { method: string; amount: number }[];
+    list: { id: string; contractNumber: string | null; soldAt: string; vehicle: string; customer: string; seller: string; price: number; cost: number; profit: number; commission: number }[];
+  };
+  commissions: {
+    total: number; paid: number; pending: number;
+    bySeller: { sellerId: string; name: string; count: number; revenue: number; profit: number; commission: number; commissionPaid: number; commissionPending: number }[];
+  };
+  cash: { in: number; out: number; balance: number; revenueByCategory: { category: string; amount: number }[]; expensesByCategory: { category: string; amount: number }[] };
+  open: { payable: number; payableCount: number; payableOverdue: number; receivable: number; receivableCount: number; financingWaiting: number; financingWaitingCount: number };
+  promissory: { receivedInMonth: number; receivedInMonthCount: number; dueInMonth: number; dueInMonthUnpaid: number; overdue: number; overdueCount: number; future: number; futureCount: number };
+  stock: {
+    count: number; available: number; reserved: number; cost: number; price: number; partsCost: number; partsPrice: number;
+    entriesCount: number; entriesValue: number;
+    entries: { vehicle: string; date: string; value: number; origin: "purchase" | "trade_in" | "consigned" }[];
+  };
+}
+export function getMonthClosing(month: string) { return request<MonthClosing>(`/financial/closing?month=${month}`); }
 export function getFinancialSummary(month?: string) { return request<FinancialSummary>(`/financial/summary${month ? `?month=${month}` : ""}`); }
 export function createTransaction(input: CreateTransactionInput) { return request<FinancialTransaction>("/financial", { method: "POST", body: input }); }
 export function payTransaction(id: string) { return request<FinancialTransaction>(`/financial/${id}/pay`, { method: "PATCH" }); }

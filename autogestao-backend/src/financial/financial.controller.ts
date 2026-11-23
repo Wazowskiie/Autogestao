@@ -5,11 +5,15 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { QueryTransactionDto } from './dto/query-transaction.dto';
 import { FinancialService } from './financial.service';
+import { ClosingService } from './closing.service';
 
 @Roles('owner', 'admin')
 @Controller('financial')
 export class FinancialController {
-  constructor(private readonly financialService: FinancialService) {}
+  constructor(
+    private readonly financialService: FinancialService,
+    private readonly closingService: ClosingService,
+  ) {}
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryTransactionDto) {
@@ -19,6 +23,12 @@ export class FinancialController {
   @Get('summary')
   summary(@CurrentUser() user: AuthenticatedUser, @Query('month') month?: string) {
     return this.financialService.summary(user.dealershipId, month);
+  }
+
+  /** Fechamento do mês: ?month=AAAA-MM (padrão: mês atual) */
+  @Get('closing')
+  closing(@CurrentUser() user: AuthenticatedUser, @Query('month') month?: string) {
+    return this.closingService.monthClosing(user.dealershipId, month);
   }
 
   @Roles('owner', 'admin')

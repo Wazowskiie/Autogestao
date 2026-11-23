@@ -14,6 +14,7 @@ import { Sales } from "./components/Sales";
 import { Customers } from "./components/Customers";
 import { Sellers } from "./components/Sellers";
 import { PromissoryNotes } from "./components/PromissoryNotes";
+import { MonthClosing } from "./components/MonthClosing";
 import { PartsStore } from "./components/PartsStore";
 import { Globe, Megaphone, Settings, ExternalLink } from "lucide-react";
 import { useAuth } from "../lib/auth-context";
@@ -29,7 +30,7 @@ import { Ads } from './components/Ads';
 type Page =
   | "login" | "onboarding" | "dashboard" | "inventory"
   | "leads" | "financial" | "ads" | "site" | "settings" | "plans" | "storefront"
-  | "sales" | "customers" | "sellers" | "promissory" | "parts" | "renave" | "chat";
+  | "sales" | "customers" | "sellers" | "promissory" | "parts" | "renave" | "chat" | "closing";
 
 function PlaceholderPage({ title, icon: Icon }: { title: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }) {
   return (
@@ -145,6 +146,7 @@ export default function App() {
     case "customers": return <Customers />;
     case "sellers": return <Sellers />;
     case "promissory": return <PromissoryNotes />;
+    case "closing": return <MonthClosing />;
     case "parts": return <PartsStore />;
     case "renave": return <Renave />;
     case "chat": return <ChatInbox initialId={chatId} onOpenLead={id=>{setCrmLeadId(id);setPage('leads');}} />;
