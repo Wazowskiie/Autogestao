@@ -117,6 +117,12 @@ export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChang
     onChanged?.();
   }, [initial, onChanged]);
 
+  // Abre a ficha de outro veículo na mesma janela (ex.: a moto que entrou na troca)
+  const openOther = async (id: string) => {
+    try { setVehicle(await dv.getVehicle(id)); setTab("entry"); }
+    catch (e) { window.alert(errMsg(e)); }
+  };
+
   if (!initial || !vehicle) return null;
   const v = vehicle;
   const status = STATUS_LABEL[v.status] ?? STATUS_LABEL.available;
@@ -179,7 +185,7 @@ export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChang
           {tab === "summary" && <SummaryTab v={v} />}
           {tab === "web" && <WebTab v={v} />}
           {tab === "entry" && <EntryTab v={v} onChanged={refresh} />}
-          {tab === "exit" && <ExitTab v={v} />}
+          {tab === "exit" && <ExitTab v={v} onOpenVehicle={openOther} />}
           {tab === "pendencies" && <PendenciesTab v={v} />}
           {tab === "financial" && <FinancialTab v={v} />}
         </div>
@@ -1249,7 +1255,7 @@ type SaleOut = sapi.SaleFull & {
   customer: sapi.SaleFull["customer"] & { document?: string | null; rg?: string | null; address?: string | null };
 };
 
-function ExitTab({ v }: { v: VehicleFull }) {
+function ExitTab({ v, onOpenVehicle }: { v: VehicleFull; onOpenVehicle: (id: string) => void }) {
   const saleId = v.sales?.[0]?.id;
   const load = useCallback(() => (saleId ? (sapi.getSaleFull(saleId) as Promise<SaleOut>) : Promise.resolve(null)), [saleId]);
   const { data: sale, error, loading } = useTabData(load);
@@ -1265,7 +1271,6 @@ function ExitTab({ v }: { v: VehicleFull }) {
   const expenses = sale.expenses ?? [];
   const notesPaid = notes.filter((x) => x.paid).length;
   const notesTotal = notes.reduce((t, x) => t + Number(x.amount), 0);
-  const firstDue = [...notes].sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
   const tradeInTotal = Number(sale.tradeInValue ?? 0);
   const c = sale.customer;
 
@@ -1303,42 +1308,59 @@ function ExitTab({ v }: { v: VehicleFull }) {
 
       <div>
         <SectionTitle>Formas de pagamento</SectionTitle>
-        <Table head={["Forma", "Valor", "Detalhes"]} empty="Nenhuma forma de pagamento registrada.">
-          {tradeInTotal > 0 && (
-            <tr key="troca"><td style={td}>Veículo na troca</td><td style={td}>{money(tradeInTotal)}</td><td style={td}>{plural(tradeIns.length, "veículo", "veículos")}</td></tr>
-          )}
-          {payments.map((p) => {
-            const details = [
-              p.method === "promissory" && notes.length ? `${notes.length}x de ${money(notes[0].amount)}${firstDue ? `, 1º vencimento ${dateBR(firstDue.dueDate)}` : ""}` : "",
-              p.installments && p.installments > 1 && p.method !== "promissory" ? `${p.installments}x` : "",
-              p.bank ? `Banco ${p.bank}` : "",
-              p.financingStatus ? sapi.FINANCING_STATUS_LABELS[p.financingStatus] : "",
-              Number(p.feeAmount) > 0 ? `taxa ${money(p.feeAmount)}` : "",
-            ].filter(Boolean).join(" · ");
-            return (
-              <tr key={p.id}>
-                <td style={td}>{PAY_NAMES[p.method] ?? p.method}</td>
-                <td style={td}>{money(p.amount)}</td>
-                <td style={{ ...td, color: C.muted }}>{details || "—"}</td>
-              </tr>
-            );
-          })}
-          {!payments.length && !tradeInTotal && sale.paymentMethod && (
-            <tr key="legado"><td style={td}>{PAY_NAMES[sale.paymentMethod] ?? sale.paymentMethod}</td><td style={td}>{money(sale.price)}</td><td style={td}>—</td></tr>
-          )}
-        </Table>
-      </div>
-
-      {notes.length > 0 && (
-        <div>
-          <SectionTitle>Promissórias</SectionTitle>
-          <InfoRows rows={[
-            ["Parcelas", `${notes.length}x de ${money(notes[0].amount)} = ${money(notesTotal)}`],
-            ["Pagas", `${notesPaid} de ${notes.length}`],
-            ["Primeiro vencimento", firstDue ? dateBR(firstDue.dueDate) : ""],
-          ]} />
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+          {[
+            ...payments.map((p) => {
+              const isNotes = p.method === "promissory" && notes.length > 0;
+              const lines: ReactNode[] = [<b key="v">{money(p.amount)}{isNotes ? ` em ${notes.length} parcela${notes.length === 1 ? "" : "s"}` : p.installments && p.installments > 1 ? ` em ${p.installments}x` : ""}</b>];
+              if (p.paymentDate) lines.push(<span key="d"><b>Data:</b> {dateBR(p.paymentDate)}</span>);
+              if (p.bank) lines.push(<span key="b"><b>Banco:</b> {p.bank}{p.financingStatus ? ` · ${sapi.FINANCING_STATUS_LABELS[p.financingStatus]}` : ""}</span>);
+              if (Number(p.feeAmount) > 0) lines.push(<span key="f"><b>Taxa:</b> {money(p.feeAmount)}</span>);
+              if (Number(p.returnAmount) > 0) lines.push(<span key="r"><b>Retorno:</b> {money(p.returnAmount)}</span>);
+              if (isNotes) {
+                [...notes].sort((a, b) => a.installmentNumber - b.installmentNumber).forEach((x) => lines.push(
+                  <span key={x.id} style={{ color: x.paid ? C.green : C.text }}>
+                    {money(x.amount)} - {x.installmentNumber}/{x.totalInstallments} - Vencimento {dateBR(x.dueDate)}{x.paid ? ` · paga${x.paidAt ? ` em ${dateBR(x.paidAt)}` : ""}` : ""}
+                  </span>,
+                ));
+              }
+              if (p.notes) lines.push(<span key="n"><b>Descrição:</b> {p.notes}</span>);
+              return { key: p.id, label: PAY_NAMES[p.method] ?? p.method, lines };
+            }),
+            ...tradeIns.map((t) => ({
+              key: `t-${t.id}`,
+              label: "Veículo na troca",
+              lines: [
+                <span key="v">
+                  <b>{money(t.cost)}</b> - {t.brand} {t.model}{t.color ? `, ${t.color}` : ""}, ano fab/mod: {t.manufactureYear ? `${t.manufactureYear}/` : ""}{t.year}
+                  {t.plate ? `, placa: ${t.plate}` : ""}{t.renavam ? `, Renavam: ${t.renavam}` : ""}{t.chassis ? `, chassi: ${t.chassis}` : ""}{t.km != null ? `, km: ${Number(t.km).toLocaleString("pt-BR")}` : ""}
+                  {" - "}<button onClick={() => onOpenVehicle(t.id)} style={{ border: 0, background: "transparent", color: C.blue, cursor: "pointer", padding: 0, fontSize: 14, textDecoration: "underline" }}>Ver veículo</button>
+                </span>,
+                <span key="e"><b>Valor de entrada:</b> {money(t.cost)}</span>,
+                <span key="n"><b>Nome de:</b> {c.name}</span>,
+                <span key="d"><b>Data:</b> {dateBR(sale.soldAt)}</span>,
+              ],
+            })),
+            ...(!payments.length && !tradeIns.length && sale.paymentMethod
+              ? [{ key: "legado", label: PAY_NAMES[sale.paymentMethod] ?? sale.paymentMethod, lines: [<b key="v">{money(sale.price)}</b>] }]
+              : []),
+          ].map((row, i) => (
+            <div key={row.key} style={{ display: "grid", gridTemplateColumns: "minmax(130px, 220px) 1fr", gap: 16, padding: "10px 16px", fontSize: 14, background: i % 2 === 0 ? C.stripe : "#fff", alignItems: "center" }}>
+              <span style={{ color: C.muted }}>{row.label}</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, color: C.text }}>{row.lines}</div>
+            </div>
+          ))}
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(130px, 220px) 1fr", gap: 16, padding: "10px 16px", fontSize: 14, borderTop: `1px solid ${C.border}` }}>
+            <span style={{ color: C.muted }}>Total</span>
+            <b>{money(payments.reduce((t, p) => t + Number(p.amount), 0) + tradeInTotal || Number(sale.price))}</b>
+          </div>
         </div>
-      )}
+        {notes.length > 0 && (
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
+            Promissórias: {notesPaid} de {notes.length} paga{notes.length === 1 ? "" : "s"} · total {money(notesTotal)}
+          </div>
+        )}
+      </div>
 
       {expenses.length > 0 && (
         <div>
@@ -1368,7 +1390,6 @@ function ExitTab({ v }: { v: VehicleFull }) {
   );
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function PendenciesTab({ v }: { v: VehicleFull }) {
   const load = useCallback(() => dv.listPendencies(v.id), [v.id]);
