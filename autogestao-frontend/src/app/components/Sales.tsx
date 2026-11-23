@@ -7,6 +7,8 @@ import * as api from "../../lib/api";
 import * as sapi from "../../lib/sales-api";
 import { useAuth } from "../../lib/auth-context";
 import { CancelSaleModal, SaleAfterPanel } from "./SaleAfterPanel";
+import { VehicleDetailsModal } from "./VehicleDetailsModal";
+import * as dv from "../../lib/vehicle-details-api";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -485,6 +487,15 @@ function SaleDetailsModal({
   const [canceling, setCanceling] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [showPrints, setShowPrints] = useState(false);
+  // Ficha do veículo (abas Entrada e Saída), igual à do Estoque
+  const [vehicleFull, setVehicleFull] = useState<dv.VehicleFull | null>(null);
+  const [openingVehicle, setOpeningVehicle] = useState(false);
+  const openVehicle = async (id: string) => {
+    setOpeningVehicle(true);
+    try { setVehicleFull(await dv.getVehicle(id)); }
+    catch (e) { window.alert(e instanceof Error ? e.message : "Não foi possível abrir o veículo"); }
+    finally { setOpeningVehicle(false); }
+  };
   const dirty = useRef(false);
   // Toda mudança feita aqui (despesa, comissão, pós-venda...) atualiza a lista quando fechar
   const setSale = (s: sapi.SaleFull) => { setSaleState((prev) => ({ ...prev, ...s })); dirty.current = true; };
@@ -546,8 +557,16 @@ function SaleDetailsModal({
                 </button>
               </div>
               {showPrints && <SalePrintsModal saleId={sale.id} onClose={() => setShowPrints(false)} />}
+              {vehicleFull && <VehicleDetailsModal vehicle={vehicleFull} initialTab="exit" onClose={() => setVehicleFull(null)} />}
               {/* Veículo */}
-              <div className="rounded-lg p-4" style={{ background: "#F4F6F9" }}>
+              <div className="rounded-lg p-4 relative" style={{ background: "#F4F6F9" }}>
+                {canEdit && (
+                  <button onClick={() => openVehicle(sale.vehicle.id)} disabled={openingVehicle}
+                    className="absolute flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+                    style={{ right: 12, top: 12, background: "#fff", border: "1px solid #185FA5", color: "#185FA5", fontSize: 12, fontWeight: 500 }}>
+                    {openingVehicle ? <Loader2 size={13} className="animate-spin" /> : <Car size={13} />} Entrada e saída
+                  </button>
+                )}
                 <p style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Veículo</p>
                 <p style={{ fontSize: 14, fontWeight: 600, color: "#0F1923" }}>{sale.vehicle.brand} {sale.vehicle.model}</p>
                 <p style={{ fontSize: 12, color: "#6B7280" }}>
