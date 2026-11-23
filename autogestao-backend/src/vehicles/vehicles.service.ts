@@ -1,3 +1,4 @@
+import { periodRange } from '../common/period';
 import { scanWishesForVehicle } from '../crm/crm-helpers';
 import {
   BadRequestException,
@@ -83,7 +84,7 @@ export class VehiclesService {
 
     const where: Prisma.VehicleWhereInput = {
       dealershipId,
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.status ? { status: query.status } : query.inStock ? { status: { in: ['available', 'reserved'] } } : {}),
       ...(query.type ? { type: query.type } : {}),
       ...(query.search
         ? {
@@ -96,6 +97,10 @@ export class VehiclesService {
           }
         : {}),
     };
+
+    // Período de entrada no estoque (data da Entrada; sem Entrada, a data do cadastro)
+    const entry = periodRange(query);
+    if (entry) where.AND = [{ OR: [{ acquisition: { entryDate: entry } }, { acquisition: null, createdAt: entry }] }];
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.vehicle.findMany({

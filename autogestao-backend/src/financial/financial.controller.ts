@@ -21,14 +21,14 @@ export class FinancialController {
   }
 
   @Get('summary')
-  summary(@CurrentUser() user: AuthenticatedUser, @Query('month') month?: string) {
-    return this.financialService.summary(user.dealershipId, month);
+  summary(@CurrentUser() user: AuthenticatedUser, @Query('month') month?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.financialService.summary(user.dealershipId, { month, from, to });
   }
 
-  /** Fechamento do mês: ?month=AAAA-MM (padrão: mês atual) */
+  /** Fechamento: ?month=AAAA-MM ou ?from=AAAA-MM&to=AAAA-MM (padrão: mês atual) */
   @Get('closing')
-  closing(@CurrentUser() user: AuthenticatedUser, @Query('month') month?: string) {
-    return this.closingService.monthClosing(user.dealershipId, month);
+  closing(@CurrentUser() user: AuthenticatedUser, @Query('month') month?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.closingService.monthClosing(user.dealershipId, { month, from, to });
   }
 
   @Roles('owner', 'admin')

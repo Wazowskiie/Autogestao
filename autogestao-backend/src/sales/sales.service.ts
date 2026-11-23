@@ -4,6 +4,7 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { QuerySaleDto } from './dto/query-sale.dto';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 import { Prisma } from '../generated/prisma/client';
+import { periodRange } from '../common/period';
 import { scanWishesForVehicle } from '../crm/crm-helpers';
 import { isSeller, saleForSeller } from '../common/seller-view';
 import { CancelSaleDto, ChecklistKey, SaleExpenseDto, UpdateChecklistDto, UpdateCommissionDto, UpdateFinancingDto, UpdateSaleExpenseDto, UpdateWarrantyDto } from './dto/sale-extras.dto';
@@ -839,10 +840,8 @@ export class SalesService {
     const pageSize = query.pageSize ?? 20;
     const where: any = { dealershipId };
 
-    if (query.month) {
-      const [year, month] = query.month.split('-').map(Number);
-      where.soldAt = { gte: new Date(Date.UTC(year, month - 1, 1)), lt: new Date(Date.UTC(year, month, 1)) };
-    }
+    const range = periodRange(query);
+    if (range) where.soldAt = range;
     if (query.sellerId) where.sellerId = query.sellerId;
     if (query.status) where.status = query.status;
     if(actor?.role==='seller') where.sellerId=actor.userId;
@@ -870,13 +869,11 @@ export class SalesService {
     return isSeller(actor) ? saleForSeller(sale) : sale;
   }
 
-  async summary(dealershipId: string, month?: string, actor?: AuthenticatedUser) {
+  async summary(dealershipId: string, period?: string | { month?: string; from?: string; to?: string }, actor?: AuthenticatedUser) {
     const where: any = { dealershipId };
     if(actor?.role==='seller') where.sellerId=actor.userId;
-    if (month) {
-      const [year, m] = month.split('-').map(Number);
-      where.soldAt = { gte: new Date(Date.UTC(year, m - 1, 1)), lt: new Date(Date.UTC(year, m, 1)) };
-    }
+    const range = periodRange(typeof period === 'string' ? { month: period } : period ?? {});
+    if (range) where.soldAt = range;
 
     const canceledCount = await this.prisma.sale.count({ where: { ...where, status: 'canceled' } });
     const sales = await this.prisma.sale.findMany({ where: { ...where, status: 'active' } });

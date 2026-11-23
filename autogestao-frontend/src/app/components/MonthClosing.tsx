@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Printer, TrendingUp, Wallet, HandCoins, ShoppingBag, AlertTriangle, ChevronDown, ChevronUp, CheckCircle2, FileSpreadsheet } from "lucide-react";
 import * as api from "../../lib/api";
-import { MonthPicker } from "./MonthPicker";
+import { PeriodPicker, periodLabel, monthPeriod, type Period } from "./PeriodPicker";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -15,12 +15,6 @@ function currentMonth() {
 // Mostra a data como foi salva, sem o fuso "voltar um dia"
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString("pt-BR", { timeZone: "UTC" });
-}
-
-function monthLabel(month: string) {
-  const [y, m] = month.split("-").map(Number);
-  const name = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("pt-BR", { month: "long", timeZone: "UTC" });
-  return `${name.charAt(0).toUpperCase()}${name.slice(1)} de ${y}`;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -74,7 +68,7 @@ function Stat({ label, value, hint, color }: { label: string; value: string; hin
 function Bars({ items, color = BLUE, showPercent }: { items: { label: string; value: number }[]; color?: string; showPercent?: boolean }) {
   const max = Math.max(...items.map((i) => i.value), 1);
   const total = items.reduce((t, i) => t + i.value, 0);
-  if (items.length === 0) return <p style={{ fontSize: 12, color: "#9CA3AF" }}>Nada neste mês.</p>;
+  if (items.length === 0) return <p style={{ fontSize: 12, color: "#9CA3AF" }}>Nada neste período.</p>;
   return (
     <div className="flex flex-col gap-3">
       {items.map((i) => (
@@ -153,7 +147,7 @@ function SalesTab({ d, expanded }: { d: api.MonthClosing; expanded?: boolean }) 
         <div style={box}>
           {show && (
             <>
-              <Title>Vendas do mês ({s.count})</Title>
+              <Title>Vendas do período ({s.count})</Title>
               <table className="w-full" style={{ borderCollapse: "collapse" }}>
                 <thead><tr>
                   <th style={th}>Data</th><th style={th}>Veículo</th><th style={th}>Cliente</th><th style={th}>Vendedor</th>
@@ -171,7 +165,7 @@ function SalesTab({ d, expanded }: { d: api.MonthClosing; expanded?: boolean }) 
               </table>
             </>
           )}
-          {!expanded && <Toggle open={open} onClick={() => setOpen(!open)} label={s.count === 1 ? "Ver a venda do mês" : `Ver as ${s.count} vendas do mês`} />}
+          {!expanded && <Toggle open={open} onClick={() => setOpen(!open)} label={s.count === 1 ? "Ver a venda do período" : `Ver as ${s.count} vendas do período`} />}
         </div>
       )}
     </div>
@@ -213,7 +207,7 @@ function ratesOf(x: api.ClosingSeller, kind: api.SaleKind) {
 function downloadSellersSheet(d: api.MonthClosing) {
   const money = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const cell = (v: string) => (/[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const rows: string[][] = [[`Fechamento dos vendedores - ${monthLabel(d.month)}`], []];
+  const rows: string[][] = [[`Fechamento dos vendedores - ${periodLabel({ from: d.from, to: d.to })}`], []];
   rows.push(["Vendedor", "Vendas", "Valor vendido", "Despesas das motos", "Valor total", "Comissão", "Salário fixo", "Total a receber", "Comissão já paga", "Falta pagar"]);
   for (const x of d.commissions.bySeller) {
     rows.push([x.name, String(x.count), money(x.revenue), money(x.expenses), money(x.total), money(x.commission), money(x.salary), money(x.toReceive), money(x.commissionPaid), money(x.commissionPending)]);
@@ -237,7 +231,7 @@ function downloadSellersSheet(d: api.MonthClosing) {
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = `vendedores-${d.month}.csv`;
+  a.download = `vendedores-${d.from === d.to ? d.from : `${d.from}_a_${d.to}`}.csv`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -250,7 +244,7 @@ function SellerCard({ x, expanded }: { x: api.ClosingSeller; expanded?: boolean 
       <div className="flex items-start justify-between gap-4">
         <div>
           <div style={{ fontSize: 16, fontWeight: 600 }}>{x.name}</div>
-          <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{x.count === 0 ? "Nenhuma venda no mês" : plural(x.count, "venda", "vendas")}</div>
+          <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>{x.count === 0 ? "Nenhuma venda no período" : plural(x.count, "venda", "vendas")}</div>
         </div>
         <div className="text-right">
           <div style={{ fontSize: 12, color: "#6B7280" }}>Total a receber</div>
@@ -342,8 +336,8 @@ function PromissoryTab({ d }: { d: api.MonthClosing }) {
   const p = d.promissory;
   return (
     <div className="grid grid-cols-2 gap-4">
-      <Stat label="Recebidas no mês" value={currency(p.receivedInMonth)} hint={plural(p.receivedInMonthCount, "parcela", "parcelas")} color="#166534" />
-      <Stat label="Venciam no mês e não foram pagas" value={currency(p.dueInMonthUnpaid)} hint={`de ${currency(p.dueInMonth)} que venciam no mês`} color={p.dueInMonthUnpaid > 0 ? "#B45309" : undefined} />
+      <Stat label="Recebidas no período" value={currency(p.receivedInMonth)} hint={plural(p.receivedInMonthCount, "parcela", "parcelas")} color="#166534" />
+      <Stat label="Venciam no período e não foram pagas" value={currency(p.dueInMonthUnpaid)} hint={`de ${currency(p.dueInMonth)} que venciam no período`} color={p.dueInMonthUnpaid > 0 ? "#B45309" : undefined} />
       <Stat label="Em atraso (todas, até hoje)" value={currency(p.overdue)} hint={plural(p.overdueCount, "parcela", "parcelas")} color={p.overdue > 0 ? "#DC2626" : undefined} />
       <Stat label="A receber nos próximos meses" value={currency(p.future)} hint={plural(p.futureCount, "parcela", "parcelas")} />
     </div>
@@ -359,14 +353,14 @@ function StockTab({ d, expanded }: { d: api.MonthClosing; expanded?: boolean }) 
       <div className="grid grid-cols-3 gap-4">
         <Stat label="Veículos em estoque hoje" value={String(s.count)} hint={`${s.available} disponíveis · ${s.reserved} reservados`} />
         <Stat label="Valor em estoque (custo)" value={currency(s.cost)} hint={`anunciado por ${currency(s.price)}`} />
-        <Stat label="Entraram no mês" value={plural(s.entriesCount, "veículo", "veículos")} hint={currency(s.entriesValue)} />
+        <Stat label="Entraram no período" value={plural(s.entriesCount, "veículo", "veículos")} hint={currency(s.entriesValue)} />
       </div>
       {s.partsCost > 0 && <div style={{ fontSize: 12, color: "#6B7280" }}>Peças em estoque: {currency(s.partsCost)} de custo.</div>}
       {s.entries.length > 0 && (
         <div style={box}>
           {show && (
             <>
-              <Title>Veículos que entraram no mês</Title>
+              <Title>Veículos que entraram no período</Title>
               <table className="w-full" style={{ borderCollapse: "collapse" }}>
                 <thead><tr><th style={th}>Data</th><th style={th}>Veículo</th><th style={th}>Origem</th><th style={{ ...th, textAlign: "right" }}>Valor</th></tr></thead>
                 <tbody>
@@ -399,12 +393,12 @@ function Pending({ d }: { d: api.MonthClosing }) {
     d.promissory.overdue > 0 && `${currency(d.promissory.overdue)} em promissórias atrasadas`,
     d.commissions.pending > 0 && `${currency(d.commissions.pending)} de comissão a pagar`,
     d.open.financingWaiting > 0 && `${currency(d.open.financingWaiting)} aguardando o banco`,
-    d.open.payable - d.open.payableOverdue > 0 && `${currency(d.open.payable - d.open.payableOverdue)} a pagar no mês`,
+    d.open.payable - d.open.payableOverdue > 0 && `${currency(d.open.payable - d.open.payableOverdue)} a pagar no período`,
   ].filter(Boolean) as string[];
   if (items.length === 0) {
     return (
       <div className="flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: "#F0FDF4", color: "#166534", fontSize: 13 }}>
-        <CheckCircle2 size={16} /> Nada pendente neste mês.
+        <CheckCircle2 size={16} /> Nada pendente neste período.
       </div>
     );
   }
@@ -419,7 +413,7 @@ function Pending({ d }: { d: api.MonthClosing }) {
 function Summary({ d }: { d: api.MonthClosing }) {
   return (
     <div className="grid grid-cols-4 gap-4">
-      <Kpi icon={ShoppingBag} label="Vendas no mês" value={String(d.sales.count)} sub={`Faturamento ${currency(d.sales.revenue)}`} bg="#EBF2FA" color={BLUE} />
+      <Kpi icon={ShoppingBag} label="Vendas no período" value={String(d.sales.count)} sub={`Faturamento ${currency(d.sales.revenue)}`} bg="#EBF2FA" color={BLUE} />
       <Kpi icon={TrendingUp} label="Lucro das vendas" value={currency(d.sales.profit)} sub={`Margem média ${d.sales.avgMargin.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`} bg="#EAF3DE" color="#27500A" />
       <Kpi icon={Wallet} label="Saldo do caixa" value={currency(d.cash.balance)} sub={`Entrou ${currency(d.cash.in)} · saiu ${currency(d.cash.out)}`}
         bg={d.cash.balance >= 0 ? "#F0FDF4" : "#FEF3C7"} color={d.cash.balance >= 0 ? "#166534" : "#D97706"} />
@@ -431,7 +425,7 @@ function Summary({ d }: { d: api.MonthClosing }) {
 // ---------- tela ----------
 
 export function MonthClosing() {
-  const [month, setMonth] = useState(currentMonth());
+  const [period, setPeriod] = useState<Period>(() => monthPeriod(currentMonth()));
   const [tab, setTab] = useState<Tab>("sales");
   const [data, setData] = useState<api.MonthClosing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -442,13 +436,13 @@ export function MonthClosing() {
     setLoading(true);
     setError(null);
     try {
-      setData(await api.getMonthClosing(month));
+      setData(await api.getMonthClosing(period));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar o fechamento");
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [period]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -459,7 +453,7 @@ export function MonthClosing() {
     const w = window.open("", "_blank");
     if (!w) { window.alert("Libere as janelas pop-up deste site para imprimir."); return; }
     w.document.write(`<!doctype html><html><head><base href="${window.location.origin}/">${document.head.innerHTML}
-      <title>Fechamento - ${monthLabel(month)}</title>
+      <title>Fechamento - ${periodLabel(period)}</title>
       <style>html,body{height:auto!important;overflow:visible!important;background:#fff}body{padding:24px}.no-print{display:none!important}.print-block{break-inside:avoid}</style>
       </head><body>${el.innerHTML}</body></html>`);
     w.document.close();
@@ -474,11 +468,11 @@ export function MonthClosing() {
       {/* Cabeçalho */}
       <div className="px-6 py-4 flex-shrink-0 flex items-center justify-between" style={{ background: "#fff", borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-center gap-3">
-          <h2>Fechamento do mês</h2>
-          <span className="px-2 py-0.5 rounded-full" style={{ background: "#EBF2FA", color: BLUE, fontSize: 12, fontWeight: 500 }}>{monthLabel(month)}</span>
+          <h2>Fechamento</h2>
+          <span className="px-2 py-0.5 rounded-full" style={{ background: "#EBF2FA", color: BLUE, fontSize: 12, fontWeight: 500 }}>{periodLabel(period)}</span>
         </div>
         <div className="flex items-center gap-3">
-          <MonthPicker value={month} onChange={setMonth} />
+          <PeriodPicker value={period} onChange={(p) => p && setPeriod(p)} />
           <button onClick={handlePrint} disabled={!data} className="px-4 py-2 rounded-lg flex items-center gap-2"
             style={{ background: "var(--primary)", color: "#fff", fontSize: 13, opacity: data ? 1 : 0.6 }}>
             <Printer size={16} /> Imprimir / PDF
@@ -518,7 +512,7 @@ export function MonthClosing() {
         <div ref={printRef} style={{ display: "none" }}>
           <div className="flex flex-col gap-5">
             <div>
-              <h2>Fechamento de {monthLabel(data.month)}</h2>
+              <h2>Fechamento: {periodLabel({ from: data.from, to: data.to })}</h2>
               <div style={{ fontSize: 12, color: "#6B7280" }}>Gerado em {new Date(data.generatedAt).toLocaleString("pt-BR")}</div>
             </div>
             <div className="print-block"><Summary d={data} /></div>

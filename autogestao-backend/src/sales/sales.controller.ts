@@ -20,8 +20,8 @@ export class SalesController {
   }
 
   @Get('summary')
-  summary(@CurrentUser() user: AuthenticatedUser, @Query('month') month?: string) {
-    return this.salesService.summary(user.dealershipId, month, user);
+  summary(@CurrentUser() user: AuthenticatedUser, @Query('month') month?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    return this.salesService.summary(user.dealershipId, { month, from, to }, user);
   }
 
   /** Financiamentos aguardando o banco */

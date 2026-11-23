@@ -92,7 +92,7 @@ export interface Vehicle {
 }
 
 export interface VehicleListResponse { items: Vehicle[]; total: number; page: number; pageSize: number; }
-export interface VehicleListParams { search?: string; status?: VehicleStatus | "all"; type?: VehicleType | "all"; page?: number; pageSize?: number; }
+export interface VehicleListParams { search?: string; status?: VehicleStatus | "all" | "stock"; type?: VehicleType | "all"; page?: number; pageSize?: number; from?: string; to?: string; }
 
 export interface VehicleInput {
   type: VehicleType; category?: string | null; status?: VehicleStatus;
@@ -112,8 +112,11 @@ export interface VehicleInput {
 export function listVehicles(params: VehicleListParams = {}) {
   const query = new URLSearchParams();
   if (params.search) query.set("search", params.search);
-  if (params.status && params.status !== "all") query.set("status", params.status);
+  if (params.status === "stock") query.set("inStock", "true");
+  else if (params.status && params.status !== "all") query.set("status", params.status);
   if (params.type && params.type !== "all") query.set("type", params.type);
+  if (params.from) query.set("from", params.from);
+  if (params.to) query.set("to", params.to);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 50));
   return request<VehicleListResponse>(`/vehicles?${query.toString()}`);
@@ -204,14 +207,20 @@ export interface SaleTradeIn { id: string; brand: string; model: string; year: n
 export interface CreateSaleInput { vehicleId: string; customerId: string; sellerId?: string; price: number; cost: number; paymentMethod?: string; soldAt?: string; notes?: string; tradeIns?: TradeInInput[]; }
 export interface UpdateSaleInput { notes?: string; paymentMethod?: string; }
 
-export function listSales(params: { month?: string; page?: number; pageSize?: number } = {}) {
+/** Período por mês: um mês (AAAA-MM) ou { from, to } */
+export type PeriodArg = string | { from: string; to: string };
+const periodParams = (p?: PeriodArg) => !p ? "" : typeof p === "string" ? `month=${p}` : `from=${p.from}&to=${p.to}`;
+
+export function listSales(params: { month?: string; from?: string; to?: string; page?: number; pageSize?: number } = {}) {
   const query = new URLSearchParams();
   if (params.month) query.set("month", params.month);
+  if (params.from) query.set("from", params.from);
+  if (params.to) query.set("to", params.to);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 50));
   return request<SaleListResponse>(`/sales?${query.toString()}`);
 }
-export function getSaleSummary(month?: string) { return request<SaleSummary>(`/sales/summary${month ? `?month=${month}` : ""}`); }
+export function getSaleSummary(period?: PeriodArg) { const q = periodParams(period); return request<SaleSummary>(`/sales/summary${q ? `?${q}` : ""}`); }
 export function getSale(id: string) { return request<Sale>(`/sales/${id}`); }
 export function createSale(input: CreateSaleInput) { return request<Sale>("/sales", { method: "POST", body: input }); }
 // Backend só aceita notes e paymentMethod no PATCH — ver sales.service.ts (update)
@@ -303,9 +312,11 @@ export interface CreateTransactionInput {
   vehicleId?: string; paid?: boolean; repeatMonths?: number;
 }
 
-export function listTransactions(params: { month?: string; type?: TransactionType; page?: number; pageSize?: number } = {}) {
+export function listTransactions(params: { month?: string; from?: string; to?: string; type?: TransactionType; page?: number; pageSize?: number } = {}) {
   const query = new URLSearchParams();
   if (params.month) query.set("month", params.month);
+  if (params.from) query.set("from", params.from);
+  if (params.to) query.set("to", params.to);
   if (params.type) query.set("type", params.type);
   query.set("page", String(params.page ?? 1));
   query.set("pageSize", String(params.pageSize ?? 50));
@@ -321,7 +332,7 @@ export interface ClosingSeller {
   sales: { id: string; soldAt: string; contractNumber: string | null; vehicle: string; customer: string; kind: SaleKind; price: number; expenses: number; total: number; rate: number | null; commission: number; paid: boolean }[];
 }
 export interface MonthClosing {
-  month: string; generatedAt: string;
+  month: string; from: string; to: string; generatedAt: string;
   sales: {
     count: number; revenue: number; cost: number; profit: number; avgMargin: number; avgTicket: number;
     cardFees: number; bankReturn: number; saleExpenses: number; canceledCount: number; refunds: number;
@@ -341,8 +352,8 @@ export interface MonthClosing {
     entries: { vehicle: string; date: string; value: number; origin: "purchase" | "trade_in" | "consigned" }[];
   };
 }
-export function getMonthClosing(month: string) { return request<MonthClosing>(`/financial/closing?month=${month}`); }
-export function getFinancialSummary(month?: string) { return request<FinancialSummary>(`/financial/summary${month ? `?month=${month}` : ""}`); }
+export function getMonthClosing(period: PeriodArg) { return request<MonthClosing>(`/financial/closing?${periodParams(period)}`); }
+export function getFinancialSummary(period?: PeriodArg) { const q = periodParams(period); return request<FinancialSummary>(`/financial/summary${q ? `?${q}` : ""}`); }
 export function createTransaction(input: CreateTransactionInput) { return request<FinancialTransaction>("/financial", { method: "POST", body: input }); }
 export function payTransaction(id: string) { return request<FinancialTransaction>(`/financial/${id}/pay`, { method: "PATCH" }); }
 export function deleteTransaction(id: string) { return request<{ success: boolean }>(`/financial/${id}`, { method: "DELETE" }); }
