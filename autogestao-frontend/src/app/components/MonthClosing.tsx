@@ -170,7 +170,7 @@ function SalesTab({ d, expanded }: { d: api.MonthClosing; expanded?: boolean }) 
               </table>
             </>
           )}
-          {!expanded && <Toggle open={open} onClick={() => setOpen(!open)} label={`Ver as ${s.count} vendas do mês`} />}
+          {!expanded && <Toggle open={open} onClick={() => setOpen(!open)} label={s.count === 1 ? "Ver a venda do mês" : `Ver as ${s.count} vendas do mês`} />}
         </div>
       )}
     </div>
@@ -306,7 +306,7 @@ function SellerCard({ x, expanded }: { x: api.ClosingSeller; expanded?: boolean 
               </tbody>
             </table>
           )}
-          {!expanded && <div className="mt-3"><Toggle open={open} onClick={() => setOpen(!open)} label={`Ver as ${x.count} vendas de ${x.name.split(" ")[0]}`} /></div>}
+          {!expanded && <div className="mt-3"><Toggle open={open} onClick={() => setOpen(!open)} label={x.count === 1 ? `Ver a venda de ${x.name.split(" ")[0]}` : `Ver as ${x.count} vendas de ${x.name.split(" ")[0]}`} /></div>}
         </>
       )}
     </div>
@@ -376,7 +376,7 @@ function StockTab({ d, expanded }: { d: api.MonthClosing; expanded?: boolean }) 
               </table>
             </>
           )}
-          {!expanded && <Toggle open={open} onClick={() => setOpen(!open)} label={`Ver os ${s.entriesCount} veículos que entraram`} />}
+          {!expanded && <Toggle open={open} onClick={() => setOpen(!open)} label={s.entriesCount === 1 ? "Ver o veículo que entrou" : `Ver os ${s.entriesCount} veículos que entraram`} />}
         </div>
       )}
     </div>
