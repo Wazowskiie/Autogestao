@@ -318,6 +318,14 @@ function formatCpf(v: string) {
   return d.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
 }
 
+/** "1.518,00", "1518,5", "1518.50" ou "1518" -> número */
+function parseMoney(v: string) {
+  const t = v.trim();
+  if (t.includes(",")) return Number(t.replace(/\./g, "").replace(",", "."));
+  if (/^\d+\.\d{1,2}$/.test(t)) return Number(t);
+  return Number(t.replace(/\./g, ""));
+}
+
 function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClose: () => void; onSaved: () => void }) {
   const isEditing = !!seller;
   const [name, setName] = useState(seller?.name ?? "");
@@ -333,6 +341,8 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
   const [shopCommission, setShopCommission] = useState<CommissionRules | null>(null);
   useEffect(() => { getSettings().then((d) => setShopCommission(d.dealership.commissionRules ?? null)).catch(() => {}); }, []);
   const [cpf, setCpf] = useState(seller?.cpf ? formatCpf(seller.cpf) : "");
+  // Salário fixo mensal (vazio = só comissão)
+  const [salary, setSalary] = useState(seller?.salary != null && Number(seller.salary) > 0 ? String(Number(seller.salary)) : "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [active, setActive] = useState(seller?.active ?? true);
@@ -365,6 +375,10 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
       if (v.trim() === "" || Number.isNaN(c) || c < 0 || c > 100) e[k] = "Entre 0 e 100";
     }
     if (cpf && cpf.replace(/\D/g, "").length !== 11) e.cpf = "CPF com 11 números";
+    if (salary.trim() !== "") {
+      const v = parseMoney(salary);
+      if (Number.isNaN(v) || v < 0) e.salary = "Valor inválido";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -383,6 +397,7 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
         commissionRatePromissory: Number(ratePromissory.replace(",", ".")),
         commissionRateFinancing: Number(rateFinancing.replace(",", ".")),
         cpf: cpf.replace(/\D/g, ""),
+        salary: salary.trim() === "" ? null : parseMoney(salary),
         active,
       };
       if (password) payload.password = password;
@@ -486,6 +501,14 @@ function SellerModal({ seller, onClose, onSaved }: { seller?: api.Seller; onClos
               <input value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))} inputMode="numeric" placeholder="000.000.000-00"
                 className="w-full rounded-lg px-3 py-2.5" style={fieldStyle(!!errors.cpf)} />
               {errors.cpf && <p style={{ fontSize: 11, color: "#DC2626", marginTop: 4 }}>{errors.cpf}</p>}
+            </div>
+
+            <div className="col-span-2">
+              <label style={{ fontSize: 13, color: "#374151", display: "block", marginBottom: 6 }}>Salário fixo por mês (R$)</label>
+              <input value={salary} onChange={(e) => setSalary(e.target.value.replace(/[^\d.,]/g, ""))} inputMode="decimal" placeholder="Ex.: 1.518,00 (deixe vazio se for só comissão)"
+                className="w-full rounded-lg px-3 py-2.5" style={fieldStyle(!!errors.salary)} />
+              {errors.salary && <p style={{ fontSize: 11, color: "#DC2626", marginTop: 4 }}>{errors.salary}</p>}
+              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>Entra no Fechamento do mês: total a receber = salário fixo + comissões.</p>
             </div>
 
             {shopCommission ? (
