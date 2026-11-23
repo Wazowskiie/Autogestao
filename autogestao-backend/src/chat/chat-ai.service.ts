@@ -55,7 +55,7 @@ export class ChatAiService {
     });
     // Only approved public fields go to the model, always scoped to this shop.
     const vehicles = await this.prisma.vehicle.findMany({
-      where: { dealershipId, status: 'available' }, select: CHAT_VEHICLE_SELECT,
+      where: { dealershipId, status: 'available', price: { gt: 0 } }, select: CHAT_VEHICLE_SELECT,
       orderBy: { createdAt: 'desc' }, take: vehicleLimit,
     });
     if (provider === 'demo') return demoReply(vehicles, history);

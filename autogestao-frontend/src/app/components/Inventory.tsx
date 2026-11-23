@@ -274,9 +274,13 @@ export function Inventory() {
                     <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{v.transmission ?? "—"}</td>
                     <td style={{ padding: "12px 16px", fontSize: 13, color: "#374151" }}>{v.type === "other" ? "—" : `${v.km.toLocaleString("pt-BR")} km`}</td>
                     <td style={{ padding: "12px 16px", fontSize: 13, color: "#6B7280" }}>{currency(Number(v.cost))}</td>
-                    <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 500 }}>{currency(Number(v.price))}</td>
+                    <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 500 }}>
+                      {Number(v.price) > 0 ? currency(Number(v.price)) : (
+                        <span title="Sem preço de venda: não aparece no site até ter preço" className="px-2 py-0.5 rounded" style={{ fontSize: 11, fontWeight: 600, background: "#FEF3C7", color: "#B45309" }}>Sem preço</span>
+                      )}
+                    </td>
                     <td style={{ padding: "12px 16px" }}>
-                      <span style={{ fontSize: 13, color: m > 30 ? "#27500A" : m > 20 ? "#374151" : "#DC2626", fontWeight: 500 }}>{m.toFixed(1)}%</span>
+                      {Number(v.price) > 0 ? <span style={{ fontSize: 13, color: m > 30 ? "#27500A" : m > 20 ? "#374151" : "#DC2626", fontWeight: 500 }}>{m.toFixed(1)}%</span> : <span style={{ fontSize: 13, color: "#9CA3AF" }}>—</span>}
                     </td>
                     <td style={{ padding: "12px 16px" }}><StatusBadge status={v.status} /></td>
                     <td style={{ padding: "12px 16px" }}>
