@@ -1,10 +1,10 @@
 import { DOC_ITEMS, docProblems, type DocItem, type DocItemStatus, type DocKey, type DocStatus } from "../../lib/vehicle-doc-status";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Search, Car, Bike, Truck, Package, Edit2, Trash2, Globe, X, Loader2, CheckCircle2, AlertTriangle, Receipt, Bookmark } from "lucide-react";
+import { Plus, Search, Car, Bike, Truck, Package, Edit2, Trash2, Globe, X, Loader2, CheckCircle2, AlertTriangle, Receipt, Bookmark, FileText } from "lucide-react";
 import { ReservationModal } from "./ReservationModal";
 import { useAuth } from "../../lib/auth-context";
 import { StatusBadge } from "./StatusBadge";
-import { VehicleDetailsModal, type VehicleDetails } from "./VehicleDetailsModal";
+import { VehicleDetailsModal, type VehicleDetails, type Tab as DetailsTab } from "./VehicleDetailsModal";
 import * as api from "../../lib/api";
 import * as dv from "../../lib/vehicle-details-api";
 
@@ -133,6 +133,8 @@ export function Inventory() {
   const [modalVehicle, setModalVehicle] = useState<api.Vehicle | "new" | null>(null);
   // Veículo aberto no painel "Dados do veículo"
   const [details, setDetails] = useState<api.Vehicle | null>(null);
+  // Aba que a ficha abre (o botão de contrato abre direto na Entrada)
+  const [detailsTab, setDetailsTab] = useState<DetailsTab>("vehicle");
   const [reserving, setReserving] = useState<api.Vehicle | null>(null);
   const auth = useAuth();
   const canManage = auth.user?.role === "owner" || auth.user?.role === "admin";
@@ -243,7 +245,7 @@ export function Inventory() {
                   v.fuel,
                 ].filter(Boolean).join(" · ");
                 return (
-                  <tr key={v.id} onClick={() => setDetails(v)} className="hover:bg-gray-50"
+                  <tr key={v.id} onClick={() => { setDetailsTab("vehicle"); setDetails(v); }} className="hover:bg-gray-50"
                     style={{ cursor: "pointer", borderBottom: i < vehicles.length - 1 ? "0.5px solid rgba(0,0,0,0.06)" : "none" }}>
                     <td style={{ padding: "12px 16px" }}>
                       <div className="flex items-center gap-3">
@@ -286,6 +288,7 @@ export function Inventory() {
                           <button title={v.status === "reserved" ? "Ver reserva" : "Reservar (sinal)"} onClick={(e) => { e.stopPropagation(); setReserving(v); }} className="p-1.5 rounded"
                             style={{ color: v.status === "reserved" ? "#fff" : "#7C3AED", background: v.status === "reserved" ? "#7C3AED" : "#F3E8FF" }}><Bookmark size={13} /></button>
                         )}
+                        <button title="Contrato de compra" onClick={(e) => { e.stopPropagation(); setDetailsTab("entry"); setDetails(v); }} className="p-1.5 rounded" style={{ color: "#0F766E", background: "#CCFBF1" }}><FileText size={13} /></button>
                         <button title="Editar" onClick={(e) => { e.stopPropagation(); setModalVehicle(v); }} className="p-1.5 rounded" style={{ color: "#6B7280", background: "#F4F6F9" }}><Edit2 size={13} /></button>
                         <button title="Publicar no site" onClick={(e) => e.stopPropagation()} className="p-1.5 rounded" style={{ color: "#185FA5", background: "#EBF2FA" }}><Globe size={13} /></button>
                         <button title="Excluir" onClick={(e) => { e.stopPropagation(); handleDelete(v); }} className="p-1.5 rounded" style={{ color: "#DC2626", background: "#FEE2E2" }}><Trash2 size={13} /></button>
@@ -301,6 +304,7 @@ export function Inventory() {
 
       <VehicleDetailsModal
         vehicle={details as unknown as VehicleDetails | null}
+        initialTab={detailsTab}
         onClose={() => setDetails(null)}
         onChanged={fetchVehicles}
         onEdit={(v) => { setDetails(null); setModalVehicle(v as unknown as api.Vehicle); }} />

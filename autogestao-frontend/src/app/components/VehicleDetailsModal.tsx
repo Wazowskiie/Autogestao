@@ -153,6 +153,7 @@ export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChang
               <Badge bg={status.bg} fg={status.fg}>{status.text}</Badge>
             </div>
           </div>
+          <Btn variant="outline" onClick={() => setTab("entry")}><FileText size={15} /> Contrato de compra</Btn>
           {onEdit && (
             <Btn variant="outline" onClick={() => onEdit(v)}><Pencil size={15} /> Editar</Btn>
           )}
@@ -1169,6 +1170,15 @@ function EntryTab({ v, onChanged }: { v: VehicleFull; onChanged: () => void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
       {!data && <Alert kind="info">Ainda não há dados de entrada para este veículo. Preencha abaixo.</Alert>}
+      <div style={{ border: "1px solid #DCE7F3", background: "#F5F9FD", borderRadius: 10, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+        <FileText size={18} style={{ color: "#185FA5", flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>Contrato de compra</div>
+          <div style={{ fontSize: 12, color: "#B45309" }}>
+            Para imprimir, preencha o <b>nome do fornecedor</b> e o <b>valor de compra</b> abaixo e clique em <b>Salvar</b>. Os botões Abrir, PDF e Word aparecem aqui em cima.
+          </div>
+        </div>
+      </div>
       {action.error && <Alert>{action.error}</Alert>}
       <div>
         <Label>Dados do fornecedor</Label>
