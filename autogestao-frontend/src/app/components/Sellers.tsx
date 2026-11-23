@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Search, Plus, Trophy, TrendingUp, DollarSign, X, User, Mail, Lock, Phone, Briefcase, Percent, Eye, EyeOff, ChevronDown, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import * as api from "../../lib/api";
 import { getSettings, type CommissionRules } from "../../lib/settings-api";
+import { MonthPicker } from "./MonthPicker";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -57,8 +58,7 @@ export function Sellers() {
             <p style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>Acompanhe a performance da equipe</p>
           </div>
           <div className="flex items-center gap-3">
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-              className="rounded-lg px-3 py-2" style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13 }} />
+            <MonthPicker value={month} onChange={setMonth} />
             <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg flex items-center gap-2" style={{ background: "var(--primary)", color: "#fff", fontSize: 13 }}>
               <Plus size={16} /> Novo Vendedor
             </button>

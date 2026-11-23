@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Printer, TrendingUp, Wallet, HandCoins, ShoppingBag, AlertTriangle, ChevronDown, ChevronUp, CheckCircle2, FileSpreadsheet } from "lucide-react";
 import * as api from "../../lib/api";
+import { MonthPicker } from "./MonthPicker";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -477,8 +478,7 @@ export function MonthClosing() {
           <span className="px-2 py-0.5 rounded-full" style={{ background: "#EBF2FA", color: BLUE, fontSize: 12, fontWeight: 500 }}>{monthLabel(month)}</span>
         </div>
         <div className="flex items-center gap-3">
-          <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)}
-            className="rounded-lg px-3 py-2" style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13 }} />
+          <MonthPicker value={month} onChange={setMonth} />
           <button onClick={handlePrint} disabled={!data} className="px-4 py-2 rounded-lg flex items-center gap-2"
             style={{ background: "var(--primary)", color: "#fff", fontSize: 13, opacity: data ? 1 : 0.6 }}>
             <Printer size={16} /> Imprimir / PDF
