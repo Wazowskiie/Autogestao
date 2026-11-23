@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, TrendingUp, TrendingDown, DollarSign, Trash2, X, Calendar, FileText, ChevronDown, Check, Clock, Car, Repeat } from "lucide-react";
 import * as api from "../../lib/api";
+import { MonthPicker } from "./MonthPicker";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -97,8 +98,7 @@ export function Financial() {
             <span className="px-2 py-0.5 rounded-full" style={{ background: "#EBF2FA", color: "#185FA5", fontSize: 12, fontWeight: 500 }}>{transactions.length} lançamentos</span>
           </div>
           <div className="flex items-center gap-3">
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-              className="rounded-lg px-3 py-2" style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13 }} />
+            <MonthPicker value={month} onChange={setMonth} />
             <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg flex items-center gap-2" style={{ background: "var(--primary)", color: "#fff", fontSize: 13 }}>
               <Plus size={16} /> Lançamento
             </button>

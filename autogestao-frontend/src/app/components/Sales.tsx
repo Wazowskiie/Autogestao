@@ -9,6 +9,7 @@ import { useAuth } from "../../lib/auth-context";
 import { CancelSaleModal, SaleAfterPanel } from "./SaleAfterPanel";
 import { VehicleDetailsModal } from "./VehicleDetailsModal";
 import * as dv from "../../lib/vehicle-details-api";
+import { MonthPicker } from "./MonthPicker";
 
 function currency(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -216,8 +217,7 @@ export function Sales() {
             <span className="px-2 py-0.5 rounded-full" style={{ background: "#EBF2FA", color: "#185FA5", fontSize: 12, fontWeight: 500 }}>{total}</span>
           </div>
           <div className="flex items-center gap-3">
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-              className="rounded-lg px-3 py-2" style={{ border: "0.5px solid rgba(0,0,0,0.12)", fontSize: 13 }} />
+            <MonthPicker value={month} onChange={setMonth} />
             <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg flex items-center gap-2"
               style={{ background: "#185FA5", color: "#fff", fontSize: 13 }}>
               <Plus size={16} /> Registrar venda
