@@ -1325,7 +1325,7 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.5)" }}
       onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-h-[92vh] overflow-y-auto" style={{ background: "#fff", borderRadius: 16, maxWidth: 640, margin: 16 }}>
+      <div className="w-full max-h-[94vh] overflow-y-auto" style={{ background: "#fff", borderRadius: 16, maxWidth: 1040, margin: 16 }}>
         <div className="flex items-center justify-between px-6 py-4 sticky top-0"
           style={{ background: "#fff", borderBottom: "0.5px solid rgba(0,0,0,0.08)", zIndex: 2 }}>
           <h3>Registrar Venda</h3>
@@ -1882,38 +1882,10 @@ export function NewSaleModal({ onClose, onSaved, prefill }: { onClose: () => voi
             </div>
           </div>
 
-          {/* ================= Despesas, comissão e garantia ================= */}
+          {/* ================= Comissão e garantia ================= */}
           <div className="rounded-xl" style={{ border: "0.5px solid rgba(0,0,0,0.1)" }}>
-            {/* Despesas entram no Financeiro: só dono/admin lançam */}
-            {!isSeller && (<>
-            <div className="flex items-center justify-between px-4 py-3" style={{ background: "#F9FAFB", borderRadius: "12px 12px 0 0" }}>
-              <div className="flex items-center gap-2">
-                <FileText size={15} style={{ color: "#185FA5" }} />
-                <span style={sectionTitle}>Despesas da venda</span>
-                {expensesTotal > 0 && <span style={{ fontSize: 12, color: "#6B7280" }}>· {currency(expensesTotal)}</span>}
-              </div>
-              <button type="button" onClick={() => setSaleExpenses(prev => [...prev, { key: formKey++, description: "", amount: "", paid: true }])}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg" style={{ fontSize: 12, fontWeight: 500, color: "#185FA5", background: "#EBF2FA" }}>
-                <Plus size={13} /> Adicionar
-              </button>
-            </div>
-            <div className="px-4 py-3 space-y-2" style={{ borderTop: "0.5px solid rgba(0,0,0,0.08)" }}>
-              {saleExpenses.length === 0 && <p style={{ fontSize: 12, color: "#9CA3AF" }}>Transferência, vistoria, revisão, brinde, combustível... Entram no Financeiro e saem do lucro. Dá para lançar depois, na venda.</p>}
-              {saleExpenses.map(e => (
-                <div key={e.key} className="flex items-center gap-2">
-                  <input value={e.description} placeholder="Descrição" onChange={(ev) => setSaleExpenses(prev => prev.map(x => x.key === e.key ? { ...x, description: ev.target.value } : x))}
-                    className="flex-1 rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff" }} />
-                  <input value={e.amount} placeholder="0,00" inputMode="decimal" onChange={(ev) => setSaleExpenses(prev => prev.map(x => x.key === e.key ? { ...x, amount: ev.target.value } : x))}
-                    className="rounded-lg px-3 py-2" style={{ ...inputStyle, background: "#fff", width: 110 }} />
-                  <label className="flex items-center gap-1" style={{ fontSize: 12, color: "#374151", whiteSpace: "nowrap" }}>
-                    <input type="checkbox" checked={e.paid} onChange={(ev) => setSaleExpenses(prev => prev.map(x => x.key === e.key ? { ...x, paid: ev.target.checked } : x))} /> Paga
-                  </label>
-                  <button type="button" onClick={() => setSaleExpenses(prev => prev.filter(x => x.key !== e.key))} className="p-2" style={{ color: "#DC2626" }}><Trash2 size={15} /></button>
-                </div>
-              ))}
-            </div>
-            </>)}
-            <div className="px-4 py-3 grid grid-cols-2 gap-4" style={{ borderTop: "0.5px solid rgba(0,0,0,0.08)" }}>
+            {/* Despesas da venda: lançadas depois, na própria venda (aba Despesas) */}
+            <div className="px-4 py-3 grid grid-cols-2 gap-4">
               <div>
                 <label style={smallLabel}>Comissão do vendedor{sellerForCommission ? ` (${sellerForCommission.name})` : ""}</label>
                 {isManager ? (
