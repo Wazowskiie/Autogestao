@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, Plus, Car, Bike, Truck, X, FileText, Edit2, Trash2, ChevronDown, UserPlus, RefreshCw, Wallet, Loader2, Printer, CheckCircle2 } from "lucide-react";
 import { openSaleDocument } from "../../lib/sale-documents";
-import { SalePrintsModal } from "./SalePrintsPanel";
+import { SalePrintsPanel } from "./SalePrintsPanel";
 import { getSettings, commissionRateByRules, type CommissionRules } from "../../lib/settings-api";
 import * as api from "../../lib/api";
 import * as sapi from "../../lib/sales-api";
 import { useAuth } from "../../lib/auth-context";
 import { CancelSaleModal, SaleAfterPanel } from "./SaleAfterPanel";
-import { VehicleDetailsModal } from "./VehicleDetailsModal";
+import { VehicleDetailsModal, C as VC, Badge, Btn, InfoRows } from "./VehicleDetailsModal";
 import * as dv from "../../lib/vehicle-details-api";
 import { PeriodPicker, monthPeriod, type Period } from "./PeriodPicker";
 
@@ -507,7 +507,6 @@ function SaleDetailsModal({
   const [sale, setSaleState] = useState<sapi.SaleFull | null>(null);
   const [canceling, setCanceling] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [showPrints, setShowPrints] = useState(false);
   // Ficha do veículo (abas Entrada e Saída), igual à do Estoque
   const [vehicleFull, setVehicleFull] = useState<dv.VehicleFull | null>(null);
   const [openingVehicle, setOpeningVehicle] = useState(false);
@@ -536,184 +535,177 @@ function SaleDetailsModal({
     return () => { active = false; };
   }, [saleId]);
 
+  const [tab, setTab] = useState<SaleTab>("sale");
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !vehicleFull && !canceling) close(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const v = sale?.vehicle;
+  const cover = v?.photos?.[0];
+  const VIcon = v?.type === "moto" ? Bike : v?.type === "truck" ? Truck : Car;
+  const notes = sale?.promissoryNotes ?? [];
+  const payments = sale?.payments ?? [];
+  const tradeIns = sale?.tradeIns ?? [];
+  const docBR = (d?: string | null) => {
+    const x = (d ?? "").replace(/\D/g, "");
+    return x.length === 11 ? x.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : x.length === 14 ? x.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5") : d ?? "";
+  };
+  const tabs: { id: SaleTab; label: string }[] = [
+    { id: "sale", label: "Venda" },
+    { id: "payment", label: "Pagamento" },
+    ...(!(sale && (sale.profit as unknown) == null) ? [{ id: "expenses" as SaleTab, label: "Despesas" }] : []),
+    { id: "commission", label: "Comissão" },
+    { id: "postsale", label: "Pós-venda" },
+    { id: "prints", label: "Impressos" },
+  ];
+
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.5)" }}
-      onClick={(e) => e.target === e.currentTarget && close()}>
-      <div className="w-full max-h-[90vh] overflow-y-auto rounded-xl" style={{ background: "#fff", maxWidth: 680, margin: 16 }}>
-        <div className="relative px-6 pt-5 pb-6" style={{ background: "#0F1923" }}>
-          <button onClick={close} className="absolute right-5 top-5" style={{ color: "#9CA3AF" }}><X size={20} /></button>
-          <p style={{ fontSize: 11, color: "#185FA5", fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 4 }}>
-            Vendas
-          </p>
-          <h3 style={{ color: "#fff" }} className="flex items-center gap-2">
-            {sale?.contractNumber ? `Venda ${sale.contractNumber}` : "Detalhes da venda"}
-            {isCanceled && <span className="px-2 py-0.5 rounded-full" style={{ fontSize: 11, background: "#DC2626", color: "#fff", fontWeight: 600 }}>Cancelada</span>}
-          </h3>
-          {sale && <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 2 }}>{new Date(sale.soldAt).toLocaleDateString("pt-BR")}</p>}
+    <div onClick={(e) => e.target === e.currentTarget && close()} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: "100%", maxWidth: 1100, height: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 50px rgba(0,0,0,0.25)", overflow: "hidden" }}>
+        {/* Cabeçalho (mesmo padrão da ficha do veículo) */}
+        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 16, padding: "18px 24px", borderBottom: `1px solid ${VC.border}` }}>
+          <div style={{ width: 64, height: 64, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "#F4F6F9", display: "flex", alignItems: "center", justifyContent: "center", color: "#CBD5E1" }}>
+            {cover ? <img src={cover.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <VIcon size={26} />}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 19, fontWeight: 600, color: VC.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {v ? `${v.brand} ${v.model}${v.version ? ` ${v.version}` : ""}` : "Venda"}
+            </div>
+            {sale && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4, color: VC.muted, fontSize: 14, flexWrap: "wrap" }}>
+                {sale.contractNumber && <span style={{ color: VC.text, fontWeight: 500 }}>Venda {sale.contractNumber}</span>}
+                <span>· {new Date(sale.soldAt).toLocaleDateString("pt-BR", { timeZone: "UTC" })}</span>
+                {v?.plate && <span>· {v.plate}</span>}
+                <span>· {sale.customer.name}</span>
+                {isCanceled ? <Badge bg={VC.redBg} fg={VC.red}>Cancelada</Badge> : <Badge bg={VC.greenBg} fg={VC.green}>Vendido</Badge>}
+              </div>
+            )}
+          </div>
+          {sale && <DocButton label="Contrato de venda" onClick={() => openSaleDocument(sale.id, "contract")} />}
+          {sale && notes.length > 0 && <DocButton label="Promissórias" onClick={() => openSaleDocument(sale.id, "promissory")} />}
+          {sale && canEdit && (
+            <Btn variant="outline" onClick={() => openVehicle(sale.vehicle.id)} disabled={openingVehicle}>
+              {openingVehicle ? <Loader2 size={15} className="animate-spin" /> : <VIcon size={15} />} Ficha do veículo
+            </Btn>
+          )}
+          {sale && canEdit && !isCanceled && <Btn variant="outline" onClick={() => onEdit(sale)}><Edit2 size={15} /> Editar</Btn>}
+          <button onClick={close} aria-label="Fechar" style={{ border: 0, background: "transparent", cursor: "pointer", color: VC.muted, padding: 6 }}><X size={22} /></button>
         </div>
 
-        <div className="px-6 py-5">
+        {/* Abas */}
+        <div style={{ flexShrink: 0, display: "flex", gap: 2, padding: "0 16px", borderBottom: `1px solid ${VC.border}`, overflowX: "auto", overflowY: "hidden" }}>
+          {tabs.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              flexShrink: 0, padding: "13px 14px", border: 0, background: "transparent", cursor: "pointer", fontSize: 14, fontWeight: 500, whiteSpace: "nowrap",
+              color: tab === t.id ? VC.blue : VC.muted, borderBottom: `2px solid ${tab === t.id ? VC.blue : "transparent"}`,
+            }}>
+              {t.label}{t.id === "payment" && notes.length ? ` (${notes.length})` : ""}
+            </button>
+          ))}
+        </div>
+
+        {/* Conteúdo */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 24 }}>
           {loading && <p style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center", padding: "24px 0" }}>Carregando...</p>}
           {error && <div className="rounded-lg px-3 py-2" style={{ background: "#FEE2E2", color: "#991B1B", fontSize: 13 }}>{error}</div>}
+          {vehicleFull && <VehicleDetailsModal vehicle={vehicleFull} initialTab="exit" onClose={() => setVehicleFull(null)} />}
 
           {sale && (
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-6">
               {justCreated && (
                 <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "#ECFDF5", color: "#047857", fontSize: 13, border: "1px solid #A7F3D0" }}>
                   <CheckCircle2 size={15} /> Venda registrada! Imprima o contrato e as promissórias para o cliente assinar.
                 </div>
               )}
-              {notice && (
-                <div className="rounded-lg px-3 py-2" style={{ background: "#EFF6FF", color: "#1E40AF", fontSize: 13, border: "1px solid #BFDBFE" }}>{notice}</div>
-              )}
-              {/* Documentos para imprimir */}
-              <div className="flex flex-wrap gap-2">
-                <DocButton label="Contrato de venda" onClick={() => openSaleDocument(sale.id, "contract")} />
-                {((sale as { promissoryNotes?: unknown[] }).promissoryNotes?.length ?? 0) > 0 && (
-                  <DocButton label="Notas promissórias" onClick={() => openSaleDocument(sale.id, "promissory")} />
-                )}
-                <button onClick={() => setShowPrints(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg"
-                  style={{ background: "#fff", color: "#185FA5", border: "1px solid #185FA5", fontSize: 13, fontWeight: 500 }}>
-                  <FileText size={14} /> Todos os impressos de saída
-                </button>
-              </div>
-              {showPrints && <SalePrintsModal saleId={sale.id} onClose={() => setShowPrints(false)} />}
-              {vehicleFull && <VehicleDetailsModal vehicle={vehicleFull} initialTab="exit" onClose={() => setVehicleFull(null)} />}
-              {/* Veículo */}
-              <div className="rounded-lg p-4 relative" style={{ background: "#F4F6F9" }}>
-                {canEdit && (
-                  <button onClick={() => openVehicle(sale.vehicle.id)} disabled={openingVehicle}
-                    className="absolute flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
-                    style={{ right: 12, top: 12, background: "#fff", border: "1px solid #185FA5", color: "#185FA5", fontSize: 12, fontWeight: 500 }}>
-                    {openingVehicle ? <Loader2 size={13} className="animate-spin" /> : <Car size={13} />} Entrada e saída
-                  </button>
-                )}
-                <p style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Veículo</p>
-                <p style={{ fontSize: 14, fontWeight: 600, color: "#0F1923" }}>{sale.vehicle.brand} {sale.vehicle.model}</p>
-                <p style={{ fontSize: 12, color: "#6B7280" }}>
-                  {sale.vehicle.year}
-                  {sale.vehicle.km != null ? ` · ${sale.vehicle.km.toLocaleString("pt-BR")} km` : ""}
-                  {sale.vehicle.color ? ` · ${sale.vehicle.color}` : ""}
-                </p>
-              </div>
+              {notice && <div className="rounded-lg px-3 py-2" style={{ background: "#EFF6FF", color: "#1E40AF", fontSize: 13, border: "1px solid #BFDBFE" }}>{notice}</div>}
 
-              {/* Cliente / Vendedor */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Cliente</p>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: "#0F1923" }}>{sale.customer.name}</p>
-                  {(sale.customer.phone || sale.customer.email) && (
-                    <p style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
-                      {[sale.customer.phone, sale.customer.email].filter(Boolean).join(" · ")}
-                    </p>
+              {tab === "sale" && (
+                <>
+                  <div>
+                    <SecLabel>Veículo</SecLabel>
+                    <InfoRows rows={[
+                      ["Veículo", `${sale.vehicle.brand} ${sale.vehicle.model}${sale.vehicle.version ? ` ${sale.vehicle.version}` : ""}`],
+                      ["Ano", sale.vehicle.manufactureYear ? `${sale.vehicle.manufactureYear}/${sale.vehicle.year}` : String(sale.vehicle.year)],
+                      ["Placa", sale.vehicle.plate ?? ""],
+                      ["Cor", sale.vehicle.color ?? ""],
+                      ["Km", sale.vehicle.km != null ? `${sale.vehicle.km.toLocaleString("pt-BR")} km` : ""],
+                    ]} />
+                  </div>
+                  <div>
+                    <SecLabel>Comprador e vendedor</SecLabel>
+                    <InfoRows rows={[
+                      ["Cliente", sale.customer.name],
+                      ["CPF/CNPJ", docBR(sale.customer.document)],
+                      ["Telefone", sale.customer.phone ?? ""],
+                      ["E-mail", sale.customer.email ?? ""],
+                      ["Endereço", sale.customer.address ?? ""],
+                      ["Vendedor", sale.seller.name],
+                    ]} />
+                  </div>
+                  <SaleAfterPanel sale={sale} canEdit={canEdit} onChange={setSale} section="result" />
+                  {sale.notes && (
+                    <div>
+                      <SecLabel>Observações</SecLabel>
+                      <InfoRows rows={[["Observações", sale.notes]]} />
+                    </div>
                   )}
-                </div>
-                <div>
-                  <p style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Vendedor</p>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: "#0F1923" }}>{sale.seller.name}</p>
-                </div>
-              </div>
+                </>
+              )}
 
-              <SaleAfterPanel sale={sale} canEdit={canEdit} onChange={setSale} />
-
-              {/* Como foi pago */}
-              {!!(sale as sapi.SaleFull).payments?.length && (
-                <div>
-                  <p style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Pagamento</p>
-                  <div className="flex flex-col gap-2">
-                    {(sale as sapi.SaleFull).payments!.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg"
-                        style={{ background: "#F9FAFB", border: "0.5px solid rgba(0,0,0,0.06)" }}>
-                        <div>
-                          <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{PAYMENT_NAMES[p.method] ?? p.method}</span>
-                          {p.bank && <span style={{ fontSize: 12, color: "#6B7280" }}> · {p.bank}</span>}
-                          {p.installments && p.installments > 1 && <span style={{ fontSize: 12, color: "#6B7280" }}> · {p.installments}x</span>}
-                          {Number(p.feeAmount) > 0 && (
-                            <span style={{ fontSize: 11, color: "#B45309", marginLeft: 6 }}>
-                              taxa {Number(p.feePercent)}% = {currency(Number(p.feeAmount))}
-                            </span>
-                          )}
-                        </div>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#0F1923" }}>{currency(Number(p.amount))}</span>
-                      </div>
-                    ))}
+              {tab === "payment" && (
+                <>
+                  <div>
+                    <SecLabel>Formas de pagamento</SecLabel>
+                    {payments.length === 0 && tradeIns.length === 0
+                      ? <InfoRows rows={[["Forma de pagamento", sale.paymentMethod ? (PAYMENT_NAMES[sale.paymentMethod] ?? sale.paymentMethod) : ""]]} />
+                      : <InfoRows rows={[
+                          ...payments.map((p): [string, React.ReactNode] => [
+                            PAYMENT_NAMES[p.method] ?? p.method,
+                            <span key={p.id}><b>{currency(Number(p.amount))}</b>
+                              {p.installments && p.installments > 1 ? ` em ${p.installments}x` : ""}
+                              {p.bank ? ` · ${p.bank}` : ""}
+                              {Number(p.feeAmount) > 0 ? ` · taxa ${currency(Number(p.feeAmount))}` : ""}
+                              {Number(p.returnAmount) > 0 ? ` · retorno ${currency(Number(p.returnAmount))}` : ""}
+                              {p.notes ? ` · ${p.notes}` : ""}</span>,
+                          ]),
+                          ...tradeIns.map((t): [string, React.ReactNode] => [
+                            "Veículo na troca",
+                            <span key={t.id}><b>{currency(Number(t.cost))}</b> · {t.brand} {t.model} {t.year}{t.plate ? ` · ${t.plate}` : ""}</span>,
+                          ]),
+                          ["Total", <b key="t">{currency(payments.reduce((a, p) => a + Number(p.amount), 0) + tradeIns.reduce((a, t) => a + Number(t.cost), 0))}</b>],
+                        ]} />}
                   </div>
-                </div>
+                  <SaleAfterPanel sale={sale} canEdit={canEdit} onChange={setSale} section="financing" />
+                  {notes.length > 0 && (
+                    <div>
+                      <SecLabel>Promissórias ({notes.filter((n) => n.paid).length} de {notes.length} pagas)</SecLabel>
+                      <InfoRows rows={notes.slice().sort((a, b) => a.installmentNumber - b.installmentNumber).map((n): [string, React.ReactNode] => [
+                        `Parcela ${n.installmentNumber}/${n.totalInstallments}`,
+                        <span key={n.id} className="flex items-center gap-3 flex-wrap">
+                          <b>{currency(Number(n.amount))}</b>
+                          <span style={{ color: VC.muted }}>vence {new Date(n.dueDate).toLocaleDateString("pt-BR", { timeZone: "UTC" })}</span>
+                          <Badge bg={n.paid ? VC.greenBg : VC.amberBg} fg={n.paid ? VC.green : VC.amber}>{n.paid ? "Paga" : "Pendente"}</Badge>
+                        </span>,
+                      ])} />
+                    </div>
+                  )}
+                </>
               )}
 
-              {/* Veículos que entraram na troca */}
-              {!!(sale as sapi.SaleFull).tradeIns?.length && (
-                <div>
-                  <p style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Entrou na troca</p>
-                  <div className="flex flex-col gap-2">
-                    {(sale as sapi.SaleFull).tradeIns!.map((t) => (
-                      <div key={t.id} className="flex items-center justify-between px-3 py-2 rounded-lg"
-                        style={{ background: "#F9FAFB", border: "0.5px solid rgba(0,0,0,0.06)" }}>
-                        <div>
-                          <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{t.brand} {t.model} {t.year}</span>
-                          {t.plate && <span style={{ fontSize: 12, color: "#6B7280" }}> · {t.plate}</span>}
-                        </div>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#0F1923" }}>{currency(Number(t.cost))}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Observações */}
-              {sale.notes && (
-                <div>
-                  <p style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Observações</p>
-                  <p style={{ fontSize: 13, color: "#374151", background: "#F4F6F9", borderRadius: 8, padding: 12 }}>{sale.notes}</p>
-                </div>
-              )}
-
-              {/* Promissórias */}
-              {sale.promissoryNotes && sale.promissoryNotes.length > 0 && (
-                <div>
-                  <p style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
-                    Promissórias ({sale.promissoryNotes.length})
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    {sale.promissoryNotes
-                      .slice()
-                      .sort((a, b) => a.installmentNumber - b.installmentNumber)
-                      .map((n) => (
-                        <div key={n.id} className="flex items-center justify-between px-3 py-2 rounded-lg"
-                          style={{ background: "#F9FAFB", border: "0.5px solid rgba(0,0,0,0.06)" }}>
-                          <div className="flex items-center gap-2">
-                            <span style={{ fontSize: 12, color: "#6B7280" }}>{n.installmentNumber}/{n.totalInstallments}</span>
-                            <span style={{ fontSize: 12, color: "#9CA3AF" }}>vence {new Date(n.dueDate).toLocaleDateString("pt-BR")}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>{currency(Number(n.amount))}</span>
-                            <span className="px-2 py-0.5 rounded-full"
-                              style={{ fontSize: 10, fontWeight: 600, background: n.paid ? "#EAF3DE" : "#FEF3C7", color: n.paid ? "#27500A" : "#92400E" }}>
-                              {n.paid ? "Paga" : "Pendente"}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
+              {tab === "expenses" && <SaleAfterPanel sale={sale} canEdit={canEdit} onChange={setSale} section="expenses" />}
+              {tab === "commission" && <SaleAfterPanel sale={sale} canEdit={canEdit} onChange={setSale} section="commission" />}
+              {tab === "postsale" && <SaleAfterPanel sale={sale} canEdit={canEdit} onChange={setSale} section="postsale" />}
+              {tab === "prints" && <SalePrintsPanel saleId={sale.id} />}
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-6 py-4" style={{ borderTop: "0.5px solid rgba(0,0,0,0.08)" }}>
-          {canEdit && sale && !isCanceled && (
-            <button onClick={() => setCanceling(true)} className="px-4 py-2 rounded-lg mr-auto"
-              style={{ border: "1px solid #FCA5A5", color: "#DC2626", fontSize: 13, fontWeight: 500 }}>Cancelar venda</button>
-          )}
-          <button onClick={close} className="px-5 py-2 rounded-lg"
-            style={{ border: "0.5px solid rgba(0,0,0,0.1)", fontSize: 13, color: "#374151" }}>Fechar</button>
-          {canEdit && sale && !isCanceled && (
-            <button onClick={() => onEdit(sale)} className="px-5 py-2 rounded-lg flex items-center gap-2"
-              style={{ background: "#185FA5", color: "#fff", fontSize: 13, fontWeight: 500 }}>
-              <Edit2 size={14} /> Editar
-            </button>
-          )}
+        {/* Rodapé */}
+        <div style={{ flexShrink: 0, padding: "12px 24px", borderTop: `1px solid ${VC.border}`, display: "flex", alignItems: "center", gap: 12 }}>
+          {canEdit && sale && !isCanceled && <Btn variant="danger" onClick={() => setCanceling(true)}>Cancelar venda</Btn>}
+          <div style={{ marginLeft: "auto" }}><Btn variant="soft" onClick={close}>Fechar</Btn></div>
         </div>
       </div>
       {canceling && sale && (
@@ -724,6 +716,11 @@ function SaleDetailsModal({
       )}
     </div>
   );
+}
+
+type SaleTab = "sale" | "payment" | "expenses" | "commission" | "postsale" | "prints";
+function SecLabel({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: VC.light, textTransform: "uppercase", marginBottom: 10 }}>{children}</div>;
 }
 
 /**
