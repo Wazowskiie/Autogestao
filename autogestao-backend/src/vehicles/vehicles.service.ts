@@ -105,7 +105,7 @@ export class VehiclesService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.vehicle.findMany({
         where,
-        include: { photos: true },
+        include: { photos: true, web: { select: { published: true } } },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,

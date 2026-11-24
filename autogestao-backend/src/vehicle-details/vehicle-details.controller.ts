@@ -240,6 +240,13 @@ export class VehicleDetailsController {
     return this.service.getWeb(user.dealershipId, vehicleId);
   }
 
+  /** Liga/desliga só o "Mostrar no site" (sem mexer no resto da aba Web) */
+  @Roles(...WRITE)
+  @Patch('web/published')
+  setPublished(@CurrentUser() user: AuthenticatedUser, @Param('vehicleId', id) vehicleId: string, @Body() body: { published?: boolean }) {
+    return this.service.setPublished(user.dealershipId, vehicleId, body?.published !== false);
+  }
+
   @Roles(...WRITE)
   @Put('web')
   upsertWeb(@CurrentUser() user: AuthenticatedUser, @Param('vehicleId', id) vehicleId: string, @Body() dto: UpsertWebDto) {

@@ -36,7 +36,7 @@ export class StorefrontService {
 
     const vehicleCount = await this.prisma.vehicle.count({
       // Moto sem preço (ex.: importada sem valor de venda) não aparece no site
-      where: { dealershipId: dealership.id, status: 'available', price: { gt: 0 } },
+      where: { dealershipId: dealership.id, status: 'available', price: { gt: 0 }, OR: [{ web: null }, { web: { published: true } }] },
     });
 
     // Não expõe dados sensíveis (CNPJ não é segredo, mas mantemos a resposta enxuta)
@@ -72,7 +72,7 @@ export class StorefrontService {
     const where: any = {
       dealershipId: dealership.id,
       status: 'available', // a vitrine só mostra o que está disponível
-      AND: [{ price: { gt: 0 } }], // e com preço definido
+      AND: [{ price: { gt: 0 }, OR: [{ web: null }, { web: { published: true } }] }], // e com preço definido
     };
 
     if (query.search) {
@@ -108,7 +108,7 @@ export class StorefrontService {
     if (!dealership) throw new NotFoundException('Loja não encontrada');
 
     const vehicle = await this.prisma.vehicle.findFirst({
-      where: { id: vehicleId, dealershipId: dealership.id, status: 'available', price: { gt: 0 } },
+      where: { id: vehicleId, dealershipId: dealership.id, status: 'available', price: { gt: 0 }, OR: [{ web: null }, { web: { published: true } }] },
       select: PUBLIC_VEHICLE_SELECT,
     });
     if (!vehicle) throw new NotFoundException('Veículo não encontrado');

@@ -72,6 +72,8 @@ export interface VehiclePhoto { id: string; url: string; order: number; }
 
 export interface Vehicle {
   id: string; dealershipId: string;
+  /** Aba Web: "Mostrar no site" (sem registro = mostra) */
+  web?: { published: boolean } | null;
   type: VehicleType; category: string | null;
   brand: string; model: string; version: string | null;
   year: number; manufactureYear: number | null; km: number;
