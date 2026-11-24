@@ -581,6 +581,16 @@ export class VehicleDetailsService {
     return this.getWeb(dealershipId, vehicleId);
   }
 
+  async setPublished(dealershipId: string, vehicleId: string, published: boolean) {
+    await this.vehicle(dealershipId, vehicleId);
+    await this.prisma.vehicleWeb.upsert({
+      where: { vehicleId },
+      create: { dealershipId, vehicleId, published },
+      update: { published },
+    });
+    return { published };
+  }
+
   /** Valor FIPE da última consulta de placa (não gasta consulta nova) */
   private async fipeFromCache(plate: string | null) {
     if (!plate) return null;

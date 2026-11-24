@@ -136,6 +136,7 @@ export function Inventory() {
   // Período de entrada no estoque (null = todo o período)
   const [period, setPeriod] = useState<Period | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [togglingSite, setTogglingSite] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<api.VehicleType | "all">("all");
   const [modalVehicle, setModalVehicle] = useState<api.Vehicle | "new" | null>(null);
   // Veículo aberto no painel "Dados do veículo"
@@ -315,7 +316,31 @@ export function Inventory() {
                         )}
                         <button title="Contrato de compra" onClick={(e) => { e.stopPropagation(); setDetailsTab("entry"); setDetails(v); }} className="p-1.5 rounded" style={{ color: "#0F766E", background: "#CCFBF1" }}><FileText size={13} /></button>
                         <button title="Editar" onClick={(e) => { e.stopPropagation(); setModalVehicle(v); }} className="p-1.5 rounded" style={{ color: "#6B7280", background: "#F4F6F9" }}><Edit2 size={13} /></button>
-                        <button title="Publicar no site" onClick={(e) => e.stopPropagation()} className="p-1.5 rounded" style={{ color: "#185FA5", background: "#EBF2FA" }}><Globe size={13} /></button>
+                        {(() => {
+                          const onSite = v.web?.published !== false;
+                          const live = onSite && v.status === "available" && Number(v.price) > 0;
+                          const title = !onSite ? "Fora do site. Clique para mostrar no site"
+                            : live ? "Aparecendo no site. Clique para tirar do site"
+                            : Number(v.price) <= 0 ? "Marcada para o site, mas só aparece quando tiver preço. Clique para tirar"
+                            : "Marcada para o site, mas só aparece quando estiver Disponível. Clique para tirar";
+                          return (
+                            <button title={title} disabled={!canManage || togglingSite === v.id}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                setTogglingSite(v.id);
+                                try {
+                                  const r = await dv.setPublished(v.id, !onSite);
+                                  setVehicles((prev) => prev.map((x) => x.id === v.id ? { ...x, web: { published: r.published } } : x));
+                                } catch (err) { window.alert(err instanceof Error ? err.message : "Não foi possível alterar"); }
+                                finally { setTogglingSite(null); }
+                              }}
+                              className="p-1.5 rounded relative"
+                              style={{ color: live ? "#fff" : onSite ? "#185FA5" : "#9CA3AF", background: live ? "#185FA5" : onSite ? "#EBF2FA" : "#F3F4F6" }}>
+                              {togglingSite === v.id ? <Loader2 size={13} className="animate-spin" /> : <Globe size={13} />}
+                              {!onSite && <span style={{ position: "absolute", left: 4, right: 4, top: "50%", height: 1.5, background: "#9CA3AF", transform: "rotate(-45deg)" }} />}
+                            </button>
+                          );
+                        })()}
                         <button title="Excluir" onClick={(e) => { e.stopPropagation(); handleDelete(v); }} className="p-1.5 rounded" style={{ color: "#DC2626", background: "#FEE2E2" }}><Trash2 size={13} /></button>
                       </div>
                     </td>

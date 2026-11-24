@@ -254,6 +254,8 @@ export const deletePendency = (vehicleId: string, id: string) =>
   request<Pendency[]>(`${base(vehicleId)}/pendencies/${id}`, { method: "DELETE" });
 
 // ---------- Web, Financeiro, Resumo ----------
+export const setPublished = (vehicleId: string, published: boolean) =>
+  request<{ published: boolean }>(`${base(vehicleId)}/web/published`, { method: "PATCH", body: { published } });
 export const getWeb = (vehicleId: string) => request<WebInfo>(`${base(vehicleId)}/web`);
 export const saveWeb = (vehicleId: string, body: WebInput) =>
   request<WebInfo>(`${base(vehicleId)}/web`, { method: "PUT", body });
