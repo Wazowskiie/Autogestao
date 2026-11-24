@@ -184,8 +184,8 @@ export function updateLeadStage(id: string, stage: LeadStage) { return request<L
 export function deleteLead(id: string) { return request<{ success: boolean }>(`/leads/${id}`, { method: "DELETE" }); }
 
 // ---------- Vendas ----------
-export interface SaleVehicle { id: string; brand: string; model: string; year: number; km?: number; color?: string | null; type: string; }
-export interface SaleCustomer { id: string; name: string; phone?: string | null; email?: string | null; }
+export interface SaleVehicle { id: string; brand: string; model: string; year: number; km?: number; color?: string | null; type: string; plate?: string | null; manufactureYear?: number | null; version?: string | null; photos?: { url: string }[] }
+export interface SaleCustomer { id: string; name: string; phone?: string | null; email?: string | null; document?: string | null; address?: string | null; }
 export interface SaleSeller { id: string; name: string; }
 export interface SalePromissoryNote { id: string; installmentNumber: number; totalInstallments: number; amount: number; dueDate: string; paid: boolean; paidAt: string | null; }
 export interface Sale {

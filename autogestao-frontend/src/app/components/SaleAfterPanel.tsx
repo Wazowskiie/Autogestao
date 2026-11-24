@@ -37,7 +37,10 @@ function useBusy() {
   return { busy, error, run };
 }
 
-export function SaleAfterPanel({ sale, canEdit, onChange }: { sale: sapi.SaleFull; canEdit: boolean; onChange: (s: sapi.SaleFull) => void }) {
+/** section: mostra só uma parte (usado nas abas da venda). Sem section, mostra tudo. */
+export type SaleSection = "result" | "expenses" | "financing" | "commission" | "postsale";
+export function SaleAfterPanel({ sale, canEdit, onChange, section }: { sale: sapi.SaleFull; canEdit: boolean; onChange: (s: sapi.SaleFull) => void; section?: SaleSection }) {
+  const show = (s: SaleSection) => !section || section === s;
   const canceled = sale.status === "canceled";
   const payments = sale.payments ?? [];
   const expenses = sale.expenses ?? [];
@@ -60,7 +63,7 @@ export function SaleAfterPanel({ sale, canEdit, onChange }: { sale: sapi.SaleFul
 
   return (
     <div className="flex flex-col gap-5">
-      {canceled && (
+      {canceled && show("result") && (
         <div className="rounded-lg px-4 py-3" style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}>
           <p className="flex items-center gap-2" style={{ fontSize: 13, fontWeight: 600, color: "#991B1B" }}>
             <Ban size={15} /> Venda cancelada em {sale.canceledAt ? new Date(sale.canceledAt).toLocaleDateString("pt-BR") : "—"}
@@ -71,7 +74,7 @@ export function SaleAfterPanel({ sale, canEdit, onChange }: { sale: sapi.SaleFul
       )}
 
       {/* Resultado real */}
-      {!hideResult && <div>
+      {!hideResult && show("result") && <div>
         <p style={label}>Resultado da venda</p>
         <div style={box}>
           {rows.map((r, i) => (
@@ -87,13 +90,13 @@ export function SaleAfterPanel({ sale, canEdit, onChange }: { sale: sapi.SaleFul
         </div>
       </div>}
 
-      {!hideResult && <ExpensesSection sale={sale} canEdit={canEdit && !canceled} onChange={onChange} />}
-      {payments.filter((p) => p.method === "financing" || p.method === "consortium").map((p) => (
+      {!hideResult && show("expenses") && <ExpensesSection sale={sale} canEdit={canEdit && !canceled} onChange={onChange} />}
+      {show("financing") && payments.filter((p) => p.method === "financing" || p.method === "consortium").map((p) => (
         <FinancingSection key={p.id} sale={sale} payment={p} canEdit={canEdit && !canceled} onChange={onChange} />
       ))}
-      <CommissionSection sale={sale} canEdit={canEdit && !canceled} onChange={onChange} />
-      {!canceled && <ChecklistSection sale={sale} onChange={onChange} />}
-      <WarrantySection sale={sale} canEdit={canEdit && !canceled} onChange={onChange} />
+      {show("commission") && <CommissionSection sale={sale} canEdit={canEdit && !canceled} onChange={onChange} />}
+      {!canceled && show("postsale") && <ChecklistSection sale={sale} onChange={onChange} />}
+      {show("postsale") && <WarrantySection sale={sale} canEdit={canEdit && !canceled} onChange={onChange} />}
     </div>
   );
 }

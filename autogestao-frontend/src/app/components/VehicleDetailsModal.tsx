@@ -27,7 +27,7 @@ interface Props {
 }
 
 // ---------- Cores e estilos do sistema ----------
-const C = {
+export const C = {
   blue: "#185FA5", blueBg: "#EBF2FA", text: "#0F172A", muted: "#64748B", light: "#94A3B8",
   border: "#E5E7EB", stripe: "#F8FAFC", green: "#27500A", greenBg: "#EAF3DE", red: "#DC2626", redBg: "#FEE2E2",
   amber: "#B45309", amberBg: "#FEF3C7",
@@ -204,11 +204,11 @@ export function VehicleDetailsModal({ vehicle: initial, onClose, onEdit, onChang
 // Componentes pequenos reaproveitados nas abas
 // =====================================================================
 
-function Badge({ bg, fg, children }: { bg: string; fg: string; children: ReactNode }) {
+export function Badge({ bg, fg, children }: { bg: string; fg: string; children: ReactNode }) {
   return <span style={{ background: bg, color: fg, padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>{children}</span>;
 }
 
-function Btn({ children, onClick, variant = "primary", disabled, type = "button", small }: {
+export function Btn({ children, onClick, variant = "primary", disabled, type = "button", small }: {
   children: ReactNode; onClick?: () => void; variant?: "primary" | "outline" | "soft" | "danger" | "success";
   disabled?: boolean; type?: "button" | "submit"; small?: boolean;
 }) {
@@ -238,7 +238,7 @@ function IconBtn({ title, onClick, children, color = C.muted }: { title: string;
   );
 }
 
-function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
+export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
       <div style={{ fontSize: 16, fontWeight: 600, color: C.text }}>{children}</div>
@@ -286,7 +286,7 @@ function Empty({ children }: { children: ReactNode }) {
 }
 
 /** Linhas "Rótulo: valor" com fundo listrado (igual à aba Veículo) */
-function InfoRows({ rows }: { rows: [string, ReactNode][] }) {
+export function InfoRows({ rows }: { rows: [string, ReactNode][] }) {
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
       {rows.map(([label, value], i) => (

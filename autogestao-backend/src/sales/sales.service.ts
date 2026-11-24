@@ -10,7 +10,8 @@ import { isSeller, saleForSeller } from '../common/seller-view';
 import { CancelSaleDto, ChecklistKey, SaleExpenseDto, UpdateChecklistDto, UpdateCommissionDto, UpdateFinancingDto, UpdateSaleExpenseDto, UpdateWarrantyDto } from './dto/sale-extras.dto';
 
 const SALE_INCLUDE = {
-  vehicle: true,
+  // foto de capa para o cabeçalho da venda
+  vehicle: { include: { photos: { orderBy: { order: 'asc' as const }, take: 1 } } },
   customer: true,
   seller: { select: { id: true, name: true } },
   // Veículos que entraram como parte do pagamento
