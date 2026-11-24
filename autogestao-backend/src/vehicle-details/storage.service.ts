@@ -19,10 +19,17 @@ const ROOT = resolve(process.env.STORAGE_DIR ?? join(process.cwd(), 'storage'));
 const PUBLIC_DIR = join(ROOT, 'public');
 const PRIVATE_DIR = join(ROOT, 'private');
 
-// Endereço público das fotos. Em produção, coloque no .env o endereço real da API.
-// Endereço público dos arquivos. Sem PUBLIC_API_URL, usa o endereço do site (PUBLIC_APP_URL),
-// que serve /files pelo mesmo domínio; localhost só no desenvolvimento.
-const PUBLIC_BASE_URL = `${(process.env.PUBLIC_API_URL || process.env.PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '')}/files`;
+// Endereço público dos arquivos (fotos, logo).
+// Lido na hora de salvar (não na importação do arquivo, quando o .env pode ainda não ter sido carregado).
+// Se PUBLIC_API_URL estiver como localhost (valor do .env.example) e houver o domínio do site em
+// PUBLIC_APP_URL, usa o domínio do site, que serve /files pelo mesmo endereço.
+const isLocal = (u: string) => /\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(u);
+export function publicFilesBase() {
+  const api = (process.env.PUBLIC_API_URL || '').trim();
+  const app = (process.env.PUBLIC_APP_URL || '').trim();
+  const base = api && !(isLocal(api) && app && !isLocal(app)) ? api : app || api || 'http://localhost:3000';
+  return `${base.replace(/\/$/, '')}/files`;
+}
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const DOCUMENT_TYPES = [
@@ -72,7 +79,7 @@ export class StorageService {
   async savePublic(folder: string, file: UploadedFileLike) {
     const key = `${folder}/${randomUUID()}${safeExtension(file.originalname) || '.jpg'}`;
     await this.write(PUBLIC_DIR, key, file.buffer);
-    return { key, url: `${PUBLIC_BASE_URL}/${key}` };
+    return { key, url: `${publicFilesBase()}/${key}` };
   }
 
   /** Salva um documento privado e devolve a chave dele */
@@ -95,8 +102,10 @@ export class StorageService {
 
   /** Apaga uma foto a partir do link dela (só se for uma foto salva aqui) */
   async removePublicByUrl(url?: string | null) {
-    if (!url || !url.startsWith(`${PUBLIC_BASE_URL}/`)) return;
-    const key = url.slice(PUBLIC_BASE_URL.length + 1);
+    // Aceita qualquer domínio: o que importa é a parte depois de /files/
+    const i = url ? url.indexOf('/files/') : -1;
+    if (!url || i < 0) return;
+    const key = decodeURIComponent(url.slice(i + '/files/'.length));
     await unlink(this.inside(PUBLIC_DIR, key)).catch(() => undefined);
   }
 
