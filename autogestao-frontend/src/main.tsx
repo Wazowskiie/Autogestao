@@ -3,6 +3,7 @@
   import App from "./app/App.tsx";
   import { PublicStorefront } from "./app/components/PublicStorefront";
   import { ResetPassword } from "./app/components/Login";
+  import { PrivacyPolicy, TermsOfUse } from "./app/components/LegalPages";
   import { AuthProvider } from "./lib/auth-context";
   import { PlanProvider } from "./lib/plan-context";
   import "./styles/index.css";
@@ -16,6 +17,11 @@
 
   if (pathMatch) {
     root.render(<PublicStorefront slug={pathMatch[1]} />);
+  } else if (/^\/(privacidade|politica-de-privacidade)\/?$/.test(window.location.pathname)) {
+    // Páginas públicas exigidas pela Meta (análise do app do WhatsApp)
+    root.render(<PrivacyPolicy />);
+  } else if (/^\/termos\/?$/.test(window.location.pathname)) {
+    root.render(<TermsOfUse />);
   } else if (window.location.pathname.startsWith("/redefinir-senha")) {
     // Link do e-mail "Esqueci minha senha": não depende de estar logado
     root.render(<ResetPassword />);
