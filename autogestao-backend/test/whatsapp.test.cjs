@@ -125,3 +125,65 @@ test('Número de outra conta é ignorado', async () => {
   const r = await wa.receive(Buffer.from(JSON.stringify(body)), undefined, body);
   assert.equal(r.ignored, true);
 });
+
+test('Conectar WhatsApp com um clique: troca o código, confere o número, liga o webhook e registra', async () => {
+  const shop2 = await prisma.dealership.create({ data: { name: 'Loja Dois', slug: 'loja-dois-wa', crmSettings: { roundRobin: true, slaHours: 2 } } });
+  const own2 = await prisma.user.create({ data: { dealershipId: shop2.id, role: 'owner', name: 'Dono 2', email: 'dono2@wa.invalid', passwordHash: 'x' } });
+  const U2 = { userId: own2.id, dealershipId: shop2.id, role: 'owner' };
+  const saved = { ...process.env };
+  const prevFetch = wa.fetchImpl; const es = [];
+  try {
+    delete process.env.META_APP_ID; delete process.env.META_APP_SECRET; delete process.env.META_ES_CONFIG_ID;
+    assert.deepEqual(wa.embeddedConfig(U2), { enabled: false });
+    await assert.rejects(wa.embeddedSignup(U2, { code: 'codigo-123456', phoneNumberId: '5550001111', wabaId: '7770001111' }), /ainda não foi configurada/);
+    Object.assign(process.env, { META_APP_ID: '1136', META_APP_SECRET: 'segredo-do-app', META_ES_CONFIG_ID: '888', META_WEBHOOK_VERIFY_TOKEN: 'token-global-abc' });
+    assert.throws(() => wa.embeddedConfig({ ...U2, role: 'seller' }), /dono/);
+    const cfg = wa.embeddedConfig(U2);
+    assert.equal(cfg.enabled, true); assert.equal(cfg.appId, '1136'); assert.equal(cfg.configId, '888'); assert.equal(cfg.appSecret, undefined);
+
+    wa.fetchImpl = async (url, init) => {
+      es.push({ url, init });
+      if (url.includes('oauth/access_token')) return { ok: true, status: 200, json: async () => ({ access_token: 'EAAloja2', expires_in: 5184000 }) };
+      if (url.includes('/phone_numbers')) return { ok: true, status: 200, json: async () => ({ data: [{ id: '5550001111' }] }) };
+      if (url.includes('/subscribed_apps') || url.includes('/register')) return { ok: true, status: 200, json: async () => ({ success: true }) };
+      return { ok: true, status: 200, json: async () => ({ display_phone_number: '+55 85 98888-0000', verified_name: 'Loja Dois' }) };
+    };
+    // número que não é da conta autorizada é recusado
+    await assert.rejects(wa.embeddedSignup(U2, { code: 'codigo-123456', phoneNumberId: '1234567890', wabaId: '7770001111' }), /já está ligado a outra loja/);
+    await assert.rejects(wa.embeddedSignup(U2, { code: 'codigo-123456', phoneNumberId: '5550009999', wabaId: '7770001111' }), /não pertence/);
+
+    es.length = 0;
+    const a = await wa.embeddedSignup(U2, { code: 'codigo-123456', phoneNumberId: '5550001111', wabaId: '7770001111', businessId: '42' });
+    assert.equal(a.status, 'connected'); assert.equal(a.connectMode, 'embedded'); assert.equal(a.verifyToken, undefined); assert.equal(a.warning, undefined);
+    assert.ok(new Date(a.tokenExpiresAt).getTime() > Date.now() + 50 * 86400000);
+    assert.match(es[0].url, /client_secret=segredo-do-app/); assert.match(es[0].url, /code=codigo-123456/);
+    assert.ok(es.some((c) => c.url.endsWith('/7770001111/subscribed_apps') && c.init.method === 'POST'));
+    const reg = es.find((c) => c.url.endsWith('/5550001111/register'));
+    assert.match(JSON.parse(reg.init.body).pin, /^\d{6}$/);
+    const row = await prisma.whatsappAccount.findUnique({ where: { dealershipId: shop2.id } });
+    assert.equal(row.appSecretEnc, null); assert.ok(row.pinEnc); assert.ok(!row.accessTokenEnc.includes('EAAloja2'));
+
+    // webhook do app ChronosAuto: token do .env e assinatura com META_APP_SECRET
+    assert.equal(await wa.verify('subscribe', 'token-global-abc', '7'), '7');
+    await assert.rejects(wa.verify('subscribe', 'token-global-abX', '7'), /não confere/);
+    const p2 = payload([{ from: '558597777777', id: 'wamid.es1', timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: 'Oi loja dois' }, name: 'Ana' }]);
+    p2.entry[0].changes[0].value.metadata.phone_number_id = '5550001111';
+    await assert.rejects(wa.receive(...signed(p2)), /Assinatura inválida/);
+    const r = await wa.receive(...signed(p2, 'segredo-do-app'));
+    assert.equal(r.received, 1);
+    assert.equal(await prisma.lead.count({ where: { dealershipId: shop2.id } }), 1);
+
+    // registro recusado não trava, mas avisa
+    wa.fetchImpl = async (url, init) => url.includes('/register')
+      ? { ok: false, status: 400, json: async () => ({ error: { message: 'Número já registrado', code: 133005 } }) }
+      : (es.push({ url, init }), (url.includes('oauth') ? { ok: true, status: 200, json: async () => ({ access_token: 'EAAnovo' }) } : url.includes('/phone_numbers') ? { ok: true, status: 200, json: async () => ({ data: [{ id: '5550001111' }] }) } : { ok: true, status: 200, json: async () => ({ success: true, verified_name: 'Loja Dois' }) }));
+    const b = await wa.embeddedSignup(U2, { code: 'codigo-654321', phoneNumberId: '5550001111', wabaId: '7770001111' });
+    assert.equal(b.status, 'connected'); assert.match(b.warning, /recusou o registro/); assert.equal(b.tokenExpiresAt, null);
+
+    // voltar para o modo manual exige a chave secreta da loja
+    await assert.rejects(wa.saveAccount(U2, { phoneNumberId: '5550001111', accessToken: 'EAAmanual' }), /chave secreta/);
+  } finally {
+    wa.fetchImpl = prevFetch;
+    for (const k of ['META_APP_ID', 'META_APP_SECRET', 'META_ES_CONFIG_ID', 'META_WEBHOOK_VERIFY_TOKEN']) { if (k in saved) process.env[k] = saved[k]; else delete process.env[k]; }
+  }
+});
