@@ -62,7 +62,8 @@ export async function launchEmbeddedSignup(cfg: { appId: string; configId: strin
       config_id: cfg.configId,
       response_type: "code",
       override_default_response_type: true,
-      extras: { setup: {}, featureType: "", sessionInfoVersion: "3" },
+      // Versão 4: a própria configuração da Meta decide o fluxo (a 2 e a 3 foram desativadas em 15/10/2026)
+      extras: { setup: {} },
     });
   });
 }
