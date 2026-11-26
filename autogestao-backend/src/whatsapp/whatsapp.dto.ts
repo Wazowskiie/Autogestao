@@ -18,6 +18,14 @@ export class SaveWhatsappAccountDto {
   appSecret?: string;
 }
 
+export class EmbeddedSignupDto {
+  // Código de uso único que a janela da Meta devolve (vale poucos minutos)
+  @IsString() @MinLength(10) @MaxLength(2000) code: string;
+  @IsString() @Matches(/^\d{6,30}$/, { message: 'Phone number ID inválido.' }) phoneNumberId: string;
+  @IsString() @Matches(/^\d{6,30}$/, { message: 'WABA ID inválido.' }) wabaId: string;
+  @IsOptional() @IsString() @Matches(/^\d{0,30}$/) businessId?: string;
+}
+
 export class SendWhatsappDto {
   @IsString() @MinLength(1) @MaxLength(4096) text: string;
 }

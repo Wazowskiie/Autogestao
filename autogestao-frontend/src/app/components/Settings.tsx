@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import * as s from "../../lib/settings-api";
 import * as wa from "../../lib/whatsapp-api";
+import { launchEmbeddedSignup, loadSdk } from "../../lib/meta-embedded-signup";
 import { useAuth } from "../../lib/auth-context";
 import { usePlan } from "../../lib/plan-context";
 
@@ -634,9 +635,26 @@ function WhatsappCard() {
   const [editing, setEditing] = useState(false);
   const [phoneNumberId, setPhoneNumberId] = useState(""), [wabaId, setWabaId] = useState(""), [token, setToken] = useState(""), [secret, setSecret] = useState("");
   const [busy, setBusy] = useState(false), [copied, setCopied] = useState("");
+  const [es, setEs] = useState<wa.EmbeddedConfig | null>(null);
   const n = useNotice();
   const load = () => wa.getWhatsappAccount().then((x) => { setA(x); setPhoneNumberId(x.phoneNumberId ?? ""); setWabaId(x.wabaId ?? ""); if (!x.configured) setEditing(true); }).catch((e) => n.show("error", msg(e)));
-  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(); wa.getEmbeddedConfig().then(setEs).catch(() => setEs({ enabled: false })); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const oneClick = !!es?.enabled;
+  // Com o botão disponível, a conexão manual fica escondida até a loja pedir
+  useEffect(() => { if (es?.appId) loadSdk(es.appId, es.graphVersion || "v25.0").catch(() => undefined); }, [es?.appId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (oneClick && a && !a.configured) setEditing(false); }, [oneClick, a?.configured]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Botão "Conectar WhatsApp": a janela da Meta faz tudo, sem copiar códigos
+  const connect = async () => {
+    if (!es?.appId || !es.configId) return;
+    setBusy(true);
+    try {
+      const r = await launchEmbeddedSignup({ appId: es.appId, configId: es.configId, graphVersion: es.graphVersion });
+      const acc = await wa.connectEmbedded(r);
+      setA(acc); setEditing(false);
+      if (acc.status !== "connected") n.show("error", acc.lastError ?? "Não foi possível conectar. Tente de novo.");
+      else n.show(acc.warning ? "error" : "ok", acc.warning ?? "WhatsApp conectado! As mensagens dos clientes já começam a cair no CRM.");
+    } catch (e) { n.show("error", msg(e)); } finally { setBusy(false); }
+  };
   const copy = async (label: string, v?: string) => { if (!v) return; try { await navigator.clipboard.writeText(v); setCopied(label); setTimeout(() => setCopied(""), 1500); } catch { n.show("error", "Não foi possível copiar."); } };
   const save = async () => {
     setBusy(true);
@@ -660,15 +678,34 @@ function WhatsappCard() {
       {a?.configured && a.status === "connected" && (
         <div className="rounded-lg px-3 py-2 mb-3" style={{ background: "#ECFDF5", fontSize: 13, color: "#065F46" }}>
           <b>{a.verifiedName ?? "Número conectado"}</b>{a.displayPhone ? ` · ${a.displayPhone}` : ""}
-          {a.lastWebhookAt ? ` · último aviso da Meta em ${new Date(a.lastWebhookAt).toLocaleString("pt-BR")}` : " · a Meta ainda não mandou nenhum aviso (cadastre o webhook)"}
+          {a.lastWebhookAt ? ` · último aviso da Meta em ${new Date(a.lastWebhookAt).toLocaleString("pt-BR")}` : a.connectMode === "embedded" ? " · esperando a primeira mensagem de cliente" : " · a Meta ainda não mandou nenhum aviso (cadastre o webhook)"}
         </div>
       )}
       {a?.lastError && a.status !== "connected" && <div className="rounded-lg px-3 py-2 mb-3" style={{ background: "#FEF2F2", fontSize: 13, color: "#991B1B" }}>{a.lastError}</div>}
-      {editing ? (
+      {a?.connectMode === "embedded" && a.tokenExpiresAt && new Date(a.tokenExpiresAt).getTime() - Date.now() < 10 * 86400000 && (
+        <div className="rounded-lg px-3 py-2 mb-3" style={{ background: "#FFFBEB", fontSize: 13, color: "#92400E" }}>
+          A autorização da Meta vence em {new Date(a.tokenExpiresAt).toLocaleDateString("pt-BR")}. Clique em <b>Reconectar WhatsApp</b> para renovar e não parar de receber mensagens.
+        </div>
+      )}
+      {oneClick && !editing && (
+        <div className="flex items-center gap-3 flex-wrap mb-3">
+          <button onClick={connect} disabled={busy} style={{ ...primaryBtn, background: "#25D366", opacity: busy ? 0.6 : 1 }}>{busy ? "Conectando..." : !a?.configured ? "Conectar WhatsApp" : a.connectMode === "embedded" ? "Reconectar WhatsApp" : "Usar conexão com um clique"}</button>
+          {!a?.configured && <span style={{ fontSize: 12, color: "#6B7280" }}>Abre uma janela da Meta: entre com o Facebook da loja, escolha ou cadastre o número e confirme o código que chega por SMS.</span>}
+        </div>
+      )}
+      {oneClick && !a?.configured && (
+        <button onClick={() => setEditing((v) => !v)} style={{ ...ghostBtn, fontSize: 12, marginBottom: editing ? 12 : 0 }}>{editing ? "Esconder conexão manual" : "Conectar manualmente (avançado)"}</button>
+      )}
+      {(oneClick && !a?.configured && !editing) ? null : a?.connectMode === "embedded" && !editing ? (
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={test} disabled={busy} style={ghostBtn}>{busy ? "Testando..." : "Testar conexão"}</button>
+          <button onClick={remove} style={{ ...ghostBtn, color: "#B91C1C" }}>Desconectar</button>
+        </div>
+      ) : editing ? (
         <>
           <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-            <Field label="Identificação do número (Phone number ID)" hint="Painel da Meta → WhatsApp → Configuração da API"><input style={inputStyle} value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value.replace(/\D/g, ""))} placeholder="Só números" /></Field>
-            <Field label="Identificação da conta (WABA ID)" hint="Opcional"><input style={inputStyle} value={wabaId} onChange={(e) => setWabaId(e.target.value.replace(/\D/g, ""))} placeholder="Só números" /></Field>
+            <Field label="Identificação do número (Phone number ID)" hint="Painel da Meta → WhatsApp → Configuração da API"><input style={inputStyle} autoComplete="off" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value.replace(/\D/g, ""))} placeholder="Só números" /></Field>
+            <Field label="Identificação da conta (WABA ID)" hint="Opcional"><input style={inputStyle} autoComplete="off" value={wabaId} onChange={(e) => setWabaId(e.target.value.replace(/\D/g, ""))} placeholder="Só números" /></Field>
             <Field label="Token de acesso permanente" hint={a?.configured ? "Em branco = mantém o atual" : "Do usuário do sistema (não use o token temporário de 24h)"}><input style={inputStyle} type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder={a?.configured ? "••••••••" : "EAA..."} /></Field>
             <Field label="Chave secreta do app (App Secret)" hint={a?.configured ? "Em branco = mantém a atual" : "Configurações do app → Básico"}><input style={inputStyle} type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={a?.configured ? "••••••••" : ""} /></Field>
           </div>

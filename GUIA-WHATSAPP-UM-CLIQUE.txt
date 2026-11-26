@@ -1,0 +1,58 @@
+WHATSAPP COM UM CLIQUE (CADASTRO INCORPORADO DA META)
+=====================================================
+Cada revenda conecta o próprio WhatsApp sozinha: Configurações → Integrações →
+"Conectar WhatsApp". Abre uma janela da Meta, ela entra com o Facebook dela, escolhe ou
+cadastra o número e confirma o código por SMS. As mensagens caem só no CRM daquela loja,
+e cada loja paga as próprias mensagens à Meta, no cartão dela.
+
+Você configura o app ChronosAuto UMA VEZ. A conexão manual continua existindo como
+"Conectar manualmente (avançado)".
+
+1. NA META (developers.facebook.com → Chronos Auto) — já feito
+   - Empresa Chronos Tech verificada.
+   - Login do Facebook para Empresas → Configurações:
+       URIs de redirecionamento do OAuth válidos: https://chronosauto.com.br/
+       Entrar com o SDK do JavaScript: Sim
+       Domínios permitidos para o SDK do JavaScript: https://chronosauto.com.br
+   - Configuração criada pelo modelo "cadastro incorporado do WhatsApp" → ID da configuração.
+
+2. NO VPS: .env do backend (uma vez só)
+   cd /var/www/Autogestao/autogestao-backend
+   nano .env
+     META_APP_ID=o_id_do_app
+     META_APP_SECRET=a_chave_secreta_do_app
+     META_ES_CONFIG_ID=o_id_da_configuracao
+     META_WEBHOOK_VERIFY_TOKEN=gere_com_openssl_rand_-hex_20
+   Não mande esses valores no chat nem coloque no GitHub.
+
+3. INSTALAR ESTA VERSÃO (depois de juntar o pull request no GitHub)
+   cd /var/www/Autogestao
+   cp -r autogestao-backend/storage ~/storage-backup
+   git pull origin main
+   cp -rn ~/storage-backup/. autogestao-backend/storage/
+   cd autogestao-backend && npm install && npx prisma migrate deploy && npx prisma generate && npm run build
+   cd ../autogestao-frontend && npm install && npm run build
+   pm2 restart all
+
+4. WEBHOOK (Meta → Casos de uso → WhatsApp → Etapa 2 → Configurar webhooks)
+   - URL de callback:  https://chronosauto.com.br/api/v1/whatsapp/webhook
+   - Verificar token:  o mesmo META_WEBHOOK_VERIFY_TOKEN do .env
+   - "Verificar e salvar" e, embaixo, assine o campo "messages".
+   Só funciona depois dos passos 2 e 3.
+
+5. TESTE COM A SUA LOJA
+   chronosauto.com.br → Configurações → Integrações → "Conectar WhatsApp".
+   Use um número que não esteja ativo no aplicativo do WhatsApp do celular.
+   Mande "oi" de outro celular: o lead aparece no CRM.
+   Enquanto o app não for aprovado, só quem tem função no app (você) consegue conectar.
+
+6. LIBERAR PARA AS REVENDAS
+   - Casos de uso → WhatsApp → "Torne-se um Provedor de Tecnologia": seguir as etapas.
+   - Análise do app pedindo acesso avançado a whatsapp_business_management e
+     whatsapp_business_messaging. A Meta pede um vídeo: grave a tela clicando em
+     "Conectar WhatsApp", a janela da Meta e a mensagem chegando no CRM.
+   - Publicar o app (precisa de Política de privacidade no site).
+
+SOBRE O TOKEN DE 60 DIAS
+   Se a configuração foi criada com validade de 60 dias, o sistema guarda a data e, faltando
+   10 dias, mostra para a loja o aviso "Reconectar WhatsApp". Um clique renova.

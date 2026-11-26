@@ -5,10 +5,16 @@ import { AuthenticatedUser } from '../auth/types/jwt-payload.type';
 import { TokenEncryptionService } from '../common/crypto/token-encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { getSettings, pickNextSeller } from '../crm/crm-helpers';
-import { SaveWhatsappAccountDto } from './whatsapp.dto';
+import { EmbeddedSignupDto, SaveWhatsappAccountDto } from './whatsapp.dto';
 
 const GRAPH = 'https://graph.facebook.com';
 const DAY = 24 * 60 * 60 * 1000;
+
+/** Compara dois textos sem vazar o tamanho do acerto pelo tempo de resposta */
+function sameText(a: string, b: string) {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
 type FetchLike = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{ ok: boolean; status: number; json: () => Promise<any> }>;
 
 /** Variações de um número brasileiro (com e sem o 9, com e sem 55), para achar o cliente certo */
@@ -58,13 +64,80 @@ export class WhatsappService {
     return base ? `${base}/api/v1/whatsapp/webhook` : '/api/v1/whatsapp/webhook';
   }
 
+  /** App ChronosAuto na Meta (um só para todas as lojas). Sem estes códigos no .env, só existe a conexão manual. */
+  private embeddedEnv() {
+    const appId = process.env.META_APP_ID?.trim(), appSecret = process.env.META_APP_SECRET?.trim(), configId = process.env.META_ES_CONFIG_ID?.trim();
+    return appId && appSecret && configId ? { appId, appSecret, configId } : null;
+  }
+
   // ======================= Configuração =======================
   async account(u: AuthenticatedUser) {
     const a = await this.prisma.whatsappAccount.findUnique({ where: { dealershipId: u.dealershipId } });
     if (!a) return { configured: false, webhookUrl: this.webhookUrl() };
-    const base = { configured: true, status: a.status, displayPhone: a.displayPhone, verifiedName: a.verifiedName, connectedAt: a.connectedAt, lastWebhookAt: a.lastWebhookAt, lastError: a.lastError };
+    const base = { configured: true, status: a.status, displayPhone: a.displayPhone, verifiedName: a.verifiedName, connectedAt: a.connectedAt, lastWebhookAt: a.lastWebhookAt, lastError: a.lastError, connectMode: a.connectMode, tokenExpiresAt: a.tokenExpiresAt };
     if (u.role === 'seller') return base;
-    return { ...base, phoneNumberId: a.phoneNumberId, wabaId: a.wabaId, verifyToken: a.verifyToken, webhookUrl: this.webhookUrl(), sellerAlertTemplate: a.sellerAlertTemplate, sellerAlertLang: a.sellerAlertLang };
+    // No cadastro incorporado o webhook é o do app ChronosAuto: a loja não precisa cadastrar nada
+    const manual = a.connectMode !== 'embedded';
+    return { ...base, phoneNumberId: a.phoneNumberId, wabaId: a.wabaId, ...(manual ? { verifyToken: a.verifyToken, webhookUrl: this.webhookUrl() } : {}), sellerAlertTemplate: a.sellerAlertTemplate, sellerAlertLang: a.sellerAlertLang };
+  }
+
+  /** O que a tela precisa para abrir a janela da Meta (nada secreto) */
+  embeddedConfig(u: AuthenticatedUser) {
+    this.manager(u);
+    const env = this.embeddedEnv();
+    return env ? { enabled: true, appId: env.appId, configId: env.configId, graphVersion: this.version } : { enabled: false };
+  }
+
+  /** Fim do "Conectar WhatsApp": troca o código por token, confere o número, liga o webhook e registra o número */
+  async embeddedSignup(u: AuthenticatedUser, dto: EmbeddedSignupDto) {
+    this.manager(u);
+    const env = this.embeddedEnv();
+    if (!env) throw new BadRequestException('A conexão com um clique ainda não foi configurada no servidor.');
+    const phoneNumberId = dto.phoneNumberId.trim(), wabaId = dto.wabaId.trim();
+    const other = await this.prisma.whatsappAccount.findFirst({ where: { phoneNumberId, NOT: { dealershipId: u.dealershipId } }, select: { id: true } });
+    if (other) throw new ConflictException('Este número já está ligado a outra loja.');
+
+    const call = async (path: string, init?: { method?: string; token?: string; body?: unknown }) => {
+      const res = await this.fetchImpl(`${GRAPH}/${this.version}/${path}`, {
+        method: init?.method ?? 'GET',
+        headers: { ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}), ...(init?.body ? { 'Content-Type': 'application/json' } : {}) },
+        ...(init?.body ? { body: JSON.stringify(init.body) } : {}),
+      });
+      const json = await res.json().catch(() => ({}));
+      return { ok: res.ok, json };
+    };
+
+    // 1. Código de uso único → token da loja
+    const q = new URLSearchParams({ client_id: env.appId, client_secret: env.appSecret, code: dto.code.trim() });
+    const ex = await call(`oauth/access_token?${q}`);
+    const token: string | undefined = ex.json?.access_token;
+    if (!ex.ok || !token) throw new BadRequestException(`A Meta não liberou o acesso: ${this.metaError(ex.json)} Tente conectar de novo.`);
+    const expiresIn = Number(ex.json?.expires_in);
+    const tokenExpiresAt = Number.isFinite(expiresIn) && expiresIn > 0 ? new Date(Date.now() + expiresIn * 1000) : null;
+
+    // 2. O número precisa ser mesmo da conta que a loja autorizou (evita apontar para número de outra pessoa)
+    const nums = await call(`${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name`, { token });
+    if (!nums.ok) throw new BadRequestException(`Não deu para ler a conta do WhatsApp: ${this.metaError(nums.json)}`);
+    if (!(nums.json?.data ?? []).some((p: any) => String(p.id) === phoneNumberId)) throw new BadRequestException('O número escolhido não pertence à conta do WhatsApp autorizada. Conecte de novo.');
+
+    // 3. Mensagens dessa conta passam a chegar no webhook do ChronosAuto
+    const sub = await call(`${wabaId}/subscribed_apps`, { method: 'POST', token });
+    if (!sub.ok) throw new BadRequestException(`Não deu para ligar o recebimento de mensagens: ${this.metaError(sub.json)}`);
+
+    // 4. Registra o número na API (define o PIN de duas etapas). Número que já estava registrado pode recusar: não trava a conexão.
+    const pin = String(Math.floor(100000 + Math.random() * 900000));
+    const reg = await call(`${phoneNumberId}/register`, { method: 'POST', token, body: { messaging_product: 'whatsapp', pin } });
+    if (!reg.ok) this.log.warn(`Registro do número ${phoneNumberId} recusado: ${this.metaError(reg.json)}`);
+
+    const data = {
+      phoneNumberId, wabaId, businessId: dto.businessId?.trim() || null, connectMode: 'embedded', accessTokenEnc: this.enc(token), appSecretEnc: null,
+      tokenExpiresAt, ...(reg.ok ? { pinEnc: this.enc(pin) } : {}), status: 'pending', lastError: null,
+    };
+    const cur = await this.prisma.whatsappAccount.findUnique({ where: { dealershipId: u.dealershipId } });
+    if (cur) await this.prisma.whatsappAccount.update({ where: { id: cur.id }, data });
+    else await this.prisma.whatsappAccount.create({ data: { dealershipId: u.dealershipId, ...data, verifyToken: randomBytes(20).toString('hex') } });
+    const result = await this.test(u);
+    return reg.ok ? result : { ...result, warning: `O número foi ligado, mas a Meta recusou o registro: ${this.metaError(reg.json)} Se as mensagens não chegarem, desconecte e conecte de novo.` };
   }
 
   /** Modelo aprovado na Meta para avisar os vendedores de cliente esperando no chat (vazio desliga) */
@@ -84,13 +157,13 @@ export class WhatsappService {
     const phoneNumberId = dto.phoneNumberId.trim();
     const other = await this.prisma.whatsappAccount.findFirst({ where: { phoneNumberId, NOT: { dealershipId: u.dealershipId } }, select: { id: true } });
     if (other) throw new ConflictException('Este número já está ligado a outra loja.');
-    if (!cur && (!dto.accessToken?.trim() || !dto.appSecret?.trim())) throw new BadRequestException('Informe o token de acesso e a chave secreta do app.');
+    if ((!cur && !dto.accessToken?.trim()) || (!cur?.appSecretEnc && !dto.appSecret?.trim())) throw new BadRequestException('Informe o token de acesso e a chave secreta do app.');
     const data = {
       phoneNumberId, wabaId: dto.wabaId?.trim() || null,
       ...(dto.accessToken?.trim() ? { accessTokenEnc: this.enc(dto.accessToken.trim()) } : {}),
       ...(dto.appSecret?.trim() ? { appSecretEnc: this.enc(dto.appSecret.trim()) } : {}),
     };
-    if (cur) await this.prisma.whatsappAccount.update({ where: { id: cur.id }, data: { ...data, status: 'pending', lastError: null } });
+    if (cur) await this.prisma.whatsappAccount.update({ where: { id: cur.id }, data: { ...data, connectMode: 'manual', tokenExpiresAt: null, status: 'pending', lastError: null } });
     else await this.prisma.whatsappAccount.create({
       data: { dealershipId: u.dealershipId, ...data, accessTokenEnc: data.accessTokenEnc!, appSecretEnc: data.appSecretEnc!, verifyToken: randomBytes(20).toString('hex') },
     });
@@ -137,13 +210,16 @@ export class WhatsappService {
   // ======================= Webhook =======================
   async verify(mode?: string, token?: string, challenge?: string) {
     if (mode !== 'subscribe' || !token || !challenge) throw new ForbiddenException('Verificação inválida');
+    // Webhook do app ChronosAuto (todas as lojas do botão "Conectar WhatsApp")
+    const global = process.env.META_WEBHOOK_VERIFY_TOKEN?.trim();
+    if (global && sameText(token, global)) return challenge;
     const a = await this.prisma.whatsappAccount.findUnique({ where: { verifyToken: token } });
     if (!a) throw new ForbiddenException('Token de verificação não confere');
     await this.prisma.whatsappAccount.update({ where: { id: a.id }, data: { lastWebhookAt: new Date() } });
     return challenge;
   }
 
-  /** Recebe o aviso da Meta. Confere a assinatura com a chave secreta da loja dona do número. */
+  /** Recebe o aviso da Meta. Confere a assinatura com a chave secreta do app dono do número (o da loja ou o ChronosAuto). */
   async receive(rawBody: Buffer | undefined, signature: string | undefined, body: any) {
     if (body?.object !== 'whatsapp_business_account') return { ignored: true };
     const changes: any[] = (body.entry ?? []).flatMap((e: any) => e.changes ?? []).filter((c: any) => c.field === 'messages' && c.value);
@@ -152,7 +228,9 @@ export class WhatsappService {
     const account = await this.prisma.whatsappAccount.findUnique({ where: { phoneNumberId: String(phoneId) } });
     if (!account) return { ignored: true };
     if (!rawBody || !signature?.startsWith('sha256=')) throw new UnauthorizedException('Assinatura ausente');
-    const expected = createHmac('sha256', this.dec(account.appSecretEnc)).update(rawBody).digest('hex');
+    const secret = account.appSecretEnc ? this.dec(account.appSecretEnc) : process.env.META_APP_SECRET?.trim();
+    if (!secret) { this.log.error('META_APP_SECRET ausente: não dá para conferir o webhook do cadastro incorporado'); throw new UnauthorizedException('Assinatura não conferível'); }
+    const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
     const got = signature.slice(7);
     if (got.length !== expected.length || !timingSafeEqual(Buffer.from(got, 'hex'), Buffer.from(expected, 'hex'))) {
       this.log.warn(`Assinatura inválida no webhook do número ${phoneId}`);
